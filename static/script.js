@@ -972,24 +972,57 @@ function bindCaseDetailTitleClicks(container) {
     });
 }
 
-function appendCasesPanelChatMessage(role, text) {
+function scrollCasesDetailScrollAreaToBottom(smooth) {
+    const area = document.getElementById('cases-detail-scroll') || document.querySelector('.cases-detail-scroll-area');
+    if (!area) return;
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            area.scrollTo({
+                top: area.scrollHeight,
+                behavior: smooth ? 'smooth' : 'auto',
+            });
+        });
+    });
+}
+
+function setCasesTabDetailLayout(isDetail) {
+    const tab = document.getElementById('tab-cases');
+    if (!tab) return;
+    tab.classList.toggle('tab-cases-detail-open', !!isDetail);
+}
+
+function bindCasesDetailScrollCondense() {
+    const scrollEl = document.getElementById('cases-detail-scroll');
+    const viewEl = document.querySelector('#cases-content .cases-detail-view');
+    if (!scrollEl || !viewEl) return;
+    const sync = () => {
+        viewEl.classList.toggle('condensed', scrollEl.scrollTop > 10);
+    };
+    scrollEl.addEventListener('scroll', sync, { passive: true });
+    sync();
+}
+
+function appendCasesPanelChatMessage(role, text, skipScroll) {
     const chat = document.getElementById('cases-detail-chat');
     if (!chat) return;
     const wrap = document.createElement('div');
-    wrap.className = `chat-message fade-in ${role === 'user' ? 'user-message' : 'ai-message'}`;
+    const isUser = role === 'user';
+    wrap.className = isUser ? 'chat-message user-message' : 'chat-message ai-message';
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';
     bubble.innerHTML = escapeHtml(text).replace(/\n/g, '<br>');
     wrap.appendChild(bubble);
     chat.appendChild(wrap);
-    chat.scrollTop = chat.scrollHeight;
+    if (!skipScroll) {
+        scrollCasesDetailScrollAreaToBottom(true);
+    }
 }
 
 function renderCaseDetailFollowUps(caseObj) {
     const chat = document.getElementById('cases-detail-chat');
     const promptEl = document.getElementById('cases-detail-chat-prompt');
     if (!chat) return;
-    chat.innerHTML = '';
+    chat.replaceChildren();
     const ups = (caseObj && caseObj.follow_ups) || [];
     if (promptEl) {
         promptEl.style.display = ups.length ? 'none' : 'block';
@@ -997,9 +1030,10 @@ function renderCaseDetailFollowUps(caseObj) {
     ups.forEach((item) => {
         const q = item && item.question != null ? String(item.question) : '';
         const a = item && item.answer != null ? String(item.answer) : '';
-        if (q) appendCasesPanelChatMessage('user', q);
-        if (a) appendCasesPanelChatMessage('bot', a);
+        if (q) appendCasesPanelChatMessage('user', q, true);
+        if (a) appendCasesPanelChatMessage('bot', a, true);
     });
+    scrollCasesDetailScrollAreaToBottom(false);
 }
 
 function showCaseList() {
@@ -1016,54 +1050,131 @@ function showCaseDetail(caseIndex) {
     renderCaseDetailView(caseData);
 }
 
+function renderCaseDetailDescriptionSection(caseData) {
+    const relEl = document.getElementById('case-description-relevance');
+    const bodyEl = document.getElementById('case-description-body');
+    if (!relEl || !bodyEl) return;
+
+    const score = caseData.relevance_score ?? caseData.initial_score ?? 0;
+    const relClass = getRelevanceClass(score);
+    const reasonRaw = caseData.relevance_reason != null ? String(caseData.relevance_reason).trim() : '';
+    const reasonHtml = reasonRaw ? ` — ${escapeHtml(reasonRaw)}` : '';
+    relEl.innerHTML = `Relevance: <span class="relevance-score ${relClass}">${score}%</span>${reasonHtml}`;
+
+    const descCachedRaw =
+        caseData.description != null && String(caseData.description).trim() !== ''
+            ? String(caseData.description).trim()
+            : '';
+    if (descCachedRaw) {
+        bodyEl.textContent = descCachedRaw;
+        bodyEl.classList.remove('loading');
+    } else {
+        bodyEl.textContent = 'Loading description...';
+        bodyEl.classList.add('loading');
+    }
+}
+
+async function loadCaseDescriptionIntoDetail(caseData) {
+    const bodyEl = document.getElementById('case-description-body');
+    if (!bodyEl) return;
+
+    const cached =
+        caseData.description != null && String(caseData.description).trim() !== ''
+            ? String(caseData.description).trim()
+            : '';
+    if (cached) {
+        bodyEl.textContent = cached;
+        bodyEl.classList.remove('loading');
+        return;
+    }
+
+    bodyEl.textContent = 'Loading description...';
+    bodyEl.classList.add('loading');
+
+    if (!contextId || activeCaseIndex === null) {
+        bodyEl.textContent = 'Unable to load description.';
+        bodyEl.classList.remove('loading');
+        return;
+    }
+
+    try {
+        const res = await fetch('/case/describe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                context_id: contextId,
+                case_index: activeCaseIndex,
+            }),
+        });
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (_) {
+            /* ignore */
+        }
+        bodyEl.classList.remove('loading');
+        if (!res.ok) {
+            bodyEl.textContent = data.error || data.message || `Could not load description (${res.status}).`;
+            return;
+        }
+        const desc = data.description != null ? String(data.description).trim() : '';
+        bodyEl.textContent = desc || 'No description available.';
+        const live = currentCases[activeCaseIndex];
+        if (live && desc) {
+            live.description = desc;
+        }
+    } catch (err) {
+        bodyEl.classList.remove('loading');
+        bodyEl.textContent = 'Unable to load description.';
+        console.error(err);
+    }
+}
+
 function renderCaseDetailView(caseData) {
     const content = document.getElementById('cases-content');
     if (!content) return;
+    setCasesTabDetailLayout(true);
     const titleSafe = escapeHtml(caseData.title || 'Untitled');
+    const citationSafe = escapeHtml(
+        caseData.citation != null && caseData.citation !== '' ? String(caseData.citation) : ''
+    );
     content.innerHTML = `
         <div class="cases-detail-view">
-            <button type="button" class="cases-back-btn" id="cases-back-btn">← Back to Cases</button>
-            <div class="cases-detail-header-panel">
-                <h3 class="cases-detail-title-text">${titleSafe}</h3>
+            <div class="cases-detail-top">
+                <div class="cases-detail-condensed-header">
+                    <span class="cases-back-btn" onclick="showCaseList()">← Back</span>
+                    <span class="cases-condensed-title">${titleSafe}</span>
+                    <span class="cases-condensed-citation">${citationSafe}</span>
+                </div>
+                <div class="cases-detail-back-row">
+                    <span class="cases-back-btn" onclick="showCaseList()">← Back to Cases</span>
+                </div>
             </div>
-            <div class="cases-detail-info-block">
-                <div id="cases-detail-meta" class="cases-detail-meta"></div>
-                <div id="cases-detail-snippet" class="cases-detail-snippet"></div>
-                <div id="cases-detail-score" class="cases-detail-score-row"></div>
+            <div class="cases-detail-card">
+                <div class="cases-detail-card-title">${titleSafe}</div>
+                <div class="cases-detail-card-citation">${citationSafe}</div>
+                <div class="cases-detail-card-description" id="case-description">
+                    <div class="cases-detail-card-relevance" id="case-description-relevance"></div>
+                    <div class="cases-detail-card-description-body" id="case-description-body"></div>
+                </div>
             </div>
-            <div class="cases-detail-divider-thin"></div>
-            <p class="cases-detail-chat-prompt" id="cases-detail-chat-prompt">Ask a question about this case or how it relates to your situation.</p>
-            <div class="cases-detail-chat" id="cases-detail-chat"></div>
-            <div class="cases-detail-input-row">
+            <div class="cases-detail-scroll-area" id="cases-detail-scroll">
+                <p class="cases-detail-chat-prompt" id="cases-detail-chat-prompt">Ask a question about this case or how it relates to your situation.</p>
+                <div class="cases-detail-chat" id="cases-detail-chat"></div>
+            </div>
+            <div class="cases-detail-input-fixed">
                 <input type="text" id="cases-detail-question" placeholder="Ask about this case..." autocomplete="off" />
                 <button type="button" id="cases-detail-send">Send</button>
             </div>
         </div>
     `;
 
-    const metaEl = document.getElementById('cases-detail-meta');
-    const snippetEl = document.getElementById('cases-detail-snippet');
-    const scoreEl = document.getElementById('cases-detail-score');
-    if (metaEl) {
-        const metaParts = [];
-        if (caseData.citation) metaParts.push(caseData.citation);
-        if (caseData.decision_date) metaParts.push(caseData.decision_date);
-        metaEl.textContent = metaParts.length ? metaParts.join(' · ') : '—';
-    }
-    if (snippetEl) {
-        snippetEl.textContent = caseData.snippet || '';
-    }
-    if (scoreEl) {
-        const score = caseData.relevance_score ?? caseData.initial_score ?? 0;
-        const relClass = getRelevanceClass(score);
-        const reason = caseData.relevance_reason ? escapeHtml(caseData.relevance_reason) : '';
-        scoreEl.innerHTML = `Relevance: <span class="relevance-score ${relClass}">${score}%</span>${
-            reason ? ` — <span class="cases-detail-reason">${reason}</span>` : ''
-        }`;
-    }
+    renderCaseDetailDescriptionSection(caseData);
     renderCaseDetailFollowUps(caseData);
+    void loadCaseDescriptionIntoDetail(caseData);
+    bindCasesDetailScrollCondense();
 
-    document.getElementById('cases-back-btn')?.addEventListener('click', showCaseList);
     document.getElementById('cases-detail-send')?.addEventListener('click', submitCasesPanelAsk);
     document.getElementById('cases-detail-question')?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -1093,7 +1204,7 @@ async function submitCasesPanelAsk() {
     loading.innerHTML =
         '<div class="message-bubble"><span class="loading-spinner" aria-hidden="true"></span>Researching...</div>';
     if (chat) chat.appendChild(loading);
-    if (chat) chat.scrollTop = chat.scrollHeight;
+    scrollCasesDetailScrollAreaToBottom(true);
     if (sendBtn) sendBtn.disabled = true;
 
     try {
@@ -1140,6 +1251,7 @@ async function submitCasesPanelAsk() {
 function renderCasesList(cases) {
     const content = document.getElementById('cases-content');
     if (!content) return;
+    setCasesTabDetailLayout(false);
 
     if (!cases || cases.length === 0) {
         content.innerHTML = '<p class="empty-state">No cases found yet.</p>';

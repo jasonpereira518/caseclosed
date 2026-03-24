@@ -533,6 +533,33 @@ def _analysis_summary_for_prompt(analysis: dict) -> str:
         return str(analysis)
 
 
+def describe_case(case_data: dict) -> str:
+    """
+    Brief LLM summary of a single case from title, citation, date, and excerpt.
+    Uses the fast flash model (CLARIFIER_MODEL).
+    """
+    title = case_data.get("title") or "Untitled"
+    citation = case_data.get("citation") or ""
+    decision_date = case_data.get("decision_date") or ""
+    snippet = case_data.get("snippet") or ""
+
+    prompt = f"""You are a legal research assistant. Given the following case information, write a clear 2-3 sentence description of what this case is about, the key legal issue, and the outcome or holding if apparent from the excerpt.
+
+Title: {title}
+Citation: {citation}
+Date: {decision_date}
+Excerpt: {snippet}
+
+Write only the description, no preamble. Be concise and specific."""
+
+    try:
+        agent = client.chats.create(model=config.CLARIFIER_MODEL)
+        response = agent.send_message(prompt)
+        return (getattr(response, "text", None) or "").strip() or "[No response from model]"
+    except Exception as e:
+        return f"[Error: {e}]"
+
+
 def ask_about_case(summary: str, analysis: dict, case_data: dict, question: str) -> str:
     """
     Answer a follow-up question about one case; uses flash model for fast replies.

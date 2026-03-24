@@ -14,6 +14,7 @@ from services.courtlistener import query_courtlistener
 from services.llm import (
     ask_about_case,
     check_if_more_info_needed,
+    describe_case,
     extract_answers_from_message,
     extract_structured_analysis,
     generate_query,
@@ -214,6 +215,51 @@ def chat():
             "cases": results,
         }
     )
+
+
+@chat_bp.route("/case/describe", methods=["POST"])
+@chat_bp.route("/case/describe/", methods=["POST"])
+@chat_bp.route("/chat/case/describe", methods=["POST"])
+@chat_bp.route("/chat/case/describe/", methods=["POST"])
+@login_required
+def case_describe():
+    payload = request.get_json(silent=True) or {}
+    request_context_id = str(payload.get("context_id", "")).strip()
+    session_context_id = str(session.get("context_id", "")).strip()
+    context_id = request_context_id or session_context_id
+    case_index = payload.get("case_index")
+    user_id = str(current_user.get_id())
+
+    if not context_id:
+        return jsonify({"error": "context_id is required"}), 400
+    try:
+        idx = int(case_index)
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid case_index"}), 400
+
+    belongs = context_belongs_to_user(context_id, user_id)
+    if not belongs:
+        return jsonify({"error": "forbidden"}), 403
+
+    context = get_context(context_id, user_id)
+    if not context:
+        return jsonify({"error": "context not found"}), 404
+
+    cases = list(context.get("cases") or [])
+    if idx < 0 or idx >= len(cases):
+        return jsonify({"error": "invalid case_index"}), 400
+
+    case = dict(cases[idx])
+    existing = case.get("description")
+    if isinstance(existing, str) and existing.strip():
+        return jsonify({"description": existing.strip()})
+
+    text = describe_case(case).strip()
+    case["description"] = text
+    cases[idx] = case
+    context["cases"] = cases
+
+    return jsonify({"description": text})
 
 
 @chat_bp.route("/case/ask", methods=["POST"])

@@ -8,8 +8,20 @@ from flask_login import LoginManager
 from routes import register_blueprints
 
 PROTECTED_JSON_PATHS = frozenset(
-    {"/chat", "/upload", "/analyze", "/draft", "/context", "/case/ask", "/chat/case/ask"}
+    {
+        "/chat",
+        "/upload",
+        "/analyze",
+        "/draft",
+        "/context",
+        "/case/ask",
+        "/chat/case/ask",
+        "/case/describe",
+        "/chat/case/describe",
+    }
 )
+# Note: login JSON responses for these paths use _is_protected_json_path(request.path),
+# which normalizes trailing slashes (e.g. /case/describe/ matches /case/describe).
 
 
 def _is_protected_json_path(path: str) -> bool:
@@ -44,7 +56,12 @@ login_manager.login_view = "auth.login"
 
 register_blueprints(app)
 
-_missing = {"/case/ask", "/chat/case/ask"} - {r.rule for r in app.url_map.iter_rules()}
+_missing = {
+    "/case/ask",
+    "/chat/case/ask",
+    "/case/describe",
+    "/chat/case/describe",
+} - {r.rule for r in app.url_map.iter_rules()}
 if _missing:
     raise RuntimeError(
         f"chat blueprint did not register expected POST case-ask paths; missing: {sorted(_missing)}. "
