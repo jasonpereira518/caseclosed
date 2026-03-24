@@ -222,7 +222,8 @@ async function handleChatSubmit(e) {
     e.preventDefault();
     const message = chatInput.value.trim();
     if (!message) return;
-    
+
+    triggerSendIconAnimation();
     appendMessage('user', message.replace(/\n/g, '<br>'));
     chatInput.value = '';
     autoResizeTextarea();
@@ -522,53 +523,42 @@ function updateCasesPanel(cases) {
 
 function displayDraft(docText) {
     const content = document.getElementById('draft-content');
-    
-    // Convert markdown-style sections to HTML
-    let html = '<div class="draft-document">';
-    
-    // Split by ** sections (markdown bold headers)
-    const lines = docText.split('\n');
-    let currentSection = '';
-    let inSection = false;
-    
-    lines.forEach((line, idx) => {
+
+    const cleanText = stripDraftMarkdown(docText || '');
+    const html = renderDraftPlainTextToHtml(cleanText);
+    content.innerHTML = `<div class="draft-document">${html}</div>`;
+}
+
+function stripDraftMarkdown(text) {
+    return text
+        .replace(/```/g, '')
+        .replace(/^\s*#{1,3}\s*/gm, '')
+        .replace(/\*\*/g, '')
+        .replace(/\*/g, '');
+}
+
+function renderDraftPlainTextToHtml(text) {
+    const lines = text.split('\n');
+    const renderedLines = lines.map(line => {
         const trimmed = line.trim();
-        
-        // Check if this is a section header (starts with **)
-        if (trimmed.startsWith('**') && trimmed.endsWith('**')) {
-            // Close previous section
-            if (currentSection) {
-                html += `<p>${escapeHtml(currentSection).replace(/\n/g, '<br>')}</p>`;
-                currentSection = '';
-            }
-            
-            // Start new section
-            const title = trimmed.replace(/\*\*/g, '').trim();
-            html += `<h3>${escapeHtml(title)}</h3>`;
-            inSection = true;
-        } else if (trimmed === '' && currentSection) {
-            // Empty line - add paragraph break
-            if (currentSection) {
-                html += `<p>${escapeHtml(currentSection).replace(/\n/g, '<br>')}</p>`;
-                currentSection = '';
-            }
-        } else {
-            // Add to current section
-            if (currentSection) {
-                currentSection += '\n' + line;
-            } else {
-                currentSection = line;
-            }
+        if (!trimmed) return '';
+        if (isAllCapsHeading(trimmed)) {
+            return `<h3>${escapeHtml(trimmed)}</h3>`;
         }
+        return escapeHtml(line);
     });
-    
-    // Add remaining content
-    if (currentSection) {
-        html += `<p>${escapeHtml(currentSection).replace(/\n/g, '<br>')}</p>`;
-    }
-    
-    html += '</div>';
-    content.innerHTML = html;
+
+    return renderedLines
+        .join('\n')
+        .replace(/\n{2,}/g, '<br><br>')
+        .replace(/\n/g, '<br>');
+}
+
+function isAllCapsHeading(line) {
+    if (!line) return false;
+    const lettersOnly = line.replace(/[^A-Za-z]/g, '');
+    if (!lettersOnly) return false;
+    return lettersOnly === lettersOnly.toUpperCase();
 }
 
 // =====================================================
@@ -639,5 +629,20 @@ function autoResizeTextarea() {
         chatInput.style.height = 'auto';
         chatInput.style.height = Math.min(chatInput.scrollHeight, 200) + 'px';
     }
+}
+
+function triggerSendIconAnimation() {
+    const iconEl = document.querySelector('.send-btn .send-icon');
+    if (!iconEl) return;
+
+    // Restart animation if the user sends quickly.
+    iconEl.classList.remove('send-flying');
+    // Force reflow so re-adding class retriggers animation.
+    void iconEl.offsetWidth;
+    iconEl.classList.add('send-flying');
+
+    iconEl.addEventListener('animationend', () => {
+        iconEl.classList.remove('send-flying');
+    }, { once: true });
 }
 

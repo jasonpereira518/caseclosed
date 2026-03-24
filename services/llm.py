@@ -303,7 +303,10 @@ def draft_legal_document(context: dict, doc_type: str = "memo") -> str:
         f"**APPLICABLE LAW**\nBased on the following relevant cases:\n{relevant_cases}\n\n"
         f"**ANALYSIS**\nProvide a thorough legal analysis connecting the facts to the applicable law.\n\n"
         f"**CONCLUSION**\nProvide a clear conclusion with recommendations.\n\n"
-        "Use professional legal writing style, proper citations, and clear reasoning."
+        "Use professional legal writing style, proper citations, and clear reasoning. "
+        "Do NOT use markdown formatting such as **, ##, *, or ``` in your response. "
+        "Use plain text only. Use ALL CAPS for section headers. Use line breaks to separate sections. "
+        "Do not use bullet points - write in paragraph form."
     )
 
     try:
