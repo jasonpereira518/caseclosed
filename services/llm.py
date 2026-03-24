@@ -524,6 +524,67 @@ Instructions:
         return scored_cases
 
 
+def _analysis_summary_for_prompt(analysis: dict) -> str:
+    if not analysis:
+        return "(No structured analysis available.)"
+    try:
+        return json.dumps(analysis, ensure_ascii=False, indent=2)
+    except Exception:
+        return str(analysis)
+
+
+def ask_about_case(summary: str, analysis: dict, case_data: dict, question: str) -> str:
+    """
+    Answer a follow-up question about one case; uses flash model for fast replies.
+    """
+    title = case_data.get("title") or "Untitled"
+    citation = case_data.get("citation") or ""
+    decision_date = case_data.get("decision_date") or ""
+    snippet = case_data.get("snippet") or ""
+    rel_score = case_data.get("relevance_score")
+    if rel_score is None:
+        rel_score = case_data.get("initial_score", "")
+    rel_reason = case_data.get("relevance_reason") or ""
+    summary_text = (summary or "").strip()
+    analysis_summary = _analysis_summary_for_prompt(analysis if isinstance(analysis, dict) else {})
+    rel_display = f"{rel_score}/100" if isinstance(rel_score, (int, float)) else str(rel_score)
+
+    prompt = f"""You are a legal research assistant. The user found this case during research and wants to know more about it, including how it might apply to their situation.
+
+User's Legal Situation Summary:
+{summary_text}
+
+User's Case Analysis:
+{analysis_summary}
+
+Case Being Discussed:
+Title: {title}
+Citation: {citation}
+Date: {decision_date}
+Excerpt: {snippet}
+Relevance Score: {rel_display}
+Relevance Reason: {rel_reason}
+
+User's Question:
+{question}
+
+Provide a clear, helpful answer. If the user asks how this case relates to their situation, draw specific connections. If you don't have enough information from the excerpt, say so and suggest what to look for in the full opinion.
+
+IMPORTANT RESPONSE GUIDELINES:
+- Answer the question directly in 2-4 sentences
+- Do not repeat the case details back to the user
+- Do not add preamble like "Based on the excerpt..." — just answer
+- If the answer requires more detail, keep it under 6 sentences total
+- Be specific and concrete, not vague"""
+
+    try:
+        agent = client.chats.create(model=config.CLARIFIER_MODEL)
+        response = agent.send_message(prompt)
+        return (getattr(response, "text", None) or "").strip() or "[No response from model]"
+    except Exception as e:
+        return f"[Error: {e}]"
+
+
 def draft_legal_document(context: dict, doc_type: str = "memo") -> str:
     """Generate professional legal memo or brief."""
     analysis = context.get("analysis", {})

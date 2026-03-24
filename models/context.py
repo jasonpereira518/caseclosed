@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 import config
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 from services.firestore import (
     delete_context as delete_context_doc,
@@ -157,7 +158,7 @@ def list_user_contexts(user_id):
         return []
     col = db.collection(config.FIRESTORE_COLLECTION)
     sessions = []
-    for doc in col.where("user_id", "==", str(user_id)).stream():
+    for doc in col.where(filter=FieldFilter("user_id", "==", str(user_id))).stream():
         data = _ensure_metadata(doc.to_dict() or {})
         sessions.append(
             {

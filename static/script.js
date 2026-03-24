@@ -31,7 +31,6 @@ const newSessionBtn = document.querySelector('#new-session-btn');
 const deleteModal = document.querySelector('#delete-modal');
 const deleteCancelBtn = document.querySelector('#delete-cancel');
 const deleteConfirmBtn = document.querySelector('#delete-confirm');
-
 let clarifyMode = false;
 let clarificationAnswers = [];
 let clarifyAttempts = 0;
@@ -40,6 +39,8 @@ let currentAnalysis = {};
 let currentCases = [];
 let sessionHistory = [];
 let pendingDeleteContextId = null;
+let casesViewState = 'list';
+let activeCaseIndex = null;
 
 /* Init & Setup
  * TODO: Consider moving to TypeScript for better type safety
@@ -956,8 +957,189 @@ function bindRelevanceScoreTooltips(container) {
     });
 }
 
-function updateCasesPanel(cases) {
+function bindCaseDetailTitleClicks(container) {
+    if (!container) return;
+    container.querySelectorAll('.case-title--detail').forEach((titleEl) => {
+        titleEl.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const item = titleEl.closest('.case-item');
+            if (!item) return;
+            const idx = parseInt(item.getAttribute('data-case-index'), 10);
+            if (Number.isNaN(idx)) return;
+            showCaseDetail(idx);
+        });
+    });
+}
+
+function appendCasesPanelChatMessage(role, text) {
+    const chat = document.getElementById('cases-detail-chat');
+    if (!chat) return;
+    const wrap = document.createElement('div');
+    wrap.className = `chat-message fade-in ${role === 'user' ? 'user-message' : 'ai-message'}`;
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    bubble.innerHTML = escapeHtml(text).replace(/\n/g, '<br>');
+    wrap.appendChild(bubble);
+    chat.appendChild(wrap);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+function renderCaseDetailFollowUps(caseObj) {
+    const chat = document.getElementById('cases-detail-chat');
+    const promptEl = document.getElementById('cases-detail-chat-prompt');
+    if (!chat) return;
+    chat.innerHTML = '';
+    const ups = (caseObj && caseObj.follow_ups) || [];
+    if (promptEl) {
+        promptEl.style.display = ups.length ? 'none' : 'block';
+    }
+    ups.forEach((item) => {
+        const q = item && item.question != null ? String(item.question) : '';
+        const a = item && item.answer != null ? String(item.answer) : '';
+        if (q) appendCasesPanelChatMessage('user', q);
+        if (a) appendCasesPanelChatMessage('bot', a);
+    });
+}
+
+function showCaseList() {
+    casesViewState = 'list';
+    activeCaseIndex = null;
+    renderCasesList(currentCases);
+}
+
+function showCaseDetail(caseIndex) {
+    const caseData = currentCases[caseIndex];
+    if (!caseData) return;
+    casesViewState = 'detail';
+    activeCaseIndex = caseIndex;
+    renderCaseDetailView(caseData);
+}
+
+function renderCaseDetailView(caseData) {
     const content = document.getElementById('cases-content');
+    if (!content) return;
+    const titleSafe = escapeHtml(caseData.title || 'Untitled');
+    content.innerHTML = `
+        <div class="cases-detail-view">
+            <button type="button" class="cases-back-btn" id="cases-back-btn">← Back to Cases</button>
+            <div class="cases-detail-header-panel">
+                <h3 class="cases-detail-title-text">${titleSafe}</h3>
+            </div>
+            <div class="cases-detail-info-block">
+                <div id="cases-detail-meta" class="cases-detail-meta"></div>
+                <div id="cases-detail-snippet" class="cases-detail-snippet"></div>
+                <div id="cases-detail-score" class="cases-detail-score-row"></div>
+            </div>
+            <div class="cases-detail-divider-thin"></div>
+            <p class="cases-detail-chat-prompt" id="cases-detail-chat-prompt">Ask a question about this case or how it relates to your situation.</p>
+            <div class="cases-detail-chat" id="cases-detail-chat"></div>
+            <div class="cases-detail-input-row">
+                <input type="text" id="cases-detail-question" placeholder="Ask about this case..." autocomplete="off" />
+                <button type="button" id="cases-detail-send">Send</button>
+            </div>
+        </div>
+    `;
+
+    const metaEl = document.getElementById('cases-detail-meta');
+    const snippetEl = document.getElementById('cases-detail-snippet');
+    const scoreEl = document.getElementById('cases-detail-score');
+    if (metaEl) {
+        const metaParts = [];
+        if (caseData.citation) metaParts.push(caseData.citation);
+        if (caseData.decision_date) metaParts.push(caseData.decision_date);
+        metaEl.textContent = metaParts.length ? metaParts.join(' · ') : '—';
+    }
+    if (snippetEl) {
+        snippetEl.textContent = caseData.snippet || '';
+    }
+    if (scoreEl) {
+        const score = caseData.relevance_score ?? caseData.initial_score ?? 0;
+        const relClass = getRelevanceClass(score);
+        const reason = caseData.relevance_reason ? escapeHtml(caseData.relevance_reason) : '';
+        scoreEl.innerHTML = `Relevance: <span class="relevance-score ${relClass}">${score}%</span>${
+            reason ? ` — <span class="cases-detail-reason">${reason}</span>` : ''
+        }`;
+    }
+    renderCaseDetailFollowUps(caseData);
+
+    document.getElementById('cases-back-btn')?.addEventListener('click', showCaseList);
+    document.getElementById('cases-detail-send')?.addEventListener('click', submitCasesPanelAsk);
+    document.getElementById('cases-detail-question')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            submitCasesPanelAsk();
+        }
+    });
+    document.getElementById('cases-detail-question')?.focus();
+}
+
+async function submitCasesPanelAsk() {
+    const input = document.getElementById('cases-detail-question');
+    const sendBtn = document.getElementById('cases-detail-send');
+    if (!input || activeCaseIndex === null || !contextId) return;
+    const q = input.value.trim();
+    if (!q) return;
+
+    const promptEl = document.getElementById('cases-detail-chat-prompt');
+    if (promptEl) promptEl.style.display = 'none';
+
+    appendCasesPanelChatMessage('user', q);
+    input.value = '';
+
+    const chat = document.getElementById('cases-detail-chat');
+    const loading = document.createElement('div');
+    loading.className = 'cases-detail-loading chat-message ai-message loading-message';
+    loading.innerHTML =
+        '<div class="message-bubble"><span class="loading-spinner" aria-hidden="true"></span>Researching...</div>';
+    if (chat) chat.appendChild(loading);
+    if (chat) chat.scrollTop = chat.scrollHeight;
+    if (sendBtn) sendBtn.disabled = true;
+
+    try {
+        const res = await fetch('/case/ask', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                context_id: contextId,
+                case_index: activeCaseIndex,
+                question: q,
+            }),
+        });
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (_) {
+            /* ignore */
+        }
+        loading.remove();
+        if (!res.ok) {
+            appendCasesPanelChatMessage(
+                'bot',
+                data.error || data.message || `Request failed (${res.status}).`
+            );
+            return;
+        }
+        const answer = data.answer != null ? String(data.answer) : '';
+        appendCasesPanelChatMessage('bot', answer);
+        const live = currentCases[activeCaseIndex];
+        if (live) {
+            if (!live.follow_ups) live.follow_ups = [];
+            live.follow_ups.push({ question: q, answer });
+        }
+    } catch (err) {
+        if (loading.parentNode) loading.remove();
+        appendCasesPanelChatMessage('bot', 'Something went wrong. Please try again.');
+        console.error(err);
+    } finally {
+        if (sendBtn) sendBtn.disabled = false;
+    }
+}
+
+function renderCasesList(cases) {
+    const content = document.getElementById('cases-content');
+    if (!content) return;
 
     if (!cases || cases.length === 0) {
         content.innerHTML = '<p class="empty-state">No cases found yet.</p>';
@@ -965,14 +1147,14 @@ function updateCasesPanel(cases) {
     }
 
     let html = '';
-    cases.forEach((c) => {
+    cases.forEach((c, i) => {
         const score = c.relevance_score ?? c.initial_score ?? 0;
         const relevanceClass = getRelevanceClass(score);
         const dim = relevanceDimensionsDataAttributes(c.relevance_dimensions);
         const tooltipClass = dim.hasTooltip ? ' relevance-score--tooltip' : '';
         html += `
-            <div class="case-item">
-                <div class="case-title">${escapeHtml(c.title || 'Untitled')}</div>
+            <div class="case-item" data-case-index="${i}">
+                <div class="case-title case-title--detail">${escapeHtml(c.title || 'Untitled')}</div>
                 ${c.citation ? `<div class="case-citation">${escapeHtml(c.citation)}</div>` : ''}
                 <div class="case-relevance">
                     <span class="relevance-score ${relevanceClass}${tooltipClass}"${dim.extraAttrs}>Relevance: ${score}%</span>
@@ -986,6 +1168,16 @@ function updateCasesPanel(cases) {
 
     content.innerHTML = html;
     bindRelevanceScoreTooltips(content);
+    bindCaseDetailTitleClicks(content);
+}
+
+function updateCasesPanel(cases) {
+    if (cases !== undefined) {
+        currentCases = Array.isArray(cases) ? cases : [];
+    }
+    casesViewState = 'list';
+    activeCaseIndex = null;
+    renderCasesList(currentCases);
 }
 
 function displayDraft(docText) {

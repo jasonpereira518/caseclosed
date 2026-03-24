@@ -3,9 +3,16 @@ import traceback
 from flask import Blueprint, jsonify, request, session
 from flask_login import current_user, login_required
 
-from models.context import auto_generate_title, get_context_id, get_or_create_context
+from models.context import (
+    auto_generate_title,
+    context_belongs_to_user,
+    get_context,
+    get_context_id,
+    get_or_create_context,
+)
 from services.courtlistener import query_courtlistener
 from services.llm import (
+    ask_about_case,
     check_if_more_info_needed,
     extract_answers_from_message,
     extract_structured_analysis,
@@ -207,3 +214,50 @@ def chat():
             "cases": results,
         }
     )
+
+
+@chat_bp.route("/case/ask", methods=["POST"])
+@chat_bp.route("/chat/case/ask", methods=["POST"])
+@login_required
+def case_ask():
+    payload = request.get_json(silent=True) or {}
+    request_context_id = str(payload.get("context_id", "")).strip()
+    session_context_id = str(session.get("context_id", "")).strip()
+    context_id = request_context_id or session_context_id
+    case_index = payload.get("case_index")
+    question = (payload.get("question") or "").strip()
+    user_id = str(current_user.get_id())
+
+    if not context_id or not question:
+        return jsonify({"error": "context_id and question are required"}), 400
+    try:
+        idx = int(case_index)
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid case_index"}), 400
+
+    belongs = context_belongs_to_user(context_id, user_id)
+    if not belongs:
+        return jsonify({"error": "forbidden"}), 403
+
+    context = get_context(context_id, user_id)
+    if not context:
+        return jsonify({"error": "context not found"}), 404
+
+    cases = list(context.get("cases") or [])
+    if idx < 0 or idx >= len(cases):
+        return jsonify({"error": "invalid case_index"}), 400
+
+    case = dict(cases[idx])
+    summary = (context.get("summary") or context.get("description") or "").strip()
+    analysis = context.get("analysis") if isinstance(context.get("analysis"), dict) else {}
+
+    answer = ask_about_case(summary, analysis, case, question)
+
+    title = case.get("title") or "Untitled"
+    follow_ups = list(case.get("follow_ups") or [])
+    follow_ups.append({"question": question, "answer": answer})
+    case["follow_ups"] = follow_ups
+    cases[idx] = case
+    context["cases"] = cases
+
+    return jsonify({"answer": answer, "case_title": title})
