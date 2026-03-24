@@ -1,7 +1,9 @@
+import traceback
+
 from flask import Blueprint, jsonify, request, session
 from flask_login import current_user, login_required
 
-from models.context import get_context_id, get_or_create_context
+from models.context import auto_generate_title, get_context_id, get_or_create_context
 from services.courtlistener import query_courtlistener
 from services.llm import (
     check_if_more_info_needed,
@@ -15,6 +17,16 @@ from services.llm import (
 
 
 chat_bp = Blueprint("chat", __name__)
+
+
+def _append_chat_message(context, role, content):
+    """Persist one chat message; reassign list so FirestoreBackedDict saves."""
+    text = (content or "").strip()
+    if not text:
+        return
+    messages = list(context.get("messages") or [])
+    messages.append({"role": role, "content": text})
+    context["messages"] = messages
 
 
 @chat_bp.route("/chat", methods=["POST"])
@@ -31,6 +43,10 @@ def chat():
     context = get_or_create_context(context_id, str(current_user.get_id()))
     if context is None:
         return jsonify({"error": "forbidden"}), 403
+    had_user_input = bool(context.get("description", "").strip())
+
+    if message:
+        _append_chat_message(context, "user", message)
 
     if adding_info and message:
         context["description"] += " " + message
@@ -54,6 +70,13 @@ def chat():
         if needs_more and questions and clarify_attempts < 2:
             context["pending_questions"] = questions
             context["clarify_attempts"] = clarify_attempts + 1
+            _qj_items = [f"{idx + 1}. {q}" for idx, q in enumerate(questions)]
+            lines = "\n".join(_qj_items)
+            _append_chat_message(
+                context,
+                "assistant",
+                f"I need a bit more information:\n\n{lines}\n\nPlease provide answers to these questions in your next message.",
+            )
             return jsonify(
                 {
                     "status": "clarifying",
@@ -75,6 +98,13 @@ def chat():
             context["description"] += " " + message
             context["pending_questions"] = questions
             context["clarify_attempts"] = clarify_attempts + 1
+            _qj_items = [f"{idx + 1}. {q}" for idx, q in enumerate(questions)]
+            lines = "\n".join(_qj_items)
+            _append_chat_message(
+                context,
+                "assistant",
+                f"I need a bit more information:\n\n{lines}\n\nPlease provide answers to these questions in your next message.",
+            )
             return jsonify(
                 {
                     "status": "clarifying",
@@ -94,18 +124,27 @@ def chat():
         context["clarify_attempts"] = 0
 
     combined_text = context["description"].strip()
+    if not had_user_input and context.get("title") == "New Session":
+        context["title"] = auto_generate_title(context)
 
     analysis = extract_structured_analysis(combined_text)
     context["analysis"] = analysis
+    for key in ("legal_issues", "jurisdictions", "causes_of_action", "facts", "parties"):
+        seq = analysis.get(key) or []
+        if isinstance(seq, list):
+            print(
+            )
 
     summary = summarize_case(combined_text)
     context["summary"] = summary
 
     seen_keys = set()
     cases = []
+    results = []
     try:
         for i in range(3):
             search_query = generate_query(summary, analysis)
+            search_query = str(search_query).strip() if search_query is not None else ""
             context["search_query"] += f"{i}th search query: {search_query}\n\n"
             cases_for_query = query_courtlistener(search_query)
             for c in cases_for_query:
@@ -114,30 +153,46 @@ def chat():
                     seen_keys.add(key)
                     cases.append(c)
             # cases += cases_for_query
+
+        results = []
+        for c in cases:
+            grading = grade_case(summary, c["title"], c["snippet"], analysis)
+            results.append(
+                {
+                    **c,
+                    "initial_score": grading["score"],
+                    "relevance_score": grading["score"],
+                    "relevance_reason": grading["reason"],
+                    "relevance_dimensions": grading.get("dimensions", {}),
+                }
+            )
+
+        results = [r for r in results if r["relevance_score"] >= 15]
+
+        if len(results) > 3:
+            results = rerank_cases(summary, analysis, results)
+
+        # Sort by descending relevance
+        results.sort(key=lambda x: x["relevance_score"], reverse=True)
+        context["cases"] = results
     except Exception as e:
-        return jsonify({"status": "error", "message": f"CourtListener error: {e}"}), 500
+        print(f"[ERROR] Full traceback:")
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-    results = []
-    for c in cases:
-        grading = grade_case(summary, c["title"], c["snippet"], analysis)
-        results.append(
-            {
-                **c,
-                "initial_score": grading["score"],
-                "relevance_score": grading["score"],
-                "relevance_reason": grading["reason"],
-                "relevance_dimensions": grading.get("dimensions", {}),
-            }
+    if results:
+        _append_chat_message(
+            context,
+            "assistant",
+            f"Found {len(results)} relevant cases. Check the Cases panel.",
         )
-
-    results = [r for r in results if r["relevance_score"] >= 15]
-
-    if len(results) > 3:
-        results = rerank_cases(summary, analysis, results)
-
-    # Sort by descending relevance
-    results.sort(key=lambda x: x["relevance_score"], reverse=True)
-    context["cases"] = results
+    else:
+        _append_chat_message(context, "assistant", "No relevant cases found.")
+    _append_chat_message(
+        context,
+        "assistant",
+        "You can add more information to refine the search or generate a document.",
+    )
 
     # -------------------------------------------------
     # Step 7: Return results

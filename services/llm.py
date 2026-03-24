@@ -61,8 +61,9 @@ def ask_clarifying_questions(user_input: str, existing_analysis: dict = None, de
 
 def extract_answers_from_message(user_message: str, questions: list) -> dict:
     """Extract answers to questions from user's message."""
+    _ea_lines = [f"{i+1}. {q}" for i, q in enumerate(questions)]
     prompt = (
-        f"Given these questions:\n" + "\n".join([f"{i+1}. {q}" for i, q in enumerate(questions)]) + "\n\n"
+        f"Given these questions:\n" + "\n".join(_ea_lines) + "\n\n"
         f"And this user response: '{user_message}'\n\n"
         "Extract the answers to each question from the user's response. "
         "Respond strictly in JSON format:\n"
@@ -200,13 +201,99 @@ def extract_structured_analysis(text: str) -> dict:
     }
 
 
+def _join_analysis_field(items) -> str:
+    """Join analysis list fields for prompts; list items may be str or dict (from LLM/storage)."""
+    if not items:
+        return ""
+    parts = []
+    for x in items:
+        if isinstance(x, str):
+            s = x.strip()
+            if s:
+                parts.append(s)
+        elif isinstance(x, dict):
+            for key in ("text", "issue", "name", "description", "value", "query", "title"):
+                v = x.get(key)
+                if isinstance(v, str) and v.strip():
+                    parts.append(v.strip())
+                    break
+            else:
+                parts.append(json.dumps(x, ensure_ascii=False))
+        elif x is not None:
+            parts.append(str(x).strip())
+    return ", ".join(parts)
+
+
+def _normalize_listish_query_items(items: list) -> str:
+    """Turn list of str/dict into a single space-separated query string."""
+    if not isinstance(items, list) or not items:
+        return ""
+    parts = []
+    for x in items:
+        if isinstance(x, str) and x.strip():
+            parts.append(x.strip())
+        elif isinstance(x, dict):
+            inner = x.get("query") or x.get("text") or x.get("keywords")
+            if isinstance(inner, str) and inner.strip():
+                parts.append(inner.strip())
+            elif isinstance(inner, list):
+                parts.extend(p for p in _normalize_listish_query_items(inner).split() if p)
+            else:
+                s = _join_analysis_field([x])
+                if s:
+                    parts.append(s.replace(",", " "))
+        elif x is not None:
+            parts.append(str(x).strip())
+    return " ".join(parts)
+
+
+def _normalize_generated_query(raw: str, fallback: str) -> str:
+    """Ensure CourtListener gets a plain string: model may return JSON or list-shaped text."""
+    fb = str(fallback or "").strip()
+    if not raw:
+        return fb
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() in ("```", "```json"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    parsed = extract_json_object(text)
+    if isinstance(parsed, dict):
+        for key in ("query", "search_query", "keywords", "q", "text"):
+            val = parsed.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+            if isinstance(val, list) and val:
+                q = _normalize_listish_query_items(val)
+                if q:
+                    return q
+        return text or fb
+
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        parsed = None
+    if isinstance(parsed, list):
+        q = _normalize_listish_query_items(parsed)
+        return q if q else fb
+    if isinstance(parsed, str) and parsed.strip():
+        return parsed.strip()
+
+    return text or fb
+
+
 def generate_query(summary: str, analysis: dict = None) -> str:
     """Generate search query using summary and structured analysis."""
+    fb = str(summary or "").strip()
     context = ""
     if analysis:
-        issues = ", ".join(analysis.get("legal_issues", []))
-        causes = ", ".join(analysis.get("causes_of_action", []))
-        jurisdictions = ", ".join(analysis.get("jurisdictions", []))
+        issues = _join_analysis_field(analysis.get("legal_issues", []))
+        causes = _join_analysis_field(analysis.get("causes_of_action", []))
+        jurisdictions = _join_analysis_field(analysis.get("jurisdictions", []))
         context = f"\n\nExtracted Legal Issues: {issues}\nCauses of Action: {causes}\nJurisdictions: {jurisdictions}"
 
     prompt = (
@@ -217,17 +304,20 @@ def generate_query(summary: str, analysis: dict = None) -> str:
     try:
         query_agent = client.chats.create(model=config.QUERY_MODEL)
         response = query_agent.send_message(prompt)
-        return response.text.strip() or summary
+        raw = (getattr(response, "text", None) or "").strip()
+        return _normalize_generated_query(raw, fb) or fb
     except Exception:
-        return summary
+        return fb
 
 
 def grade_case(summary: str, case_title: str, snippet: str, analysis: dict = None) -> dict:
     # Build context from structured analysis if available
     context = ""
     if analysis:
-        issues = ", ".join(analysis.get("legal_issues", [])) or ", ".join(analysis.get("issues", []))
-        causes = ", ".join(analysis.get("causes_of_action", []))
+        issues = _join_analysis_field(analysis.get("legal_issues", [])) or _join_analysis_field(
+            analysis.get("issues", [])
+        )
+        causes = _join_analysis_field(analysis.get("causes_of_action", []))
         if issues or causes:
             context = "User's Legal Context:\n"
             if issues:
@@ -440,18 +530,26 @@ def draft_legal_document(context: dict, doc_type: str = "memo") -> str:
     summary = context.get("summary", "")
     cases = context.get("cases", [])
 
-    facts = "\n".join([f"- {f}" for f in analysis.get("facts", [])])
-    issues = "\n".join([f"- {i}" for i in analysis.get("legal_issues", [])])
-    parties = "\n".join([f"- {p.get('name', 'Unknown')} ({p.get('role', 'Unknown')})" for p in analysis.get("parties", [])])
-    jurisdictions = ", ".join(analysis.get("jurisdictions", []))
-    causes = "\n".join([f"- {c}" for c in analysis.get("causes_of_action", [])])
+    _facts_lines = [f"- {f}" for f in analysis.get("facts", [])]
+    facts = "\n".join(_facts_lines)
+    _issues_lines = [f"- {i}" for i in analysis.get("legal_issues", [])]
+    issues = "\n".join(_issues_lines)
+    _parties_lines = [
+        f"- {p.get('name', 'Unknown')} ({p.get('role', 'Unknown')})" for p in analysis.get("parties", [])
+    ]
+    parties = "\n".join(_parties_lines)
+    _juris = list(analysis.get("jurisdictions", []))
+    jurisdictions = ", ".join(_juris)
+    _causes_lines = [f"- {c}" for c in analysis.get("causes_of_action", [])]
+    causes = "\n".join(_causes_lines)
 
-    relevant_cases = "\n\n".join([
+    _rc_blocks = [
         f"**{c.get('title', 'Unknown')}** ({c.get('citation', 'No citation')})\n"
         f"Relevance: {c.get('relevance_score', 0)}% - {c.get('relevance_reason', '')}\n"
         f"Snippet: {c.get('snippet', '')[:200]}..."
         for c in cases[:5]
-    ])
+    ]
+    relevant_cases = "\n\n".join(_rc_blocks)
 
     prompt = (
         f"Generate a professional legal {doc_type} with the following structure:\n\n"

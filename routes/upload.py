@@ -1,7 +1,7 @@
 from flask import Blueprint, current_app, jsonify, request, session
 from flask_login import current_user, login_required
 
-from models.context import get_context_id, get_or_create_context
+from models.context import auto_generate_title, get_context_id, get_or_create_context
 from services.llm import extract_structured_analysis
 from services.pdf import allowed_file, save_uploaded_pdf, extract_pdf_text, cleanup_temp_file
 
@@ -27,7 +27,10 @@ def upload():
             context = get_or_create_context(context_id, str(current_user.get_id()))
             if context is None:
                 return jsonify({"error": "forbidden"}), 403
+            had_user_input = bool(context.get("description", "").strip())
             context["description"] += f"\n\n[PDF: {name}]\n{pdf_text}"
+            if not had_user_input and context.get("title") == "New Session":
+                context["title"] = auto_generate_title(context)
 
             # Extract structured analysis from PDF
             analysis = extract_structured_analysis(pdf_text)

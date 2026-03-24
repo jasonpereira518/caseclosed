@@ -23,6 +23,14 @@ const analyzeBtn = document.querySelector('#analyze-btn');
 const draftBtn = document.querySelector('#draft-btn');
 const draftGenerateBtn = document.querySelector('#draft-generate-btn');
 const roleSelectEl = document.querySelector('#role-select');
+const sidebarEl = document.querySelector('#sidebar');
+const sidebarToggleBtn = document.querySelector('#sidebar-toggle');
+const sidebarBackdrop = document.querySelector('#sidebar-backdrop');
+const sessionListEl = document.querySelector('#session-list');
+const newSessionBtn = document.querySelector('#new-session-btn');
+const deleteModal = document.querySelector('#delete-modal');
+const deleteCancelBtn = document.querySelector('#delete-cancel');
+const deleteConfirmBtn = document.querySelector('#delete-confirm');
 
 let clarifyMode = false;
 let clarificationAnswers = [];
@@ -30,6 +38,8 @@ let clarifyAttempts = 0;
 let contextId = null;
 let currentAnalysis = {};
 let currentCases = [];
+let sessionHistory = [];
+let pendingDeleteContextId = null;
 
 /* Init & Setup
  * TODO: Consider moving to TypeScript for better type safety
@@ -38,12 +48,15 @@ let currentCases = [];
 document.addEventListener('DOMContentLoaded', async () => {
     // Load context on page load
     await loadContext();
+    await loadSessionHistory();
+    setupSidebar();
     
     // Setup tab switching
     setupTabs();
     
     // Setup event listeners
     setupEventListeners();
+    setupMainContentSidebarClose();
 });
 
 // =====================================================
@@ -108,6 +121,31 @@ function setupEventListeners() {
     chatInput.addEventListener('input', autoResizeTextarea);
 }
 
+function setupMainContentSidebarClose() {
+    const selectors = [
+        '.chat-box',
+        '.panel-tab',
+        '.chat-form',
+        '.toolbar-btn',
+        '#sidebar-backdrop',
+        '#chat-input',
+        '.send-btn',
+        '.panel-content',
+        '.chat-pane'
+    ];
+    const closeIfOpen = () => {
+        if (!document.body.classList.contains('sidebar-collapsed')) {
+            document.body.classList.add('sidebar-collapsed');
+            updateSidebarToggleIcon();
+        }
+    };
+    selectors.forEach((selector) => {
+        document.querySelectorAll(selector).forEach((el) => {
+            el.addEventListener('click', closeIfOpen);
+        });
+    });
+}
+
 // =====================================================
 // CONTEXT MANAGEMENT
 // =====================================================
@@ -115,20 +153,329 @@ async function loadContext() {
     try {
         const res = await fetch('/context');
         const data = await res.json();
-        contextId = data.context_id;
-        // Role selector will be updated if needed
-        
-        if (data.context && data.context.analysis) {
-            currentAnalysis = data.context.analysis;
-            updateAnalysisPanel(data.context.analysis);
-        }
-        
-        if (data.context && data.context.cases) {
-            currentCases = data.context.cases;
-            updateCasesPanel(data.context.cases);
-        }
+        applyContextToUI(data.context_id, data.context);
     } catch (err) {
         console.error('Error loading context:', err);
+    }
+}
+
+async function loadSessionHistory() {
+    try {
+        const res = await fetch('/contexts');
+        const data = await res.json();
+        sessionHistory = data.contexts || [];
+        if (data.active_context_id) {
+            contextId = data.active_context_id;
+        }
+        renderSessionList();
+    } catch (err) {
+        console.error('Error loading session history:', err);
+    }
+}
+
+function setupSidebar() {
+    // Keep sidebar hidden by default; toggle button remains visible.
+    document.body.classList.add('sidebar-collapsed');
+    updateSidebarToggleIcon();
+
+    if (sidebarToggleBtn) {
+        sidebarToggleBtn.addEventListener('click', toggleSidebar);
+    }
+    if (sidebarBackdrop) {
+        sidebarBackdrop.addEventListener('click', closeSidebar);
+    }
+    if (newSessionBtn) {
+        newSessionBtn.addEventListener('click', handleNewSession);
+    }
+    if (sessionListEl) {
+        sessionListEl.addEventListener('click', handleSessionListClick);
+    }
+    if (deleteCancelBtn) {
+        deleteCancelBtn.addEventListener('click', hideDeleteModal);
+    }
+    if (deleteConfirmBtn) {
+        deleteConfirmBtn.addEventListener('click', confirmDeleteSession);
+    }
+    if (deleteModal) {
+        deleteModal.addEventListener('click', (e) => {
+            if (e.target === deleteModal) {
+                hideDeleteModal();
+            }
+        });
+    }
+}
+
+function renderSessionList() {
+    if (!sessionListEl) return;
+    if (!sessionHistory.length) {
+        sessionListEl.innerHTML = '<p class="sidebar-empty">No sessions yet.</p>';
+        return;
+    }
+    sessionListEl.innerHTML = sessionHistory.map((item) => {
+        const isActive = item.context_id === contextId;
+        const title = escapeHtml((item.title || 'New Session').slice(0, 35));
+        const ts = formatRelativeTime(item.updated_at || item.created_at);
+        return `
+            <div class="session-card ${isActive ? 'active' : ''}" data-context-id="${escapeHtml(item.context_id)}" title="${escapeHtml(item.title || 'New Session')}">
+                <div class="session-main">
+                    <div class="session-title">${title}</div>
+                    <div class="session-time">${escapeHtml(ts)}</div>
+                </div>
+                <button type="button" class="session-menu-btn" data-menu-btn="${escapeHtml(item.context_id)}">...</button>
+                <div class="session-menu" data-menu="${escapeHtml(item.context_id)}">
+                    <button type="button" data-action="rename" data-context-id="${escapeHtml(item.context_id)}">Rename</button>
+                    <button type="button" data-action="delete" data-context-id="${escapeHtml(item.context_id)}">Delete</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function formatRelativeTime(isoString) {
+    if (!isoString) return 'just now';
+    const then = new Date(isoString).getTime();
+    if (Number.isNaN(then)) return 'just now';
+    const diffMs = Date.now() - then;
+    const minutes = Math.floor(diffMs / 60000);
+    const hours = Math.floor(diffMs / 3600000);
+    const days = Math.floor(diffMs / 86400000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes} min ago`;
+    if (hours < 24) return `${hours} hr ago`;
+    if (days === 1) return 'yesterday';
+    return `${days} days ago`;
+}
+
+function applyContextToUI(nextContextId, context) {
+    contextId = nextContextId || contextId;
+    const safeContext = context || {};
+    currentAnalysis = safeContext.analysis || {};
+    currentCases = safeContext.cases || [];
+
+    renderChatFromContext(safeContext);
+    updateAnalysisPanel(currentAnalysis);
+    updateCasesPanel(currentCases);
+    updateDraftPanel(safeContext.draft);
+    renderSessionList();
+}
+
+function resetChatWindow() {
+    if (!chatBox) return;
+    chatBox.innerHTML = `
+        <div class="chat-message ai-message fade-in">
+            <div class="message-bubble">Hello! Upload a case PDF or describe your legal situation to begin.</div>
+            <div class="message-timestamp">Now</div>
+        </div>
+    `;
+}
+
+function renderChatFromContext(context) {
+    const messages = Array.isArray(context.messages) ? context.messages : [];
+    if (!messages.length) {
+        resetChatWindow();
+        return;
+    }
+    if (!chatBox) return;
+    chatBox.innerHTML = '';
+    messages.forEach((msg) => {
+        const role = (msg && (msg.role || msg.sender || msg.type)) || 'assistant';
+        const rawText = (msg && (msg.content || msg.text || msg.message)) || '';
+        const htmlText = escapeHtml(String(rawText)).replace(/\n/g, '<br>');
+        appendMessage(role === 'user' ? 'user' : 'bot', htmlText);
+    });
+}
+
+function updateDraftPanel(draft) {
+    const draftContent = document.getElementById('draft-content');
+    const draftDownloadBtn = document.getElementById('draft-download-btn');
+    if (!draftContent) return;
+
+    if (draft && String(draft).trim()) {
+        displayDraft(String(draft));
+        if (draftDownloadBtn) {
+            draftDownloadBtn.style.display = 'inline-block';
+        }
+        return;
+    }
+
+    draftContent.innerHTML = '<p class="empty-state">Click "Generate Document" to create a legal memo or brief based on your case analysis.</p>';
+    if (draftDownloadBtn) {
+        draftDownloadBtn.style.display = 'none';
+    }
+}
+
+function toggleSidebar() {
+    document.body.classList.toggle('sidebar-collapsed');
+    updateSidebarToggleIcon();
+}
+
+function closeSidebar() {
+    document.body.classList.add('sidebar-collapsed');
+    updateSidebarToggleIcon();
+}
+
+function updateSidebarToggleIcon() {
+    if (!sidebarToggleBtn) return;
+    const isClosed = document.body.classList.contains('sidebar-collapsed');
+    sidebarToggleBtn.textContent = isClosed ? '☰' : '✕';
+}
+
+async function handleNewSession() {
+    try {
+        const res = await fetch('/contexts/new', { method: 'POST' });
+        const data = await res.json();
+        contextId = data.context_id;
+        clearPanelsForNewSession();
+        await loadSessionHistory();
+        if (window.innerWidth < 768) closeSidebar();
+    } catch (err) {
+        console.error('Error creating new session:', err);
+    }
+}
+
+function clearPanelsForNewSession() {
+    clarifyMode = false;
+    clarificationAnswers = [];
+    clarifyAttempts = 0;
+    currentAnalysis = {};
+    currentCases = [];
+    updateAnalysisPanel({});
+    updateCasesPanel([]);
+    updateDraftPanel('');
+    resetChatWindow();
+}
+
+async function handleSessionListClick(e) {
+    const menuBtn = e.target.closest('[data-menu-btn]');
+    if (menuBtn) {
+        const contextForMenu = menuBtn.getAttribute('data-menu-btn');
+        document.querySelectorAll('.session-menu.show').forEach((menu) => {
+            if (menu.getAttribute('data-menu') !== contextForMenu) {
+                menu.classList.remove('show');
+            }
+        });
+        const menu = document.querySelector(`.session-menu[data-menu="${CSS.escape(contextForMenu)}"]`);
+        if (menu) menu.classList.toggle('show');
+        return;
+    }
+
+    const actionBtn = e.target.closest('[data-action]');
+    if (actionBtn) {
+        const action = actionBtn.getAttribute('data-action');
+        const targetContextId = actionBtn.getAttribute('data-context-id');
+        if (action === 'rename') {
+            await beginRenameSession(targetContextId);
+        } else if (action === 'delete') {
+            showDeleteModal(targetContextId);
+        }
+        return;
+    }
+
+    const card = e.target.closest('.session-card');
+    if (!card) return;
+    const targetContextId = card.getAttribute('data-context-id');
+    if (!targetContextId || targetContextId === contextId) return;
+    await switchSession(targetContextId);
+}
+
+async function switchSession(targetContextId) {
+    const card = document.querySelector(`.session-card[data-context-id="${CSS.escape(targetContextId)}"]`);
+    if (card) {
+        card.classList.add('is-loading');
+    }
+    try {
+        const res = await fetch('/contexts/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ context_id: targetContextId })
+        });
+        if (res.status === 403) {
+            return;
+        }
+        const data = await res.json();
+        applyContextToUI(data.context_id, data.context || {});
+        await loadSessionHistory();
+        if (window.innerWidth < 768) closeSidebar();
+    } catch (err) {
+        console.error('Error switching session:', err);
+    } finally {
+        if (card) {
+            card.classList.remove('is-loading');
+        }
+    }
+}
+
+async function beginRenameSession(targetContextId) {
+    const card = document.querySelector(`.session-card[data-context-id="${CSS.escape(targetContextId)}"]`);
+    if (!card) return;
+    const titleEl = card.querySelector('.session-title');
+    if (!titleEl) return;
+    const existingTitle = titleEl.textContent || 'New Session';
+    titleEl.innerHTML = `<input class="session-rename-input" type="text" value="${escapeHtml(existingTitle)}" maxlength="120" />`;
+    const input = titleEl.querySelector('input');
+    if (!input) return;
+    input.focus();
+    input.select();
+
+    const commit = async () => {
+        const title = input.value.trim() || 'New Session';
+        try {
+            await fetch('/contexts/rename', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ context_id: targetContextId, title })
+            });
+            await loadSessionHistory();
+        } catch (err) {
+            console.error('Error renaming session:', err);
+        }
+    };
+
+    input.addEventListener('keydown', async (ev) => {
+        if (ev.key === 'Enter') {
+            ev.preventDefault();
+            await commit();
+        } else if (ev.key === 'Escape') {
+            await loadSessionHistory();
+        }
+    });
+    input.addEventListener('blur', commit, { once: true });
+}
+
+function showDeleteModal(targetContextId) {
+    pendingDeleteContextId = targetContextId;
+    if (deleteModal) {
+        deleteModal.style.display = 'flex';
+    }
+}
+
+function hideDeleteModal() {
+    pendingDeleteContextId = null;
+    if (deleteModal) {
+        deleteModal.style.display = 'none';
+    }
+}
+
+async function confirmDeleteSession() {
+    if (!pendingDeleteContextId) return;
+    const targetContextId = pendingDeleteContextId;
+    try {
+        const res = await fetch('/contexts/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ context_id: targetContextId })
+        });
+        const data = await res.json();
+        if (data.new_context_id) {
+            contextId = data.new_context_id;
+            clearPanelsForNewSession();
+            await switchSession(data.new_context_id);
+        }
+        await loadSessionHistory();
+    } catch (err) {
+        console.error('Error deleting session:', err);
+    } finally {
+        hideDeleteModal();
     }
 }
 
@@ -498,7 +845,7 @@ function updateCasesPanel(cases) {
     const content = document.getElementById('cases-content');
     
     if (!cases || cases.length === 0) {
-        content.innerHTML = '<p class="empty-state">No case law results yet. Start a search to see relevant cases.</p>';
+        content.innerHTML = '<p class="empty-state">No cases found yet.</p>';
         return;
     }
     
