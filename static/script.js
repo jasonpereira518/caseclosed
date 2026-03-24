@@ -841,24 +841,141 @@ function getRelevanceClass(score) {
     }
 }
 
+function getTooltipSubscoreClass(score) {
+    const n = Number(score);
+    if (!Number.isFinite(n)) return '';
+    if (n >= 75) return 'tooltip-excellent';
+    if (n >= 65) return 'tooltip-good';
+    if (n >= 35) return 'tooltip-fair';
+    return 'tooltip-poor';
+}
+
+let scoreTooltipEl = null;
+let scoreTooltipOwner = null;
+
+const RELEVANCE_DIMENSION_ATTRS = [
+    ['factual_similarity', 'data-factual'],
+    ['legal_issues_match', 'data-legal'],
+    ['causes_of_action_overlap', 'data-causes'],
+    ['jurisdictional_relevance', 'data-jurisdiction'],
+    ['practical_utility', 'data-utility'],
+];
+
+function relevanceDimensionsDataAttributes(dimensions) {
+    if (!dimensions || typeof dimensions !== 'object' || Array.isArray(dimensions)) {
+        return { extraAttrs: '', hasTooltip: false };
+    }
+    const attrs = [];
+    for (const [key, attrName] of RELEVANCE_DIMENSION_ATTRS) {
+        if (!Object.prototype.hasOwnProperty.call(dimensions, key)) continue;
+        const v = dimensions[key];
+        if (v === undefined || v === null || v === '') continue;
+        const s = String(v).replace(/"/g, '&quot;');
+        attrs.push(`${attrName}="${s}"`);
+    }
+    if (!attrs.length) {
+        return { extraAttrs: '', hasTooltip: false };
+    }
+    return { extraAttrs: ' ' + attrs.join(' '), hasTooltip: true };
+}
+
+function buildScoreTooltipHtml(targetEl) {
+    const rows = [
+        ['Factual Similarity:', targetEl.getAttribute('data-factual')],
+        ['Legal Issues Match:', targetEl.getAttribute('data-legal')],
+        ['Causes of Action:', targetEl.getAttribute('data-causes')],
+        ['Jurisdictional Relevance:', targetEl.getAttribute('data-jurisdiction')],
+        ['Practical Utility:', targetEl.getAttribute('data-utility')],
+    ];
+    return rows
+        .filter(([, v]) => v !== null && v !== '')
+        .map(([label, v]) => {
+            const n = Number(v);
+            const isNum = Number.isFinite(n);
+            const tier = isNum ? getTooltipSubscoreClass(n) : '';
+            const valueClass = isNum && tier ? `tooltip-value ${tier}` : 'tooltip-value';
+            const valueText = isNum ? `${Math.round(n)}%` : escapeHtml(String(v));
+            return `<div><span class="tooltip-label">${escapeHtml(label)}</span><span class="${valueClass}">${valueText}</span></div>`;
+        })
+        .join('');
+}
+
+function positionScoreTooltip(tooltip, clientX, clientY) {
+    const pad = 12;
+    const edge = 8;
+    tooltip.style.position = 'fixed';
+    tooltip.style.left = `${clientX + pad}px`;
+    tooltip.style.top = `${clientY + pad}px`;
+    const w = tooltip.offsetWidth;
+    let left = clientX + pad;
+    if (left + w > window.innerWidth - edge) {
+        left = clientX - w - pad;
+    }
+    if (left < edge) left = edge;
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${clientY + pad}px`;
+}
+
+function removeScoreTooltip() {
+    if (scoreTooltipEl) {
+        scoreTooltipEl.remove();
+        scoreTooltipEl = null;
+        scoreTooltipOwner = null;
+    }
+}
+
+function onScoreTooltipEnter(e) {
+    removeScoreTooltip();
+    const inner = buildScoreTooltipHtml(e.currentTarget);
+    if (!inner) return;
+    const tip = document.createElement('div');
+    tip.className = 'score-tooltip';
+    tip.innerHTML = inner;
+    document.body.appendChild(tip);
+    scoreTooltipEl = tip;
+    scoreTooltipOwner = e.currentTarget;
+    positionScoreTooltip(tip, e.clientX, e.clientY);
+}
+
+function onScoreTooltipMove(e) {
+    if (scoreTooltipEl && e.currentTarget === scoreTooltipOwner) {
+        positionScoreTooltip(scoreTooltipEl, e.clientX, e.clientY);
+    }
+}
+
+function onScoreTooltipLeave() {
+    removeScoreTooltip();
+}
+
+function bindRelevanceScoreTooltips(container) {
+    if (!container) return;
+    container.querySelectorAll('.relevance-score--tooltip').forEach((el) => {
+        el.addEventListener('mouseenter', onScoreTooltipEnter);
+        el.addEventListener('mousemove', onScoreTooltipMove);
+        el.addEventListener('mouseleave', onScoreTooltipLeave);
+    });
+}
+
 function updateCasesPanel(cases) {
     const content = document.getElementById('cases-content');
-    
+
     if (!cases || cases.length === 0) {
         content.innerHTML = '<p class="empty-state">No cases found yet.</p>';
         return;
     }
-    
+
     let html = '';
-    cases.forEach(c => {
+    cases.forEach((c) => {
         const score = c.relevance_score ?? c.initial_score ?? 0;
         const relevanceClass = getRelevanceClass(score);
+        const dim = relevanceDimensionsDataAttributes(c.relevance_dimensions);
+        const tooltipClass = dim.hasTooltip ? ' relevance-score--tooltip' : '';
         html += `
             <div class="case-item">
                 <div class="case-title">${escapeHtml(c.title || 'Untitled')}</div>
                 ${c.citation ? `<div class="case-citation">${escapeHtml(c.citation)}</div>` : ''}
                 <div class="case-relevance">
-                    <span class="relevance-score ${relevanceClass}">Relevance: ${score}%</span>
+                    <span class="relevance-score ${relevanceClass}${tooltipClass}"${dim.extraAttrs}>Relevance: ${score}%</span>
                 </div>
                 ${c.relevance_reason ? `<div class="relevance-reason">${escapeHtml(c.relevance_reason)}</div>` : ''}
                 ${c.snippet ? `<div class="case-snippet">${escapeHtml(c.snippet.substring(0, 200))}...</div>` : ''}
@@ -866,8 +983,9 @@ function updateCasesPanel(cases) {
             </div>
         `;
     });
-    
+
     content.innerHTML = html;
+    bindRelevanceScoreTooltips(content);
 }
 
 function displayDraft(docText) {

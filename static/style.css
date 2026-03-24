@@ -913,6 +913,52 @@ body:not(.sidebar-collapsed) #sidebar-toggle {
     text-decoration: underline;
 }
 
+.score-tooltip {
+    position: fixed;
+    z-index: 3000;
+    background: #FFFFFF;
+    border: 1px solid #E0D5C8;
+    border-radius: 10px;
+    padding: 12px 16px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    font-size: 12px;
+    line-height: 1.8;
+    color: #3A2A1A;
+    pointer-events: none;
+    white-space: nowrap;
+    animation: fadeIn 0.1s ease;
+}
+
+.score-tooltip .tooltip-label {
+    color: #9E8E7E;
+    font-weight: 400;
+}
+
+.score-tooltip .tooltip-value {
+    font-weight: 600;
+    margin-left: 6px;
+}
+
+.tooltip-excellent {
+    color: #6aa84f;
+    font-weight: 600;
+}
+
+.tooltip-good {
+    color: #e7c049;
+    font-weight: 600;
+}
+
+.tooltip-fair {
+    color: #e69138;
+    font-weight: 600;
+}
+
+.tooltip-poor {
+    color: #cc0000;
+    font-weight: 600;
+}
+
 /* ---- Draft Content ---- */
 .draft-content {
     color: #3e2f24;
