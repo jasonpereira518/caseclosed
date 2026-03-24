@@ -8,12 +8,23 @@
             <div class="chat-header">
                 <div class="chat-header-content">
                     <h2 class="chat-title">Legal Assistant</h2>
-                    <div class="role-selector" id="role-selector">
-                        <label for="role-select" class="role-label">Role:</label>
-                        <select id="role-select" class="role-select" name="role">
-                            <option value="defendant">Defendant</option>
-                            <option value="prosecutor">Prosecutor</option>
-                        </select>
+                    <div class="chat-header-actions">
+                        <div class="role-selector" id="role-selector">
+                            <label for="role-select" class="role-label">Role:</label>
+                            <select id="role-select" class="role-select" name="role">
+                                <option value="defendant">Defendant</option>
+                                <option value="prosecutor">Prosecutor</option>
+                            </select>
+                        </div>
+                        <div class="user-banner" aria-label="Signed-in user">
+                            {% if user_profile_pic %}
+                            <img src="{{ user_profile_pic }}" alt="" class="user-avatar" width="32" height="32" referrerpolicy="no-referrer">
+                            {% else %}
+                            <span class="user-avatar-fallback" aria-hidden="true"><i class="fas fa-user"></i></span>
+                            {% endif %}
+                            <span class="user-display-name">{{ user_name or user_email or 'Account' }}</span>
+                            <a href="{{ url_for('auth.logout') }}" class="user-signout">Sign out</a>
+                        </div>
                     </div>
                 </div>
                 <!-- Toolbar -->
@@ -36,8 +47,9 @@
             
             <!-- Chat messages area -->
             <div class="chat-box" id="chat-box" aria-live="polite">
-                <div class="message bot fade-in">
-                    Hello! Upload a case PDF or describe your legal situation to begin.
+                <div class="chat-message ai-message fade-in">
+                    <div class="message-bubble">Hello! Upload a case PDF or describe your legal situation to begin.</div>
+                    <div class="message-timestamp">Now</div>
                 </div>
             </div>
             

@@ -160,7 +160,9 @@ body {
 .chat-box {
     flex: 1;
     padding: 24px;
+    box-sizing: border-box;
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -186,39 +188,89 @@ body {
 }
 
 /* ---- Messages ---- */
-.message {
+.chat-message {
+    display: flex;
+    flex-direction: column;
     max-width: 75%;
-    padding: 12px 16px;
-    border-radius: 10px;
+    box-sizing: border-box;
+    margin-bottom: 12px;
+}
+
+.chat-message.user-message {
+    align-self: flex-end;
+    align-items: flex-end;
+}
+
+.chat-message.ai-message {
+    align-self: flex-start;
+    align-items: flex-start;
+}
+
+.message-bubble {
+    border-radius: 18px;
+    padding: 12px 18px;
     line-height: 1.6;
     word-wrap: break-word;
+    overflow-wrap: anywhere;
     font-size: 14px;
-    animation: fadeIn 0.3s ease-in-out;
+    box-sizing: border-box;
+    box-shadow: 0 2px 10px rgba(62, 47, 36, 0.08);
+    border: 1px solid transparent;
 }
 
-.message.user {
-    background-color: #5c4033;
-    color: #ffffff;
-    align-self: flex-end;
-    border: 1px solid #4a3428;
+.user-message .message-bubble {
+    background-color: #B8805F;
+    color: #FFF8F0;
+    border-color: #a56f4f;
 }
 
-.message.bot {
-    background-color: #ffffff;
+.ai-message .message-bubble {
+    background-color: #f5f0e8;
     color: #3e2f24;
-    align-self: flex-start;
-    border: 1px solid #d4c4b0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border-color: #e2d5c3;
 }
 
-.message.bot a {
+.ai-message .message-bubble a {
     color: #7f5539;
     text-decoration: none;
     font-weight: 500;
 }
 
-.message.bot a:hover {
+.ai-message .message-bubble a:hover {
     text-decoration: underline;
+}
+
+.message-timestamp {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #9a8c7e;
+    opacity: 0.95;
+    padding: 0 6px;
+}
+
+.user-message .message-timestamp {
+    text-align: right;
+}
+
+.ai-message .message-timestamp {
+    text-align: left;
+}
+
+.loading-message .message-bubble {
+    opacity: 0.88;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.loading-spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(127, 85, 57, 0.25);
+    border-top-color: #7f5539;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
 }
 
 /* ---- Chat Form ---- */
@@ -226,6 +278,7 @@ body {
     display: flex;
     align-items: center;
     padding: 16px 20px;
+    box-sizing: border-box;
     background-color: #ffffff;
     border-top: 2px solid #d4c4b0;
     gap: 12px;
@@ -623,8 +676,155 @@ body {
     }
 }
 
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .fade-in {
     animation: fadeIn 0.3s ease-in-out;
+}
+
+/* ---- Login page ---- */
+.login-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 72px);
+    padding: 32px 20px;
+}
+
+.login-card {
+    width: 100%;
+    max-width: 400px;
+    background-color: #ffffff;
+    border: 1px solid #d4c4b0;
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(60, 40, 30, 0.12);
+    padding: 40px 36px;
+    text-align: center;
+}
+
+.login-logo-img {
+    display: block;
+    margin: 0 auto 16px;
+    border-radius: 8px;
+}
+
+.login-title {
+    margin: 0 0 8px;
+    font-size: 26px;
+    font-weight: 700;
+    color: #5c4033;
+    letter-spacing: -0.5px;
+}
+
+.login-tagline {
+    margin: 0 0 28px;
+    font-size: 14px;
+    color: #8b7d6b;
+    line-height: 1.5;
+}
+
+.btn-google-signin {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+    max-width: 280px;
+    padding: 12px 20px;
+    background-color: #faf8f5;
+    color: #3e2f24;
+    border: 2px solid #d4c4b0;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-google-signin:hover {
+    background-color: #ffffff;
+    border-color: #7f5539;
+    box-shadow: 0 2px 8px rgba(92, 64, 51, 0.15);
+    color: #3e2f24;
+}
+
+.btn-google-icon {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+/* ---- Chat header: user + actions ---- */
+.chat-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.user-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 0 4px 12px;
+    border-left: 1px solid rgba(212, 196, 176, 0.5);
+    margin-left: 4px;
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #d4c4b0;
+    flex-shrink: 0;
+}
+
+.user-avatar-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: #7f5539;
+    color: #ffffff;
+    font-size: 14px;
+    flex-shrink: 0;
+    border: 2px solid #6b4530;
+}
+
+.user-display-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #e6d5c3;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-signout {
+    font-size: 12px;
+    font-weight: 600;
+    color: #c4a882;
+    text-decoration: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: color 0.2s ease, background-color 0.2s ease;
+    white-space: nowrap;
+}
+
+.user-signout:hover {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.1);
+    text-decoration: none;
 }
 
 /* ---- Responsive ---- */
@@ -646,6 +846,36 @@ body {
 }
 
 @media (max-width: 600px) {
+    .chat-header-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .chat-header-actions {
+        width: 100%;
+        justify-content: space-between;
+        border-top: 1px solid rgba(212, 196, 176, 0.35);
+        padding-top: 12px;
+        margin-top: 4px;
+    }
+
+    .user-banner {
+        border-left: none;
+        margin-left: 0;
+        padding-left: 0;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .user-display-name {
+        max-width: 100px;
+    }
+
+    .login-card {
+        padding: 32px 24px;
+    }
+
     .chat-box {
         padding: 16px;
     }

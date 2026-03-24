@@ -1,6 +1,19 @@
 // Global State Management
 // @dev-owner: Sarah M.
 // Keep these in sync with the backend state model
+
+// Redirect to login on 401 (session expired / not authenticated)
+(function () {
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = function (...args) {
+        return nativeFetch(...args).then(function (response) {
+            if (response.status === 401) {
+                window.location.href = '/auth/login';
+            }
+            return response;
+        });
+    };
+})();
 const chatBox = document.querySelector('#chat-box');
 const chatForm = document.querySelector('#chat-form');
 const chatInput = document.querySelector('#chat-input');
@@ -214,7 +227,7 @@ async function handleChatSubmit(e) {
     chatInput.value = '';
     autoResizeTextarea();
     
-    const thinking = appendMessage('bot', getThinkingText());
+    const thinking = appendLoadingMessage('Analyzing your case...');
     
     try {
         // Always send the message - backend will extract answers if in clarification mode
@@ -231,7 +244,7 @@ async function handleChatSubmit(e) {
         });
         
         const data = await res.json();
-        thinking.remove();
+        removeMessage(thinking);
         
         // Handle clarifying
         if (data.status === 'clarifying') {
@@ -286,7 +299,7 @@ async function handleChatSubmit(e) {
             appendMessage('bot', `${data.message}`);
         }
     } catch (err) {
-        thinking.remove();
+        removeMessage(thinking);
         appendMessage('bot', 'Server error.');
         console.error(err);
     }
@@ -562,12 +575,57 @@ function displayDraft(docText) {
 // UTILITIES
 // =====================================================
 function appendMessage(sender, text) {
-    const div = document.createElement('div');
-    div.classList.add('message', sender, 'fade-in');
-    div.innerHTML = text;
-    chatBox.appendChild(div);
-    chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
-    return div;
+    const wrapper = document.createElement('div');
+    wrapper.classList.add('chat-message', sender === 'user' ? 'user-message' : 'ai-message', 'fade-in');
+
+    const bubble = document.createElement('div');
+    bubble.classList.add('message-bubble');
+    bubble.innerHTML = text;
+
+    const timestamp = document.createElement('div');
+    timestamp.classList.add('message-timestamp');
+    timestamp.textContent = getCurrentTimestamp();
+
+    wrapper.appendChild(bubble);
+    wrapper.appendChild(timestamp);
+    chatBox.appendChild(wrapper);
+    scrollChatToBottom(wrapper);
+    return wrapper;
+}
+
+function appendLoadingMessage(text) {
+    const wrapper = document.createElement('div');
+    wrapper.classList.add('chat-message', 'ai-message', 'loading-message', 'fade-in');
+
+    const bubble = document.createElement('div');
+    bubble.classList.add('message-bubble');
+    bubble.innerHTML = `<span class="loading-spinner" aria-hidden="true"></span>${escapeHtml(text)}`;
+
+    const timestamp = document.createElement('div');
+    timestamp.classList.add('message-timestamp');
+    timestamp.textContent = getCurrentTimestamp();
+
+    wrapper.appendChild(bubble);
+    wrapper.appendChild(timestamp);
+    chatBox.appendChild(wrapper);
+    scrollChatToBottom(wrapper);
+    return wrapper;
+}
+
+function removeMessage(messageEl) {
+    if (messageEl && messageEl.parentNode) {
+        messageEl.parentNode.removeChild(messageEl);
+    }
+}
+
+function getCurrentTimestamp() {
+    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function scrollChatToBottom(lastMessageEl) {
+    if (lastMessageEl && typeof lastMessageEl.scrollIntoView === 'function') {
+        lastMessageEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
 }
 
 function escapeHtml(text) {
@@ -583,18 +641,3 @@ function autoResizeTextarea() {
     }
 }
 
-// Utility: pick a thinking/placeholder message at random (uniform probability)
-function getThinkingText() {
-    const options = [
-        'Thinking...',
-        'Processing...',
-        'Generating response...',
-        'Composing reply...',
-        'Working on it...',
-        'Hold on...',
-        'Formulating answer...',
-        'One moment...'
-    ];
-    const idx = Math.floor(Math.random() * options.length);
-    return options[idx];
-}

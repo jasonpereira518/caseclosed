@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request, session
+from flask_login import current_user, login_required
 
 from models.context import get_context_id, get_or_create_context
 from services.courtlistener import query_courtlistener
@@ -16,6 +17,7 @@ chat_bp = Blueprint("chat", __name__)
 
 
 @chat_bp.route("/chat", methods=["POST"])
+@login_required
 def chat():
     payload = request.json or {}
     message = payload.get("message", "").strip()
@@ -25,7 +27,9 @@ def chat():
     adding_info = payload.get("adding_info", False)
 
     context_id = get_context_id(session)
-    context = get_or_create_context(context_id)
+    context = get_or_create_context(context_id, str(current_user.get_id()))
+    if context is None:
+        return jsonify({"error": "forbidden"}), 403
 
     if adding_info and message:
         context["description"] += " " + message

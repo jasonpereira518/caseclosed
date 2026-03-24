@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+from flask_login import current_user, login_required
 
 from models.context import get_context as get_stored_context
 from services.llm import draft_legal_document, extract_structured_analysis
@@ -8,6 +9,7 @@ draft_bp = Blueprint("draft", __name__)
 
 
 @draft_bp.route("/draft", methods=["POST"])
+@login_required
 def draft():
     """Generate legal memo or brief from context."""
     payload = request.json or {}
@@ -17,7 +19,7 @@ def draft():
     if not context_id:
         return jsonify({"error": "No context_id provided"}), 400
 
-    context = get_stored_context(context_id)
+    context = get_stored_context(context_id, str(current_user.get_id()))
     if not context:
         return jsonify({"error": "Context not found"}), 404
 

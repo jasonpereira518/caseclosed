@@ -1,4 +1,5 @@
 import os
+import logging
 
 from pdfminer.high_level import extract_text
 from werkzeug.utils import secure_filename
@@ -25,3 +26,12 @@ def extract_pdf_text(path: str, filename: str) -> str:
     except Exception as e:
         pdf_text = f"[Error extracting text from PDF: {e}]"
     return pdf_text
+
+
+def cleanup_temp_file(filepath: str):
+    try:
+        os.remove(filepath)
+    except FileNotFoundError:
+        logging.warning("Temp file already removed or missing: %s", filepath)
+    except Exception as e:
+        logging.warning("Failed to delete temp file %s: %s", filepath, e)

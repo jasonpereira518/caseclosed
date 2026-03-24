@@ -7,6 +7,7 @@ load_dotenv()
 
 # Flask app settings
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-secret")
+SECRET_KEY = os.getenv("SECRET_KEY", FLASK_SECRET_KEY)
 UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", tempfile.gettempdir())
 MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 50 * 1024 * 1024))
 PORT = int(os.getenv("PORT", 5050))
@@ -21,6 +22,15 @@ GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 COURTLISTENER_TOKEN = os.getenv("COURTLISTENER_TOKEN")
 COURTLISTENER_BASE_URL = os.getenv("COURTLISTENER_BASE_URL", "https://www.courtlistener.com/api/rest/v4/search/")
 GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "key.json")
+
+# Firebase / Firestore (context persistence)
+FIREBASE_CREDENTIALS = os.getenv("FIREBASE_CREDENTIALS", "key.json")
+FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "user_contexts")
+FIRESTORE_USERS_COLLECTION = os.getenv("FIRESTORE_USERS_COLLECTION", "users")
+
+# Google OAuth (backend)
+GOOGLE_OAUTH_CLIENT_SECRETS = os.getenv("GOOGLE_OAUTH_CLIENT_SECRETS", "client_secret.json")
+OAUTH_REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI", "http://localhost:5050/auth/callback")
 
 # Model configuration
 CLARIFIER_MODEL = os.getenv("CLARIFIER_MODEL", "gemini-2.5-flash")

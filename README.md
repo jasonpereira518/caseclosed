@@ -1,134 +1,149 @@
 # Case Closed
 
-As part of the AI Hackathon, we built **Case Closed** — an AI-powered precedent recommendation engine that blends multi-agent reasoning, modern LLMs, and the CourtListener API to make legal research faster and more contextual. The project aims to move beyond keyword search and toward legal-similarity-driven retrieval, automated memo/brief drafting, and an iterative, chat-style research workflow.
-
-Contributors:
-
-- Sai Yadavalli — AI Engineer
-- Sedat Unal — Full-stack Developer
-- Jason Pereira — Frontend Developer & UI/UX Designer
-- Saksham Anand — Backend Developer
+**Case Closed** is an AI-powered legal research assistant. It helps you describe a matter (or upload a PDF), surfaces relevant case law from CourtListener, explains relevance, and drafts memo- or brief-style documents—all in a single browser session.
 
 ---
 
-## Inspiration — Make legal research feel like conversation
+## Features
 
-Legal research often requires sifting through thousands of opinions to find a single meaningful precedent. We wanted to reduce that friction. Instead of treating legal documents as strings to be keyword-matched, Case Closed reasons about facts, issues, and legal posture — more like a junior associate guided by a senior. Our goal was to create a pipeline that could:
+From a user’s perspective, the app provides:
 
-- extract structured legal elements from uploads or prompts,
-- query live case databases intelligently, and
-- produce human-readable explanations and legal drafts.
-
-The result is a research assistant that helps you find relevant cases, explains _why_ they matter, and helps convert findings into memos and briefs — all within a single session.
-
----
-
-## Pitch
-
-Case Closed is a conversational legal research assistant. Users upload a court opinion (PDF / text) or describe their fact pattern; the system extracts facts, identifies legal issues and jurisdiction, constructs targeted queries to CourtListener, ranks results by contextual similarity (not just lexical overlap), and produces explainers and draft legal memos.
-
-This approach accelerates legal workflows by combining: multi-agent reasoning (fact extraction, query generation, relevance scoring, drafting), semantic retrieval (embeddings + Gemini), and direct integration with CourtListener for authoritative case text.
+- **PDF upload and automatic legal analysis** — Upload a PDF; text is extracted and structured facts, parties, issues, and related fields are inferred for the session.
+- **Chat-based legal case intake with a clarification loop** — Describe your situation in chat; the assistant may ask follow-up questions before running a full search.
+- **CourtListener case search with LLM-powered relevance ranking** — Cases are fetched from CourtListener, scored for relevance, and sorted with short explanations.
+- **Legal document drafting (memo / brief)** — Generate draft memos or briefs from the current session context and retrieved cases.
+- **Tabbed workspace** — **Analysis**, **Cases**, and **Draft** panels alongside the chat so you can review structured output, results, and generated text in one place.
 
 ---
 
-## Overview
+## Tech stack
 
-The repository contains the full-stack app, agent pipeline, and demo frontend.
-
-- `app.py` — Flask server and agent orchestrator
-- `app.py/` — modular agent definitions (extractor, retriever, evaluator, drafter)
-- `static/` — vanilla JavaScript/CSS chat-style UI and upload interface
-- `templates/` — main HTML files
-
-### Features
-
-- **Contextual Precedent Retrieval:** Retrieves cases from CourtListener using structured queries derived from extracted facts and issues.
-- **Multi-Agent Pipeline:** Separate agents for extraction, search-query construction, retrieval, evaluation, and drafting.
-- **Draft Generation:** Generate memos and briefs based on retrieved cases and session context.
-- **Session Persistence:** Each user session stores context, enabling iterative refinement and progressive drafting.
-- **Filterable Results:** Narrow results by jurisdiction, court level, and issue similarity.
-- **Easy Uploads:** Upload PDFs or paste text — the system extracts and analyzes content automatically.
+| Layer | Technology |
+|--------|------------|
+| Backend | Python, [Flask](https://flask.palletsprojects.com/) |
+| Frontend | Vanilla JavaScript, HTML, CSS (server-rendered templates) |
+| LLM | Google Gemini via [Vertex AI](https://cloud.google.com/vertex-ai) (`google-genai`) |
+| Case search | [CourtListener](https://www.courtlistener.com/) REST API |
+| PDF | [pdfminer.six](https://github.com/pdfminer/pdfminer.six) |
+| Container | Docker (`python:3.11-slim`) |
 
 ---
 
-## Example walk-through
+## Project structure
 
-1. Upload a case PDF or paste a fact pattern.
-2. The **Extraction Agent** pulls parties, claims, dates, and core issues.
-3. The **Query Agent** turns those structured facts into optimized CourtListener queries.
-4. The **Retrieval Agent** fetches candidate opinions and embeddings are used to compute semantic similarity.
-5. The **Evaluation Agent** ranks and explains why each result is relevant.
-6. Ask the **Drafting Agent** to produce a memo or brief section; iterate until satisfied.
+```
+caseclosed/
+├── app.py              # Application entry point; Flask app + blueprint registration
+├── config.py           # Centralized configuration (env-backed)
+├── requirements.txt
+├── Dockerfile
+├── routes/             # Flask Blueprints
+│   ├── chat.py         # POST /chat
+│   ├── upload.py       # POST /upload
+│   ├── analyze.py      # POST /analyze
+│   ├── draft.py        # POST /draft
+│   ├── context.py      # GET /context
+│   └── main.py         # GET / (renders UI)
+├── services/
+│   ├── llm.py          # Gemini / Vertex AI calls
+│   ├── courtlistener.py
+│   └── pdf.py          # PDF save, extract, temp cleanup
+├── models/
+│   └── context.py      # In-memory session context + eviction helpers
+├── utils/
+│   └── helpers.py      # Shared helpers (e.g. JSON extraction)
+├── static/             # script.js, style.css, icons
+├── templates/          # base.html, chat.html
+└── assets/             # Diagrams / media for docs (e.g. architecture)
+```
 
 ---
 
-## Stack Overview
+## Setup — run locally
 
-![Case Closed High Level Architecture](assets/case_closed_architecture.png)
+1. **Clone** this repository.
 
----
+2. **Credentials and environment**
+   - Create a `.env` file in the project root (see [Environment variables](#environment-variables) below). Do not commit real secrets.
+   - Add a Google Cloud **service account** JSON key as `key.json` in the project root (or set `GOOGLE_APPLICATION_CREDENTIALS` to another path). See [Google Cloud: service account keys](https://cloud.google.com/iam/docs/keys-create-delete).
 
-## Demo
-Click the video below to view our skit and demo!
+3. **Install dependencies**
 
-[![Watch the video](https://img.youtube.com/vi/-iNLur6breI/hqdefault.jpg)](https://youtu.be/-iNLur6breI)
-
-## Setup and Running
-
-### Prerequisites
-
-1. **Install Docker Desktop**
-   - Download and install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-   - Ensure Docker is running before proceeding
-
-2. **Required Files**
-   - `.env` file with your environment variables (PROJECT_ID, GOOGLE_CLOUD_LOCATION, COURTLISTENER_TOKEN, GOOGLE_APPLICATION_CREDENTIALS=/key.json)
-   - `key.json` - [Google Cloud service](https://docs.cloud.google.com/iam/docs/keys-create-delete) account credentials file in the project root directory. Paste your key in the file once you acquire it. 
-
-### Running on Mac/Linux
-
-1. **Build the Docker image:**
    ```bash
-   docker build --no-cache -t caseclosed .
+   pip install -r requirements.txt
    ```
 
-2. **Run the container:**
+4. **Run the app**
+
    ```bash
-   docker run -p 5000:5000 --env-file .env -v "$(pwd)/key.json:/app/key.json" -e GOOGLE_APPLICATION_CREDENTIALS=/app/key.json caseclosed
+   python app.py
    ```
 
-3. **Access the application:**
-   - Open your browser and navigate to: `http://localhost:5000`
+   The server listens on **port 5050** by default (`http://localhost:5050`). Override with the `PORT` variable if needed.
 
-### Running on Windows
+---
 
-1. **Clone This Repository**
-2. **Build the Docker image:**
-   ```powershell
-   docker build --no-cache -t caseclosed .
-   ```
+## Setup — Docker
 
-3. **Run the container (PowerShell):**
-   ```powershell
-   docker run -p 5000:5000 `
-     --env-file .env `
-     -v "${PWD}/key.json:/app/key.json" `
-     -e GOOGLE_APPLICATION_CREDENTIALS=/app/key.json `
-     caseclosed
-   ```
-
-   **Or using Command Prompt:**
-   ```cmd
-   docker run -p 5000:5000 --env-file .env -v "%cd%/key.json:/app/key.json" -e GOOGLE_APPLICATION_CREDENTIALS=/app/key.json caseclosed
-   ```
-
-4. **Access the application:**
-   - Open your browser and navigate to: `http://localhost:5000`
-
-### Stopping the Container
-
-Press `Ctrl+C` in the terminal where the container is running, or:
+Build and run with host port **5050** mapped to the container (the image sets `PORT=5050`):
 
 ```bash
-docker ps  # Find the container ID
-docker stop <container-id>
+docker build --no-cache -t caseclosed .
+docker run -p 5050:5050 \
+  --env-file .env \
+  -v "$(pwd)/key.json:/app/key.json" \
+  -e GOOGLE_APPLICATION_CREDENTIALS=/app/key.json \
+  caseclosed
+```
+
+Then open `http://localhost:5050`.
+
+To stop: `Ctrl+C`, or `docker stop <container-id>`.
+
+---
+
+## Environment variables
+
+All values are read from the environment (and optionally `.env` via `python-dotenv`). **Never commit real tokens or keys.**
+
+| Variable | Purpose |
+|----------|---------|
+| `FLASK_SECRET_KEY` | Secret key for Flask sessions (signing cookies). |
+| `UPLOAD_FOLDER` | Directory where uploaded PDFs are written temporarily (defaults to the system temp directory). |
+| `MAX_CONTENT_LENGTH` | Maximum upload size in bytes (default aligns with prior app limit). |
+| `PORT` | HTTP port for `python app.py` (default **5050**). |
+| `FLASK_DEBUG` | Set to `true` to enable Flask debug mode; otherwise treated as off. |
+| `PROJECT_ID` | Google Cloud project ID for Vertex AI. |
+| `GOOGLE_CLOUD_LOCATION` | Vertex AI region (e.g. `us-central1`). |
+| `COURTLISTENER_TOKEN` | Optional CourtListener API token for authenticated search requests. |
+| `COURTLISTENER_BASE_URL` | CourtListener search API base URL (override only if needed). |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to the GCP service account JSON file (default `key.json` in the working directory). |
+| `CLARIFIER_MODEL` | Gemini model id for clarification / Q&A-style steps. |
+| `SUMMARIZER_MODEL` | Gemini model id for case summarization. |
+| `SCORER_MODEL` | Gemini model id for relevance scoring. |
+| `ANALYZER_MODEL` | Gemini model id for structured legal analysis extraction. |
+| `DRAFT_MODEL` | Gemini model id for memo/brief drafting. |
+| `QUERY_MODEL` | Gemini model id for CourtListener query string generation. |
+
+---
+
+## Demo & architecture
+
+**Demo video:** [YouTube](https://youtu.be/-iNLur6breI)
+
+[![Watch the demo](https://img.youtube.com/vi/-iNLur6breI/hqdefault.jpg)](https://youtu.be/-iNLur6breI)
+
+**High-level architecture:**
+
+![Case Closed architecture](assets/case_closed_architecture.png)
+
+---
+
+## Contributors
+
+- Sai Yadavalli — AI Engineer  
+- Sedat Unal — Full-stack Developer  
+- Jason Pereira — Frontend Developer & UI/UX Designer  
+- Saksham Anand — Backend Developer  
+
+Built as part of an AI hackathon project.
