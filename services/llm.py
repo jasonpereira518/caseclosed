@@ -229,49 +229,209 @@ def grade_case(summary: str, case_title: str, snippet: str, analysis: dict = Non
         issues = ", ".join(analysis.get("legal_issues", [])) or ", ".join(analysis.get("issues", []))
         causes = ", ".join(analysis.get("causes_of_action", []))
         if issues or causes:
-            context = "\n\nUser's Legal Context:\n"
+            context = "User's Legal Context:\n"
             if issues:
                 context += f"- Legal Issues: {issues}\n"
             if causes:
                 context += f"- Causes of Action: {causes}\n"
 
-    # Stronger, more structured grading prompt
     prompt = f"""
-        You are an experienced legal research assistant.
-        Your task is to assess how relevant the following case is to the user's described legal issue.
+You are an experienced legal research assistant evaluating case relevance.
 
-        User's Description:
-        {summary}{context}
+User's Legal Situation:
+{summary}
 
-        Case to Evaluate:
-        Title: {case_title}
-        Excerpt: {snippet}
+Structured Analysis:
+{context}
 
-        Instructions:
-        - Provide a relevance score from 0 to 100.
-        - Consider overlap in facts, legal issues, causes of action, and jurisdictional or procedural context.
-        - Be moderately lenient: if there is any meaningful thematic or factual connection, assign at least a partial score (e.g., 30–60 range).
-        - Reserve very low scores (0–20) only for completely unrelated or irrelevant cases.
-        - Higher scores (70–100) indicate strong legal and factual alignment.
-        - Be fair, consistent, and nuanced — reward partial matches.
-        - Output ONLY valid JSON in this exact format:
-        {{"score": <integer>, "reason": "<one-sentence reason>"}}
+Case to Evaluate:
+Title: {case_title}
+Excerpt: {snippet}
+
+Score this case across 5 dimensions. For each dimension, provide a score from 0 to 100.
+
+DIMENSIONS AND WEIGHTS:
+1. Factual Similarity (30%) — How closely do the facts of this case mirror the user's situation? Consider parties, events, circumstances, and outcomes.
+2. Legal Issues Match (25%) — Do the legal questions, doctrines, or theories in this case align with the user's legal issues?
+3. Causes of Action Overlap (20%) — Does this case involve the same or closely related causes of action, charges, or claims?
+4. Jurisdictional & Procedural Relevance (15%) — Is this case from a relevant jurisdiction, court level, or procedural posture?
+5. Practical Utility (10%) — Would this case be genuinely useful in building a legal argument for the user's situation? Consider precedential value, recency, and clarity of holdings.
+
+Output ONLY valid JSON in this exact format:
+{{
+  "factual_similarity": <integer 0-100>,
+  "legal_issues_match": <integer 0-100>,
+  "causes_of_action_overlap": <integer 0-100>,
+  "jurisdictional_relevance": <integer 0-100>,
+  "practical_utility": <integer 0-100>,
+  "weighted_score": <integer 0-100>,
+  "reason": "<one-sentence summary of why this case is or isn't relevant>"
+}}
+
+Calculate weighted_score as: (factual_similarity * 0.30) + (legal_issues_match * 0.25) + (causes_of_action_overlap * 0.20) + (jurisdictional_relevance * 0.15) + (practical_utility * 0.10). Round to the nearest integer.
+
+Be fair and consistent. Reward partial matches. Reserve scores below 20 only for truly unrelated cases.
     """
 
     try:
         response = scorer_agent.send_message(prompt)
         text = response.text.strip()
         parsed = extract_json_object(text) or {}
-        score = int(parsed.get("score", 50))
+
+        factual = int(parsed.get("factual_similarity", 50))
+        legal = int(parsed.get("legal_issues_match", 50))
+        causes = int(parsed.get("causes_of_action_overlap", 50))
+        jurisdictional = int(parsed.get("jurisdictional_relevance", 50))
+        practical = int(parsed.get("practical_utility", 50))
+
+        factual = max(0, min(100, factual))
+        legal = max(0, min(100, legal))
+        causes = max(0, min(100, causes))
+        jurisdictional = max(0, min(100, jurisdictional))
+        practical = max(0, min(100, practical))
+
+        weighted_score = round(
+            factual * 0.30
+            + legal * 0.25
+            + causes * 0.20
+            + jurisdictional * 0.15
+            + practical * 0.10
+        )
+        weighted_score = max(0, min(100, weighted_score))
         reason = parsed.get("reason", "No reason given.")
     except Exception as e:
-        score, reason = 50, f"[Error grading case: {e}]"
+        weighted_score, reason = 50, f"[Error grading case: {e}]"
+        factual = legal = causes = jurisdictional = practical = 50
 
-    # Normalize and return safe output
     return {
-        "score": max(0, min(100, score)),
-        "reason": reason.strip()
+        "score": weighted_score,
+        "reason": reason.strip(),
+        "dimensions": {
+            "factual_similarity": factual,
+            "legal_issues_match": legal,
+            "causes_of_action_overlap": causes,
+            "jurisdictional_relevance": jurisdictional,
+            "practical_utility": practical,
+        },
     }
+
+
+def rerank_cases(summary: str, analysis: dict, scored_cases: list, top_n: int = 10) -> list:
+    """
+    Comparative reranking pass for calibration across top cases.
+    Returns updated case list; on any error, returns original cases unchanged.
+    """
+    if not scored_cases:
+        return scored_cases
+
+    try:
+        top_cases = sorted(
+            scored_cases,
+            key=lambda c: c.get("relevance_score", 0),
+            reverse=True,
+        )[:top_n]
+
+        context = ""
+        if analysis:
+            context = json.dumps(analysis, ensure_ascii=False)
+
+        candidate_lines = []
+        for idx, case in enumerate(top_cases, start=1):
+            candidate_lines.append(
+                f"{idx}. Title: {case.get('title', 'Untitled')}\n"
+                f"   Excerpt: {case.get('snippet', '')}\n"
+                f"   Initial Score: {case.get('relevance_score', 0)}"
+            )
+        candidates_block = "\n".join(candidate_lines)
+
+        prompt = f"""
+You are an experienced legal research assistant performing a comparative reranking.
+
+User's Legal Situation:
+{summary}
+
+Structured Analysis:
+{context}
+
+Below are {len(top_cases)} candidate cases that were individually scored for relevance. Your job is to comparatively rank them against EACH OTHER, considering which cases would be most useful together for building a legal argument.
+
+Candidates:
+{candidates_block}
+
+Instructions:
+- Rerank these cases by comparing them directly against each other
+- Consider: Which cases provide the strongest precedent? Which complement each other? Which are redundant?
+- Adjust scores to reflect relative ranking — the best case should score highest, and gaps between cases should reflect meaningful differences in utility
+- Keep scores on the 0-100 scale
+- Output ONLY valid JSON as an array in this exact format:
+[
+  {{"index": 1, "adjusted_score": <integer 0-100>, "rerank_reason": "<brief reason for adjustment>"}},
+  {{"index": 2, "adjusted_score": <integer 0-100>, "rerank_reason": "<brief reason for adjustment>"}},
+  ...
+]
+        """
+
+        response = scorer_agent.send_message(prompt)
+        text = response.text.strip()
+
+        parsed = None
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            # Fallback: try to extract JSON array from wrapped text.
+            start = text.find("[")
+            end = text.rfind("]")
+            if start != -1 and end != -1 and end > start:
+                parsed = json.loads(text[start : end + 1])
+
+        if not isinstance(parsed, list):
+            return scored_cases
+
+        # Build updates for only the top_n subset by 1-based index.
+        updates = {}
+        for item in parsed:
+            if not isinstance(item, dict):
+                continue
+            idx = item.get("index")
+            if not isinstance(idx, int) or idx < 1 or idx > len(top_cases):
+                continue
+            try:
+                adjusted = int(item.get("adjusted_score", top_cases[idx - 1].get("relevance_score", 0)))
+            except Exception:
+                adjusted = top_cases[idx - 1].get("relevance_score", 0)
+            adjusted = max(0, min(100, adjusted))
+            rerank_reason = str(item.get("rerank_reason", "")).strip()
+            updates[idx - 1] = {"adjusted_score": adjusted, "rerank_reason": rerank_reason}
+
+        if not updates:
+            return scored_cases
+
+        # Apply updates to a copy of top_cases and map back by stable key.
+        updated_top_cases = []
+        for idx, case in enumerate(top_cases):
+            case_copy = dict(case)
+            if idx in updates:
+                case_copy["relevance_score"] = updates[idx]["adjusted_score"]
+                case_copy["rerank_reason"] = updates[idx]["rerank_reason"]
+            updated_top_cases.append(case_copy)
+
+        top_keys_to_case = {}
+        for case in updated_top_cases:
+            key = case.get("pdf_link") or case.get("citation") or case.get("title") or ""
+            if key:
+                top_keys_to_case[key] = case
+
+        final_cases = []
+        for case in scored_cases:
+            key = case.get("pdf_link") or case.get("citation") or case.get("title") or ""
+            if key and key in top_keys_to_case:
+                final_cases.append(top_keys_to_case[key])
+            else:
+                final_cases.append(case)
+
+        return final_cases
+    except Exception:
+        return scored_cases
 
 
 def draft_legal_document(context: dict, doc_type: str = "memo") -> str:

@@ -69,7 +69,7 @@ body {
 }
 
 .chat-header {
-    background: linear-gradient(135deg, #5C4033, #6B5744);
+    background: linear-gradient(135deg, #5C4033, #826851);
     border-bottom: 1px solid rgba(255, 255, 255, 0.2);
     padding: 12px 16px;
 }
@@ -570,17 +570,10 @@ body {
     color: #7f5539;
 }
 
-.relevance-score.relevance-high {
-    color: #22c55e; /* Green for high relevance (70-100) */
-}
-
-.relevance-score.relevance-medium {
-    color: #eab308; /* Yellow for medium relevance (40-69) */
-}
-
-.relevance-score.relevance-low {
-    color: #ef4444; /* Red for low relevance (20-39) */
-}
+.relevance-excellent { color: #6aa84f; font-weight: 600; }
+.relevance-good { color: #e7c049; font-weight: 600; }
+.relevance-fair { color: #e69138; font-weight: 600; }
+.relevance-poor { color: #cc0000; font-weight: 600; }
 
 .relevance-reason {
     color: #6b5d4f;

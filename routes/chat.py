@@ -9,6 +9,7 @@ from services.llm import (
     extract_structured_analysis,
     generate_query,
     grade_case,
+    rerank_cases,
     summarize_case,
 )
 
@@ -100,6 +101,7 @@ def chat():
     summary = summarize_case(combined_text)
     context["summary"] = summary
 
+    seen_keys = set()
     cases = []
     try:
         for i in range(3):
@@ -107,7 +109,9 @@ def chat():
             context["search_query"] += f"{i}th search query: {search_query}\n\n"
             cases_for_query = query_courtlistener(search_query)
             for c in cases_for_query:
-                if c not in cases:
+                key = c.get("pdf_link") or c.get("citation") or c.get("title") or ""
+                if key and key not in seen_keys:
+                    seen_keys.add(key)
                     cases.append(c)
             # cases += cases_for_query
     except Exception as e:
@@ -119,10 +123,17 @@ def chat():
         results.append(
             {
                 **c,
+                "initial_score": grading["score"],
                 "relevance_score": grading["score"],
                 "relevance_reason": grading["reason"],
+                "relevance_dimensions": grading.get("dimensions", {}),
             }
         )
+
+    results = [r for r in results if r["relevance_score"] >= 15]
+
+    if len(results) > 3:
+        results = rerank_cases(summary, analysis, results)
 
     # Sort by descending relevance
     results.sort(key=lambda x: x["relevance_score"], reverse=True)

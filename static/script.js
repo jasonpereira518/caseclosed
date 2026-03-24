@@ -483,12 +483,14 @@ function updateAnalysisPanel(analysis) {
 }
 
 function getRelevanceClass(score) {
-    if (score >= 70) {
-        return 'relevance-high'; // Green for high relevance
-    } else if (score >= 40) {
-        return 'relevance-medium'; // Yellow for medium relevance
+    if (score >= 75) {
+        return 'relevance-excellent';
+    } else if (score >= 65) {
+        return 'relevance-good';
+    } else if (score >= 35) {
+        return 'relevance-fair';
     } else {
-        return 'relevance-low'; // Red for low relevance
+        return 'relevance-poor';
     }
 }
 
@@ -502,7 +504,7 @@ function updateCasesPanel(cases) {
     
     let html = '';
     cases.forEach(c => {
-        const score = c.relevance_score || 0;
+        const score = c.relevance_score ?? c.initial_score ?? 0;
         const relevanceClass = getRelevanceClass(score);
         html += `
             <div class="case-item">
