@@ -125,8 +125,46 @@ def delete_context_route():
 
     active_context_id = session.get("context_id")
     if active_context_id == context_id:
+        sessions = list_user_contexts(user_id)
+        remaining = [s for s in sessions if s.get("context_id") != context_id]
+        remaining.sort(key=lambda s: s.get("updated_at") or "", reverse=True)
+        if remaining:
+            existing_context_id = str(remaining[0].get("context_id") or "").strip()
+            if not existing_context_id:
+                return jsonify({"error": "no remaining contexts"}), 500
+            session["context_id"] = existing_context_id
+            loaded = get_stored_context(existing_context_id, user_id) or {}
+            full_context_data = {
+                "context_id": existing_context_id,
+                "title": loaded.get("title", "New Session"),
+                "description": loaded.get("description", ""),
+                "messages": loaded.get("messages", []),
+                "analysis": loaded.get("analysis", {}),
+                "cases": loaded.get("cases", []),
+                "summary": loaded.get("summary", ""),
+                "search_query": loaded.get("search_query", ""),
+                "draft": loaded.get("draft", ""),
+            }
+            for key, value in loaded.items():
+                if key not in full_context_data:
+                    full_context_data[key] = value
+            return jsonify(
+                {
+                    "status": "ok",
+                    "switched_to": existing_context_id,
+                    "context": full_context_data,
+                }
+            )
+
         new_context_id = str(uuid.uuid4())
         create_new_context(user_id, context_id=new_context_id)
         session["context_id"] = new_context_id
-        return jsonify({"status": "ok", "new_context_id": new_context_id})
-    return jsonify({"status": "ok"})
+        default_context_data = get_context_or_default(new_context_id, user_id) or {}
+        return jsonify(
+            {
+                "status": "ok",
+                "switched_to": new_context_id,
+                "context": default_context_data,
+            }
+        )
+    return jsonify({"status": "ok", "switched_to": session.get("context_id")})

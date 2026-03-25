@@ -51,6 +51,12 @@ let activeCaseIndex = null;
  * Fix: CASE-245 - Add error handling for context load failure
  */
 document.addEventListener('DOMContentLoaded', async () => {
+    // Show loading skeletons until initial data arrives.
+    showChatSkeleton();
+    showAnalysisSkeleton();
+    showCasesSkeleton();
+    showDraftSkeleton();
+
     // Load context on page load
     await loadContext();
     await loadSessionHistory();
@@ -183,6 +189,65 @@ function setupMainContentSidebarClose() {
             el.addEventListener('click', closeIfOpen);
         });
     });
+}
+
+function showChatSkeleton() {
+    const box = document.querySelector('.chat-box') || document.getElementById('chat-box');
+    if (!box) return;
+    box.innerHTML = `
+      <div class="skeleton-block">
+        <div class="skeleton skeleton-bubble ai"></div>
+        <div class="skeleton skeleton-bubble user"></div>
+        <div class="skeleton skeleton-bubble ai"></div>
+      </div>
+    `;
+}
+
+function showAnalysisSkeleton() {
+    const panel = document.getElementById('analysis-content') || document.querySelector('#tab-analysis .panel-section');
+    if (panel) {
+        panel.innerHTML = `
+          <div class="skeleton-block">
+            <div class="skeleton skeleton-title"></div>
+            <div class="skeleton skeleton-line long"></div>
+            <div class="skeleton skeleton-line full"></div>
+            <div class="skeleton skeleton-line medium"></div>
+            <div class="skeleton skeleton-line long"></div>
+            <div class="skeleton skeleton-line short"></div>
+          </div>
+        `;
+    }
+}
+
+function showCasesSkeleton() {
+    const panel = document.getElementById('cases-content') || document.querySelector('#tab-cases .panel-section');
+    if (panel) {
+        panel.innerHTML = `
+          <div class="skeleton-block">
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+          </div>
+        `;
+    }
+}
+
+function showDraftSkeleton() {
+    const panel = document.getElementById('draft-content') || document.querySelector('#tab-draft .panel-section');
+    if (panel) {
+        panel.innerHTML = `
+          <div class="skeleton-block">
+            <div class="skeleton skeleton-title"></div>
+            <div class="skeleton skeleton-line full"></div>
+            <div class="skeleton skeleton-line long"></div>
+            <div class="skeleton skeleton-line full"></div>
+            <div class="skeleton skeleton-line medium"></div>
+            <div class="skeleton skeleton-line full"></div>
+            <div class="skeleton skeleton-line long"></div>
+            <div class="skeleton skeleton-line short"></div>
+          </div>
+        `;
+    }
 }
 
 // =====================================================
@@ -391,6 +456,11 @@ function updateSidebarToggleIcon() {
 
 async function handleNewSession() {
     try {
+        showChatSkeleton();
+        showAnalysisSkeleton();
+        showCasesSkeleton();
+        showDraftSkeleton();
+
         const res = await fetch('/contexts/new', { method: 'POST' });
         const data = await res.json();
         contextId = data.context_id;
@@ -452,6 +522,10 @@ async function switchSession(targetContextId) {
     if (card) {
         card.classList.add('is-loading');
     }
+    showChatSkeleton();
+    showAnalysisSkeleton();
+    showCasesSkeleton();
+    showDraftSkeleton();
     try {
         const res = await fetch('/contexts/switch', {
             method: 'POST',
@@ -535,11 +609,12 @@ async function confirmDeleteSession() {
             body: JSON.stringify({ context_id: targetContextId })
         });
         const data = await res.json();
-        if (data.new_context_id) {
-            contextId = data.new_context_id;
-            clearPanelsForNewSession();
-            await switchSession(data.new_context_id);
+        if (data && data.switched_to && data.context) {
+            contextId = data.switched_to;
+            applyContextToUI(data.switched_to, data.context || {});
         }
+        // Remove deleted session locally for immediate UI feedback.
+        sessionHistory = (sessionHistory || []).filter((s) => s.context_id !== targetContextId);
         await loadSessionHistory();
     } catch (err) {
         console.error('Error deleting session:', err);
@@ -630,6 +705,7 @@ async function handleAnalyze() {
     }
     
     appendMessage('bot', 'Analyzing case...');
+    showAnalysisSkeleton();
     
     try {
         const res = await fetch('/analyze', {
@@ -706,6 +782,7 @@ async function handleChatSubmit(e) {
             appendMessage('bot', questionsText);
             
             if (data.analysis) {
+                showAnalysisSkeleton();
                 currentAnalysis = data.analysis;
                 updateAnalysisPanel(data.analysis);
             }
@@ -731,11 +808,13 @@ async function handleChatSubmit(e) {
             }
             
             if (data.analysis) {
+                showAnalysisSkeleton();
                 currentAnalysis = data.analysis;
                 updateAnalysisPanel(data.analysis);
             }
             
             if (data.cases && data.cases.length > 0) {
+                showCasesSkeleton();
                 currentCases = data.cases;
                 updateCasesPanel(data.cases);
                 appendMessage('bot', `Found ${data.cases.length} relevant cases. Check the Cases panel.`);
@@ -841,7 +920,7 @@ async function handleDraftGenerate() {
     const docType = document.getElementById('draft-type').value;
     const draftContent = document.getElementById('draft-content');
     
-    draftContent.innerHTML = '<p class="empty-state">Generating document...</p>';
+    showDraftSkeleton();
     
     try {
         const res = await fetch('/draft', {

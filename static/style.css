@@ -146,6 +146,80 @@ body:not(.sidebar-collapsed) .sidebar {
     padding: 10px 14px;
 }
 
+/* Skeleton base */
+.skeleton {
+    background: linear-gradient(90deg, #EDE7DD 25%, #F5EDE3 50%, #EDE7DD 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: 6px;
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* Skeleton elements */
+.skeleton-line {
+    height: 14px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+}
+
+.skeleton-line.short {
+    width: 40%;
+}
+
+.skeleton-line.medium {
+    width: 65%;
+}
+
+.skeleton-line.long {
+    width: 90%;
+}
+
+.skeleton-line.full {
+    width: 100%;
+}
+
+.skeleton-title {
+    height: 20px;
+    width: 50%;
+    margin-bottom: 16px;
+    border-radius: 4px;
+}
+
+.skeleton-bubble {
+    border-radius: 18px;
+    padding: 0;
+    margin-bottom: 12px;
+}
+
+.skeleton-bubble.user {
+    height: 48px;
+    width: 60%;
+    margin-left: auto;
+}
+
+.skeleton-bubble.ai {
+    height: 64px;
+    width: 70%;
+}
+
+.skeleton-card {
+    border-radius: 10px;
+    height: 100px;
+    margin-bottom: 12px;
+}
+
+.skeleton-block {
+    padding: 16px;
+}
+
 .session-card {
     padding: 12px 16px;
     margin: 4px 10px;
@@ -775,6 +849,11 @@ body:not(.sidebar-collapsed) #sidebar-toggle {
 
 .role-dropdown-toggle:hover {
     background: rgba(255,255,255,0.18);
+}
+
+.role-dropdown-toggle:focus {
+    outline: none;
+    box-shadow: none;
 }
 
 .role-arrow {
