@@ -1002,6 +1002,18 @@ function bindCasesDetailScrollCondense() {
     sync();
 }
 
+function stripMarkdown(text) {
+    return String(text ?? '')
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/\*(.+?)\*/g, '$1')
+        .replace(/^#{1,6}\s+/gm, '')
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/`(.+?)`/g, '$1')
+        .replace(/^\s*[-*]\s+/gm, '• ')
+        .replace(/^\s*\d+\.\s+/gm, '')
+        .trim();
+}
+
 function appendCasesPanelChatMessage(role, text, skipScroll) {
     const chat = document.getElementById('cases-detail-chat');
     if (!chat) return;
@@ -1010,7 +1022,9 @@ function appendCasesPanelChatMessage(role, text, skipScroll) {
     wrap.className = isUser ? 'chat-message user-message' : 'chat-message ai-message';
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';
-    bubble.innerHTML = escapeHtml(text).replace(/\n/g, '<br>');
+    const raw = String(text ?? '');
+    const display = isUser ? raw : stripMarkdown(raw);
+    bubble.innerHTML = escapeHtml(display).replace(/\n/g, '<br>');
     wrap.appendChild(bubble);
     chat.appendChild(wrap);
     if (!skipScroll) {
@@ -1050,85 +1064,15 @@ function showCaseDetail(caseIndex) {
     renderCaseDetailView(caseData);
 }
 
-function renderCaseDetailDescriptionSection(caseData) {
+function renderCaseDetailRelevanceSection(caseData) {
     const relEl = document.getElementById('case-description-relevance');
-    const bodyEl = document.getElementById('case-description-body');
-    if (!relEl || !bodyEl) return;
+    if (!relEl) return;
 
     const score = caseData.relevance_score ?? caseData.initial_score ?? 0;
     const relClass = getRelevanceClass(score);
     const reasonRaw = caseData.relevance_reason != null ? String(caseData.relevance_reason).trim() : '';
     const reasonHtml = reasonRaw ? ` — ${escapeHtml(reasonRaw)}` : '';
     relEl.innerHTML = `Relevance: <span class="relevance-score ${relClass}">${score}%</span>${reasonHtml}`;
-
-    const descCachedRaw =
-        caseData.description != null && String(caseData.description).trim() !== ''
-            ? String(caseData.description).trim()
-            : '';
-    if (descCachedRaw) {
-        bodyEl.textContent = descCachedRaw;
-        bodyEl.classList.remove('loading');
-    } else {
-        bodyEl.textContent = 'Loading description...';
-        bodyEl.classList.add('loading');
-    }
-}
-
-async function loadCaseDescriptionIntoDetail(caseData) {
-    const bodyEl = document.getElementById('case-description-body');
-    if (!bodyEl) return;
-
-    const cached =
-        caseData.description != null && String(caseData.description).trim() !== ''
-            ? String(caseData.description).trim()
-            : '';
-    if (cached) {
-        bodyEl.textContent = cached;
-        bodyEl.classList.remove('loading');
-        return;
-    }
-
-    bodyEl.textContent = 'Loading description...';
-    bodyEl.classList.add('loading');
-
-    if (!contextId || activeCaseIndex === null) {
-        bodyEl.textContent = 'Unable to load description.';
-        bodyEl.classList.remove('loading');
-        return;
-    }
-
-    try {
-        const res = await fetch('/case/describe', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({
-                context_id: contextId,
-                case_index: activeCaseIndex,
-            }),
-        });
-        let data = {};
-        try {
-            data = await res.json();
-        } catch (_) {
-            /* ignore */
-        }
-        bodyEl.classList.remove('loading');
-        if (!res.ok) {
-            bodyEl.textContent = data.error || data.message || `Could not load description (${res.status}).`;
-            return;
-        }
-        const desc = data.description != null ? String(data.description).trim() : '';
-        bodyEl.textContent = desc || 'No description available.';
-        const live = currentCases[activeCaseIndex];
-        if (live && desc) {
-            live.description = desc;
-        }
-    } catch (err) {
-        bodyEl.classList.remove('loading');
-        bodyEl.textContent = 'Unable to load description.';
-        console.error(err);
-    }
 }
 
 function renderCaseDetailView(caseData) {
@@ -1154,10 +1098,7 @@ function renderCaseDetailView(caseData) {
             <div class="cases-detail-card">
                 <div class="cases-detail-card-title">${titleSafe}</div>
                 <div class="cases-detail-card-citation">${citationSafe}</div>
-                <div class="cases-detail-card-description" id="case-description">
-                    <div class="cases-detail-card-relevance" id="case-description-relevance"></div>
-                    <div class="cases-detail-card-description-body" id="case-description-body"></div>
-                </div>
+                <div class="cases-detail-card-relevance" id="case-description-relevance"></div>
             </div>
             <div class="cases-detail-scroll-area" id="cases-detail-scroll">
                 <p class="cases-detail-chat-prompt" id="cases-detail-chat-prompt">Ask a question about this case or how it relates to your situation.</p>
@@ -1170,9 +1111,8 @@ function renderCaseDetailView(caseData) {
         </div>
     `;
 
-    renderCaseDetailDescriptionSection(caseData);
+    renderCaseDetailRelevanceSection(caseData);
     renderCaseDetailFollowUps(caseData);
-    void loadCaseDescriptionIntoDetail(caseData);
     bindCasesDetailScrollCondense();
 
     document.getElementById('cases-detail-send')?.addEventListener('click', submitCasesPanelAsk);

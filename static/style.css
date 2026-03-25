@@ -497,36 +497,11 @@ body:not(.sidebar-collapsed) .sidebar {
     display: none;
 }
 
-.cases-detail-card-description {
-    margin-top: 14px;
-}
-
 .cases-detail-card-relevance {
     font-size: 13px;
     color: #5c4a3a;
     line-height: 1.6;
-}
-
-.cases-detail-card-description-body {
-    font-size: 13px;
-    color: #5c4a3a;
-    line-height: 1.6;
-    margin-top: 10px;
-}
-
-.cases-detail-card-description-body.loading {
-    color: #9e8e7e;
-    animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-    0%,
-    100% {
-        opacity: 0.6;
-    }
-    50% {
-        opacity: 1;
-    }
+    margin-top: 14px;
 }
 
 .cases-detail-scroll-area {
