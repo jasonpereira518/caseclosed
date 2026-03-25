@@ -533,6 +533,38 @@ def _analysis_summary_for_prompt(analysis: dict) -> str:
         return str(analysis)
 
 
+def generate_session_title(first_message: str) -> str:
+    """
+    Short sidebar title (≤28 chars, 3–5 words) via flash model; falls back to capped raw text.
+    """
+    from models.context import cap_session_title
+
+    raw = (first_message or "").strip()
+    if not raw:
+        return "New Session"
+
+    snippet = raw[:2000]
+    prompt = (
+        "Generate a short title (3-5 words, max 28 characters) for a legal research session "
+        "based on this message. The title should capture the core legal topic. "
+        "Output ONLY the title, nothing else. No quotes, no punctuation at the end.\n\n"
+        f"Message: {snippet}"
+    )
+    try:
+        agent = client.chats.create(model=config.CLARIFIER_MODEL)
+        response = agent.send_message(prompt)
+        title = (getattr(response, "text", None) or "").strip()
+        title = title.strip("\"'“”‘’")
+        title = title.split("\n", 1)[0].strip()
+        while title and title[-1] in ".,;:!?":
+            title = title[:-1].strip()
+        if not title:
+            return cap_session_title(raw)
+        return cap_session_title(title)
+    except Exception:
+        return cap_session_title(raw)
+
+
 def describe_case(case_data: dict) -> str:
     """
     Brief LLM summary of a single case from title, citation, date, and excerpt.

@@ -16,25 +16,27 @@ body {
     width: 100%;
     background: linear-gradient(135deg, #4A3228, #5C4033);
     padding: 10px 24px;
-    display: flex;
-    justify-content: center;
     position: sticky;
     top: 0;
-    box-shadow: none;
     z-index: 100;
     border-bottom: 1px solid #3f2a21;
+    box-sizing: border-box;
 }
 
 .site-header-inner {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
+    width: 100%;
+    margin: 0 auto;
 }
 
 .site-icon {
     font-size: 15px;
     color: #ffffff;
-    opacity: 1;
+    display: flex;
+    align-items: center;
 }
 
 .site-title {
@@ -183,7 +185,23 @@ body:not(.sidebar-collapsed) .sidebar {
     font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
+}
+
+.session-title[data-animate-title="true"]::after {
+    content: '|';
+    color: #B8805F;
+    animation: blink 0.6s step-end infinite;
+    margin-left: 1px;
+}
+
+@keyframes blink {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0;
+    }
 }
 
 .session-time {
@@ -727,36 +745,77 @@ body:not(.sidebar-collapsed) #sidebar-toggle {
 .role-selector {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 12px;
+    gap: 8px;
 }
 
 .role-label {
-    color: rgba(255, 255, 255, 0.8);
+    font-size: 13px;
+    color: rgba(255,255,255,0.8);
     font-weight: 500;
 }
 
-.role-select {
-    padding: 6px 10px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 999px;
-    background-color: rgba(0, 0, 0, 0.12);
-    color: #ffffff;
-    font-size: 12px;
-    font-family: inherit;
+.role-dropdown {
+    position: relative;
+}
+
+.role-dropdown-toggle {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #FFFFFF;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
     cursor: pointer;
-    outline: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     transition: all 0.15s ease;
 }
 
-.role-select:hover {
-    background-color: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.45);
+.role-dropdown-toggle:hover {
+    background: rgba(255,255,255,0.18);
 }
 
-.role-select:focus {
-    border-color: rgba(255, 255, 255, 0.55);
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.14);
+.role-arrow {
+    font-size: 10px;
+    opacity: 0.7;
+}
+
+.role-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    background: #FFFFFF;
+    border: 1px solid #E0D5C8;
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    min-width: 140px;
+    z-index: 500;
+    padding: 4px 0;
+    animation: fadeIn 0.1s ease;
+}
+
+.role-dropdown-menu.show {
+    display: block;
+}
+
+.role-option {
+    padding: 8px 16px;
+    font-size: 13px;
+    color: #3A2A1A;
+    cursor: pointer;
+    transition: background 0.1s ease;
+}
+
+.role-option:hover {
+    background: #F5EDE3;
+}
+
+.role-option.active {
+    color: #B8805F;
+    font-weight: 600;
 }
 
 /* ---- Toolbar ---- */

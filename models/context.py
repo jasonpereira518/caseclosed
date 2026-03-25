@@ -204,7 +204,49 @@ def create_new_context(user_id, context_id=None):
     return context_id, ctx
 
 
+def cap_session_title(text: str, max_len: int = 28) -> str:
+    """Trim to max_len characters at the last full word; strip noise punctuation."""
+    text = (text or "").strip()
+    text = text.strip("\"'“”‘’")
+    while text and text[-1] in ".,;:!?":
+        text = text[:-1].strip()
+    if not text:
+        return "New Session"
+    if len(text) <= max_len:
+        return text
+    chunk = text[: max_len + 1]
+    if " " in chunk:
+        cut = text[:max_len].rsplit(" ", 1)[0].strip()
+        return cut if cut else text[:max_len].strip()
+    return text[:max_len].strip()
+
+
+def _strip_conversational_lead_in(text: str) -> str:
+    t = (text or "").strip()
+    if not t:
+        return t
+    low = t.lower()
+    for prefix in (
+        "i need help with ",
+        "i need help ",
+        "can you help with ",
+        "help with ",
+        "question about ",
+        "i have a question about ",
+    ):
+        if low.startswith(prefix):
+            return t[len(prefix) :].strip()
+    return t
+
+
+def _first_line_preview_words(text: str, max_words: int = 5) -> str:
+    line = _strip_conversational_lead_in((text or "").strip().split("\n", 1)[0])
+    words = line.split()
+    return " ".join(words[:max_words]) if words else ""
+
+
 def auto_generate_title(context):
+    """Non-LLM fallback: short topic (≤28 chars) from first user message or description."""
     if not isinstance(context, dict):
         return "New Session"
 
@@ -215,18 +257,24 @@ def auto_generate_title(context):
             text = str(first.get("content") or first.get("text") or "").strip()
         else:
             text = str(first).strip()
-        if text:
-            return text[:40]
+        snippet = _first_line_preview_words(text, 5)
+        if snippet:
+            return cap_session_title(snippet)
 
     description = str(context.get("description", "")).strip()
     if description:
         for line in description.splitlines():
             line = line.strip()
             if line.startswith("[PDF:") and "]" in line:
-                return line[5 : line.index("]")].strip()[:40] or "New Session"
+                name = line[5 : line.index("]")].strip()
+                base = name.replace(".pdf", "").replace("_", " ").strip()
+                if base:
+                    return cap_session_title(_first_line_preview_words(base, 5) or base)
         for line in description.splitlines():
             line = line.strip()
             if line and not line.startswith("[PDF:"):
-                return line[:40]
+                snippet = _first_line_preview_words(line, 5)
+                if snippet:
+                    return cap_session_title(snippet)
 
     return "New Session"

@@ -21,11 +21,17 @@
                     <h2 class="chat-title">Legal Assistant</h2>
                     <div class="chat-header-actions">
                         <div class="role-selector" id="role-selector">
-                            <label for="role-select" class="role-label">Role:</label>
-                            <select id="role-select" class="role-select" name="role">
-                                <option value="defendant">Defendant</option>
-                                <option value="prosecutor">Prosecutor</option>
-                            </select>
+                            <span class="role-label">Role:</span>
+                            <div class="role-dropdown" id="role-dropdown">
+                                <button class="role-dropdown-toggle" id="role-toggle" type="button">
+                                    <span id="role-selected-text">Defendant</span>
+                                    <span class="role-arrow">▾</span>
+                                </button>
+                                <div class="role-dropdown-menu" id="role-menu">
+                                    <div class="role-option active" data-value="defendant">Defendant</div>
+                                    <div class="role-option" data-value="prosecutor">Prosecutor</div>
+                                </div>
+                            </div>
                         </div>
                         <div class="user-banner" aria-label="Signed-in user">
                             {% if user_profile_pic %}

@@ -4,7 +4,6 @@ from flask import Blueprint, jsonify, request, session
 from flask_login import current_user, login_required
 
 from models.context import (
-    auto_generate_title,
     context_belongs_to_user,
     get_context,
     get_context_id,
@@ -18,6 +17,7 @@ from services.llm import (
     extract_answers_from_message,
     extract_structured_analysis,
     generate_query,
+    generate_session_title,
     grade_case,
     rerank_cases,
     summarize_case,
@@ -50,11 +50,16 @@ def chat():
     context_id = get_context_id(session)
     context = get_or_create_context(context_id, str(current_user.get_id()))
     if context is None:
-        return jsonify({"error": "forbidden"}), 403
-    had_user_input = bool(context.get("description", "").strip())
+        return jsonify({"error": "forbidden", "title": "New Session"}), 403
 
     if message:
         _append_chat_message(context, "user", message)
+
+    if message and context.get("title") == "New Session":
+        try:
+            context["title"] = generate_session_title(message)
+        except Exception:
+            pass
 
     if adding_info and message:
         context["description"] += " " + message
@@ -91,6 +96,7 @@ def chat():
                     "questions": questions,
                     "clarify_attempts": context["clarify_attempts"],
                     "context_id": context_id,
+                    "title": context.get("title", "New Session"),
                     "analysis": context.get("analysis", {}),
                 }
             )
@@ -119,6 +125,7 @@ def chat():
                     "questions": questions,
                     "clarify_attempts": context["clarify_attempts"],
                     "context_id": context_id,
+                    "title": context.get("title", "New Session"),
                     "analysis": context.get("analysis", {}),
                 }
             )
@@ -132,16 +139,8 @@ def chat():
         context["clarify_attempts"] = 0
 
     combined_text = context["description"].strip()
-    if not had_user_input and context.get("title") == "New Session":
-        context["title"] = auto_generate_title(context)
-
     analysis = extract_structured_analysis(combined_text)
     context["analysis"] = analysis
-    for key in ("legal_issues", "jurisdictions", "causes_of_action", "facts", "parties"):
-        seq = analysis.get(key) or []
-        if isinstance(seq, list):
-            print(
-            )
 
     summary = summarize_case(combined_text)
     context["summary"] = summary
@@ -186,7 +185,14 @@ def chat():
     except Exception as e:
         print(f"[ERROR] Full traceback:")
         traceback.print_exc()
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify(
+            {
+                "status": "error",
+                "message": str(e),
+                "context_id": context_id,
+                "title": context.get("title", "New Session"),
+            }
+        ), 500
 
     if results:
         _append_chat_message(
@@ -209,6 +215,7 @@ def chat():
         {
             "status": "results",
             "context_id": context_id,
+            "title": context.get("title", "New Session"),
             "query": context["search_query"],
             "summary": summary,
             "analysis": analysis,

@@ -22,7 +22,11 @@ const pdfInput = document.querySelector('#pdf-input');
 const analyzeBtn = document.querySelector('#analyze-btn');
 const draftBtn = document.querySelector('#draft-btn');
 const draftGenerateBtn = document.querySelector('#draft-generate-btn');
-const roleSelectEl = document.querySelector('#role-select');
+const roleToggleBtn = document.getElementById('role-toggle');
+const roleMenuEl = document.getElementById('role-menu');
+const roleSelectedTextEl = document.getElementById('role-selected-text');
+const roleOptionsEls = document.querySelectorAll('.role-option');
+let selectedRole = 'defendant';
 const sidebarEl = document.querySelector('#sidebar');
 const sidebarToggleBtn = document.querySelector('#sidebar-toggle');
 const sidebarBackdrop = document.querySelector('#sidebar-backdrop');
@@ -120,6 +124,40 @@ function setupEventListeners() {
     
     // Auto-resize textarea
     chatInput.addEventListener('input', autoResizeTextarea);
+
+    // Role dropdown (custom, replaces native <select>)
+    if (roleToggleBtn && roleMenuEl && roleSelectedTextEl && roleOptionsEls) {
+        // Default selection: Defendant
+        roleOptionsEls.forEach((opt) => {
+            const isDefendant = String(opt.dataset.value || '').toLowerCase() === 'defendant';
+            opt.classList.toggle('active', isDefendant);
+        });
+        roleSelectedTextEl.textContent = 'Defendant';
+        selectedRole = 'defendant';
+
+        roleToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            roleMenuEl.classList.toggle('show');
+        });
+
+        roleOptionsEls.forEach((opt) => {
+            opt.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const val = String(opt.dataset.value || '').toLowerCase();
+                selectedRole = val;
+                roleOptionsEls.forEach((o) => {
+                    const ov = String(o.dataset.value || '').toLowerCase();
+                    o.classList.toggle('active', ov === val);
+                });
+                roleSelectedTextEl.textContent = (opt.textContent || '').trim() || 'Defendant';
+                roleMenuEl.classList.remove('show');
+            });
+        });
+
+        document.addEventListener('click', () => {
+            roleMenuEl.classList.remove('show');
+        });
+    }
 }
 
 function setupMainContentSidebarClose() {
@@ -206,6 +244,25 @@ function setupSidebar() {
     }
 }
 
+function typeTitle(element, text, speed = 40, cardEl = null) {
+    element.textContent = '';
+    element.setAttribute('data-animate-title', 'true');
+    let i = 0;
+    function type() {
+        if (i < text.length) {
+            element.textContent += text.charAt(i);
+            i++;
+            setTimeout(type, speed);
+        } else {
+            element.removeAttribute('data-animate-title');
+            if (cardEl) {
+                cardEl.removeAttribute('data-animate-title');
+            }
+        }
+    }
+    type();
+}
+
 function renderSessionList() {
     if (!sessionListEl) return;
     if (!sessionHistory.length) {
@@ -214,10 +271,12 @@ function renderSessionList() {
     }
     sessionListEl.innerHTML = sessionHistory.map((item) => {
         const isActive = item.context_id === contextId;
-        const title = escapeHtml((item.title || 'New Session').slice(0, 35));
+        const titleText = item.title || 'New Session';
+        const title = escapeHtml(titleText);
         const ts = formatRelativeTime(item.updated_at || item.created_at);
+        const animateAttr = item._animateTitleNext ? ' data-animate-title="true"' : '';
         return `
-            <div class="session-card ${isActive ? 'active' : ''}" data-context-id="${escapeHtml(item.context_id)}" title="${escapeHtml(item.title || 'New Session')}">
+            <div class="session-card ${isActive ? 'active' : ''}" data-context-id="${escapeHtml(item.context_id)}" title="${escapeHtml(titleText)}"${animateAttr}>
                 <div class="session-main">
                     <div class="session-title">${title}</div>
                     <div class="session-time">${escapeHtml(ts)}</div>
@@ -230,6 +289,15 @@ function renderSessionList() {
             </div>
         `;
     }).join('');
+    sessionListEl.querySelectorAll('.session-card[data-animate-title="true"]').forEach((cardEl) => {
+        const titleEl = cardEl.querySelector('.session-title');
+        if (!titleEl) return;
+        const fullText = titleEl.textContent || '';
+        typeTitle(titleEl, fullText, 40, cardEl);
+    });
+    sessionHistory.forEach((item) => {
+        delete item._animateTitleNext;
+    });
 }
 
 function formatRelativeTime(isoString) {
@@ -481,9 +549,23 @@ async function confirmDeleteSession() {
 }
 
 function updateRoleSelector(role) {
-    if (roleSelectEl && role) {
-        roleSelectEl.value = role;
+    if (!role) return;
+    const normalized = String(role).toLowerCase();
+    selectedRole = normalized;
+
+    if (roleOptionsEls && roleOptionsEls.length) {
+        roleOptionsEls.forEach((opt) => {
+            const val = String(opt.dataset.value || '').toLowerCase();
+            opt.classList.toggle('active', val === normalized);
+        });
     }
+
+    if (roleSelectedTextEl) {
+        const match = Array.from(roleOptionsEls || []).find((opt) => String(opt.dataset.value || '').toLowerCase() === normalized);
+        if (match) roleSelectedTextEl.textContent = (match.textContent || '').trim();
+    }
+
+    roleMenuEl?.classList.remove('show');
 }
 
 // =====================================================
@@ -511,6 +593,19 @@ async function handlePDFUpload() {
         appendMessage('bot', `<i>Extracted text preview:</i><br>${data.text.substring(0, 300)}...`);
         
         contextId = data.context_id;
+        const uploadCid = data.context_id;
+        const prevEntry = sessionHistory.find((s) => s.context_id === uploadCid);
+        const wasNewSessionTitle = prevEntry && prevEntry.title === 'New Session';
+
+        await loadSessionHistory();
+        if (wasNewSessionTitle && uploadCid) {
+            const cur = sessionHistory.find((s) => s.context_id === uploadCid);
+            if (cur && cur.title && cur.title !== 'New Session') {
+                cur._animateTitleNext = true;
+            }
+        }
+        renderSessionList();
+
         // Role selector will be updated if needed
         
         if (data.analysis) {
@@ -624,6 +719,16 @@ async function handleChatSubmit(e) {
             clarificationAnswers = [];
             contextId = data.context_id;
             // Role selector will be updated if needed
+
+            const sid = data.context_id || contextId;
+            const hist = sessionHistory.find((s) => s.context_id === sid);
+            if (hist && data.title != null && data.title !== '') {
+                const wasNew = hist.title === 'New Session' || !hist.title;
+                hist.title = data.title;
+                if (wasNew && data.title !== 'New Session') {
+                    hist._animateTitleNext = true;
+                }
+            }
             
             if (data.analysis) {
                 currentAnalysis = data.analysis;
@@ -641,6 +746,7 @@ async function handleChatSubmit(e) {
             }
             
             appendMessage('bot', 'You can add more information to refine the search or generate a document.');
+            renderSessionList();
             return;
         }
         
