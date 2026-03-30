@@ -9,7 +9,11 @@ from models.context import (
     get_context_id,
     get_or_create_context,
 )
-from services.courtlistener import query_courtlistener
+from services.courtlistener import (
+    query_courtlistener,
+    check_case_treatment,
+    extract_cluster_id,
+)
 from services.llm import (
     ask_about_case,
     check_if_more_info_needed,
@@ -153,14 +157,16 @@ def chat():
             search_query = generate_query(summary, analysis)
             search_query = str(search_query).strip() if search_query is not None else ""
             context["search_query"] += f"{i}th search query: {search_query}\n\n"
+            
             cases_for_query = query_courtlistener(search_query)
+            
             for c in cases_for_query:
                 key = c.get("pdf_link") or c.get("citation") or c.get("title") or ""
                 if key and key not in seen_keys:
                     seen_keys.add(key)
                     cases.append(c)
             # cases += cases_for_query
-
+            
         results = []
         for c in cases:
             grading = grade_case(summary, c["title"], c["snippet"], analysis)
@@ -173,12 +179,12 @@ def chat():
                     "relevance_dimensions": grading.get("dimensions", {}),
                 }
             )
-
+            
         results = [r for r in results if r["relevance_score"] >= 15]
-
+        
         if len(results) > 3:
             results = rerank_cases(summary, analysis, results)
-
+            
         # Sort by descending relevance
         results.sort(key=lambda x: x["relevance_score"], reverse=True)
         context["cases"] = results
@@ -314,3 +320,56 @@ def case_ask():
     context["cases"] = cases
 
     return jsonify({"answer": answer, "case_title": title})
+
+
+@chat_bp.route("/case/treatment", methods=["POST"])
+@chat_bp.route("/chat/case/treatment", methods=["POST"])
+@login_required
+def case_treatment():
+    default_error = {
+        "status": "unknown",
+        "label": "",
+        "details": "",
+        "checked": True
+    }
+    try:
+        payload = request.get_json(silent=True) or {}
+        request_context_id = str(payload.get("context_id", "")).strip()
+        session_context_id = str(session.get("context_id", "")).strip()
+        context_id = request_context_id or session_context_id
+        case_index = payload.get("case_index")
+        user_id = str(current_user.get_id())
+
+        if not context_id:
+            return jsonify({"treatment": default_error})
+        try:
+            idx = int(case_index)
+        except (TypeError, ValueError):
+            return jsonify({"treatment": default_error})
+
+        belongs = context_belongs_to_user(context_id, user_id)
+        if not belongs:
+            return jsonify({"error": "forbidden", "treatment": default_error}), 403
+
+        context = get_context(context_id, user_id)
+        if not context:
+            return jsonify({"treatment": default_error})
+
+        cases = list(context.get("cases") or [])
+        if idx < 0 or idx >= len(cases):
+            return jsonify({"treatment": default_error})
+
+        case = dict(cases[idx])
+        treatment = case.get("treatment", {})
+        if treatment.get("checked"):
+            return jsonify({"treatment": treatment})
+
+        cluster_id = extract_cluster_id(case.get("pdf_link", ""))
+        treatment_result = check_case_treatment(cluster_id, case.get("citation", ""))
+        case["treatment"] = treatment_result
+        cases[idx] = case
+        context["cases"] = cases
+
+        return jsonify({"treatment": treatment_result})
+    except Exception:
+        return jsonify({"treatment": default_error})

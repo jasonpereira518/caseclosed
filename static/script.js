@@ -1257,7 +1257,23 @@ function renderCaseDetailRelevanceSection(caseData) {
     const relClass = getRelevanceClass(score);
     const reasonRaw = caseData.relevance_reason != null ? String(caseData.relevance_reason).trim() : '';
     const reasonHtml = reasonRaw ? ` — ${escapeHtml(reasonRaw)}` : '';
-    relEl.innerHTML = `Relevance: <span class="relevance-score ${relClass}">${score}%</span>${reasonHtml}`;
+    
+    let treatmentHtml = '';
+    if (caseData.treatment && caseData.treatment.checked) {
+        treatmentHtml = getTreatmentBadgeHtml(caseData.treatment);
+    } else {
+        treatmentHtml = '<span class="treatment-checking">●</span>';
+        setTimeout(() => {
+            const detailPlaceholder = document.getElementById(`detail-treatment-badge-${activeCaseIndex}`);
+            if (detailPlaceholder) {
+                const listPlaceholder = document.getElementById(`treatment-badge-${activeCaseIndex}`);
+                // Since loadAllTreatments might already be grabbing this, we can just pass the detail placeholder.
+                loadCaseTreatment(activeCaseIndex, detailPlaceholder);
+            }
+        }, 50);
+    }
+
+    relEl.innerHTML = `Relevance: <span class="relevance-score ${relClass}">${score}%</span> <span class="treatment-placeholder" id="detail-treatment-badge-${activeCaseIndex}">${treatmentHtml}</span>${reasonHtml}`;
 }
 
 function renderCaseDetailView(caseData) {
@@ -1373,6 +1389,66 @@ async function submitCasesPanelAsk() {
     }
 }
 
+function getTreatmentBadgeHtml(treatment) {
+    if (!treatment || !treatment.checked || treatment.status === 'unknown') return '';
+    
+    const config = {
+        'negative': { icon: '✗', class: 'treatment-negative', tooltip: `Automated citation check found this case may have been ${treatment.label || 'negatively treated'}. ${treatment.details || ''} Always verify with Westlaw or Lexis.` },
+        'warning': { icon: '⚠', class: 'treatment-warning', tooltip: `Automated citation check found this case may have been ${treatment.label || 'questioned'}. ${treatment.details || ''} Always verify with Westlaw or Lexis.` },
+        'good': { icon: '✓', class: 'treatment-good', tooltip: 'Automated citation check found no negative treatment for this case. Always verify with Westlaw or Lexis.' }
+    };
+    
+    const badge = config[treatment.status];
+    if (!badge) return '';
+    
+    return `<span class="treatment-icon ${badge.class}" title="${badge.tooltip}">${badge.icon}</span>`;
+}
+
+function loadCaseTreatment(caseIndex, badgePlaceholder) {
+    fetch('/case/treatment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ context_id: contextId, case_index: caseIndex })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.treatment) {
+            // Update local case data
+            if (currentCases[caseIndex]) {
+                currentCases[caseIndex].treatment = data.treatment;
+            }
+            // Replace placeholder with badge
+            if (badgePlaceholder) {
+                badgePlaceholder.innerHTML = getTreatmentBadgeHtml(data.treatment);
+            }
+            // Also update the other view's placeholder if it exists (sync list & detail)
+            const listPlaceholder = document.getElementById(`treatment-badge-${caseIndex}`);
+            if (listPlaceholder && listPlaceholder !== badgePlaceholder) {
+                listPlaceholder.innerHTML = getTreatmentBadgeHtml(data.treatment);
+            }
+            const detailPlaceholder = document.getElementById(`detail-treatment-badge-${caseIndex}`);
+            if (detailPlaceholder && detailPlaceholder !== badgePlaceholder) {
+                detailPlaceholder.innerHTML = getTreatmentBadgeHtml(data.treatment);
+            }
+        }
+    })
+    .catch(() => {
+        if (badgePlaceholder) badgePlaceholder.innerHTML = '';
+    });
+}
+
+function loadAllTreatments(cases) {
+    cases.forEach((caseData, index) => {
+        if (!caseData.treatment || !caseData.treatment.checked) {
+            setTimeout(() => {
+                const placeholder = document.getElementById(`treatment-badge-${index}`);
+                if (placeholder) loadCaseTreatment(index, placeholder);
+            }, index * 300); // 300ms stagger between each request
+        }
+    });
+}
+
 function renderCasesList(cases) {
     const content = document.getElementById('cases-content');
     if (!content) return;
@@ -1389,9 +1465,20 @@ function renderCasesList(cases) {
         const relevanceClass = getRelevanceClass(score);
         const dim = relevanceDimensionsDataAttributes(c.relevance_dimensions);
         const tooltipClass = dim.hasTooltip ? ' relevance-score--tooltip' : '';
+        
+        let treatmentHtml = '';
+        if (c.treatment && c.treatment.checked) {
+            treatmentHtml = getTreatmentBadgeHtml(c.treatment);
+        } else {
+            treatmentHtml = '<span class="treatment-checking">●</span>';
+        }
+        
         html += `
             <div class="case-item" data-case-index="${i}">
-                <div class="case-title case-title--detail">${escapeHtml(c.title || 'Untitled')}</div>
+                <div class="case-title case-title--detail">
+                    ${escapeHtml(c.title || 'Untitled')}
+                    <span class="treatment-placeholder" id="treatment-badge-${i}">${treatmentHtml}</span>
+                </div>
                 ${c.citation ? `<div class="case-citation">${escapeHtml(c.citation)}</div>` : ''}
                 <div class="case-relevance">
                     <span class="relevance-score ${relevanceClass}${tooltipClass}"${dim.extraAttrs}>Relevance: ${score}%</span>
@@ -1406,6 +1493,7 @@ function renderCasesList(cases) {
     content.innerHTML = html;
     bindRelevanceScoreTooltips(content);
     bindCaseDetailTitleClicks(content);
+    loadAllTreatments(cases);
 }
 
 function updateCasesPanel(cases) {

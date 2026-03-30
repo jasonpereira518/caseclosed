@@ -15,13 +15,7 @@ client = genai.Client(
     location=config.GOOGLE_CLOUD_LOCATION,
 )
 
-# Independent agents
-clarifier_agent = client.chats.create(model=config.CLARIFIER_MODEL)
-summarizer_agent = client.chats.create(model=config.SUMMARIZER_MODEL)
-scorer_agent = client.chats.create(model=config.SCORER_MODEL)
-analyzer_agent = client.chats.create(model=config.ANALYZER_MODEL)
-draft_agent = client.chats.create(model=config.DRAFT_MODEL)
-query_agent = client.chats.create(model=config.QUERY_MODEL)
+# Agents will be instantiated statelessly per call.
 
 
 def ask_clarifying_questions(user_input: str, existing_analysis: dict = None, description: str = "") -> list:
@@ -50,7 +44,7 @@ def ask_clarifying_questions(user_input: str, existing_analysis: dict = None, de
     )
 
     try:
-        response = clarifier_agent.send_message(prompt)
+        response = client.chats.create(model=config.CLARIFIER_MODEL).send_message(prompt)
         lines = [q.strip() for q in response.text.splitlines() if q.strip()]
         if any("NO QUESTIONS NEEDED" in q.upper() for q in lines):
             return []
@@ -75,7 +69,7 @@ def extract_answers_from_message(user_message: str, questions: list) -> dict:
         "Set has_sufficient_info to false if critical information is still missing."
     )
     try:
-        response = clarifier_agent.send_message(prompt)
+        response = client.chats.create(model=config.CLARIFIER_MODEL).send_message(prompt)
         text = response.text.strip()
         parsed = extract_json_object(text)
         if parsed:
@@ -134,7 +128,7 @@ def check_if_more_info_needed(user_message: str, existing_context: str, analysis
     )
 
     try:
-        response = clarifier_agent.send_message(prompt)
+        response = client.chats.create(model=config.CLARIFIER_MODEL).send_message(prompt)
         text = response.text.strip()
         parsed = extract_json_object(text)
         if parsed:
@@ -153,7 +147,7 @@ def check_if_more_info_needed(user_message: str, existing_context: str, analysis
 def summarize_case(text: str) -> str:
     prompt = f"Summarize this legal situation clearly and factually for use in a case law search:\n\n{text}"
     try:
-        response = summarizer_agent.send_message(prompt)
+        response = client.chats.create(model=config.SUMMARIZER_MODEL).send_message(prompt)
         return response.text.strip()
     except Exception as e:
         return f"[Error summarizing: {e}]"
@@ -177,7 +171,7 @@ def extract_structured_analysis(text: str) -> dict:
         "If information is not available, use empty arrays."
     )
     try:
-        response = analyzer_agent.send_message(prompt)
+        response = client.chats.create(model=config.ANALYZER_MODEL).send_message(prompt)
         text = response.text.strip()
         parsed = extract_json_object(text)
         if parsed:
@@ -297,15 +291,23 @@ def generate_query(summary: str, analysis: dict = None) -> str:
         context = f"\n\nExtracted Legal Issues: {issues}\nCauses of Action: {causes}\nJurisdictions: {jurisdictions}"
 
     prompt = (
-        f"Generate exactly 5 words of short keyword-style legal search terms for CourtListener "
-        + f"querying purposes based on the following summary and analysis. Output ONLY the 5 keywords with "
-        + f"no numbering or explanation: \n\nSummary:\n{summary},\n\nAnalysis{context}"
+        f"Generate a single search query of 5-8 keywords separated by spaces for finding relevant legal cases. Output ONLY the keywords on a single line, no quotes, no line breaks, no numbering. Example: juvenile assault school provocation self-defense minor\n\nSummary:\n{summary},\n\nAnalysis{context}"
     )
     try:
-        query_agent = client.chats.create(model=config.QUERY_MODEL)
-        response = query_agent.send_message(prompt)
+        response = client.chats.create(model=config.QUERY_MODEL).send_message(prompt)
         raw = (getattr(response, "text", None) or "").strip()
-        return _normalize_generated_query(raw, fb) or fb
+        ans = _normalize_generated_query(raw, fb) or fb
+        
+        import re
+        ans = ans.replace('"', '').replace("'", "")
+        ans = ans.replace('\n', ' ')
+        ans = re.sub(r'\s+', ' ', ans).strip()
+        if len(ans) > 100:
+            ans = ans[:100]
+            last_space = ans.rfind(' ')
+            if last_space != -1:
+                ans = ans[:last_space]
+        return ans
     except Exception:
         return fb
 
@@ -341,11 +343,21 @@ Excerpt: {snippet}
 Score this case across 5 dimensions. For each dimension, provide a score from 0 to 100.
 
 DIMENSIONS AND WEIGHTS:
-1. Factual Similarity (30%) — How closely do the facts of this case mirror the user's situation? Consider parties, events, circumstances, and outcomes.
-2. Legal Issues Match (25%) — Do the legal questions, doctrines, or theories in this case align with the user's legal issues?
-3. Causes of Action Overlap (20%) — Does this case involve the same or closely related causes of action, charges, or claims?
-4. Jurisdictional & Procedural Relevance (15%) — Is this case from a relevant jurisdiction, court level, or procedural posture?
-5. Practical Utility (10%) — Would this case be genuinely useful in building a legal argument for the user's situation? Consider precedential value, recency, and clarity of holdings.
+1. Factual Similarity (30%) — How closely do the facts of this case mirror the user's situation? Consider parties, events, circumstances, and outcomes. For each dimension, a score of 50 means "some relevance." Do NOT score 0 unless the dimension is completely inapplicable. Even loose connections should score 20-40.
+2. Legal Issues Match (25%) — Do the legal questions, doctrines, or theories in this case align with the user's legal issues? For each dimension, a score of 50 means "some relevance." Do NOT score 0 unless the dimension is completely inapplicable. Even loose connections should score 20-40.
+3. Causes of Action Overlap (20%) — Does this case involve the same or closely related causes of action, charges, or claims? For each dimension, a score of 50 means "some relevance." Do NOT score 0 unless the dimension is completely inapplicable. Even loose connections should score 20-40.
+4. Jurisdictional & Procedural Relevance (15%) — Is this case from a relevant jurisdiction, court level, or procedural posture? For each dimension, a score of 50 means "some relevance." Do NOT score 0 unless the dimension is completely inapplicable. Even loose connections should score 20-40.
+5. Practical Utility (10%) — Would this case be genuinely useful in building a legal argument for the user's situation? Consider precedential value, recency, and clarity of holdings. For each dimension, a score of 50 means "some relevance." Do NOT score 0 unless the dimension is completely inapplicable. Even loose connections should score 20-40.
+
+SCORING CALIBRATION:
+- A score of 50 means "moderately relevant — some connection to the user's legal situation"
+- A score of 30-49 means "partially relevant — shares some legal concepts but differs in key facts or jurisdiction"
+- A score below 20 should be reserved ONLY for cases that are completely unrelated to the user's situation
+- If a case involves similar legal concepts (e.g., both involve assault, both involve Fourth Amendment), it should score at LEAST 35-45 even if the specific facts differ
+- If a case is from the same jurisdiction AND involves similar legal issues, it should score at LEAST 50-65
+- A score of 70+ means strong factual AND legal alignment
+- Do NOT default to low scores. Most cases returned from a targeted legal search will have SOME relevance — score them accordingly
+- When in doubt, score HIGHER rather than lower
 
 Output ONLY valid JSON in this exact format:
 {{
@@ -364,7 +376,7 @@ Be fair and consistent. Reward partial matches. Reserve scores below 20 only for
     """
 
     try:
-        response = scorer_agent.send_message(prompt)
+        response = client.chats.create(model=config.SCORER_MODEL).send_message(prompt)
         text = response.text.strip()
         parsed = extract_json_object(text) or {}
 
@@ -461,7 +473,7 @@ Instructions:
 ]
         """
 
-        response = scorer_agent.send_message(prompt)
+        response = client.chats.create(model=config.SCORER_MODEL).send_message(prompt)
         text = response.text.strip()
 
         parsed = None
@@ -688,7 +700,7 @@ def draft_legal_document(context: dict, doc_type: str = "memo") -> str:
     )
 
     try:
-        response = draft_agent.send_message(prompt)
+        response = client.chats.create(model=config.DRAFT_MODEL).send_message(prompt)
         return response.text.strip()
     except Exception as e:
         return f"[Error drafting document: {e}]"

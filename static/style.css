@@ -1303,6 +1303,7 @@ body:not(.sidebar-collapsed) #sidebar-toggle {
 }
 
 .case-item {
+    position: relative;
     margin-bottom: 16px;
     padding: 16px;
     background-color: #ffffff;
@@ -1784,4 +1785,96 @@ body:not(.sidebar-collapsed) #sidebar-toggle {
     .panel-tab {
         padding: 14px 8px;
     }
+}
+
+/* ----------------------------------------------------
+   CASE TREATMENT BADGES
+   ---------------------------------------------------- */
+.treatment-icon {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: help;
+  text-decoration: none !important;
+}
+
+.treatment-icon.treatment-negative {
+  color: #CC0000;
+  background: #FDE8E8;
+}
+
+.treatment-icon.treatment-warning {
+  color: #E69138;
+  background: #FFF3E0;
+}
+
+.treatment-icon.treatment-good {
+  color: #4A7C59;
+  background: #E8F5E9;
+}
+
+.treatment-checking {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  font-size: 8px;
+  color: #B8805F;
+  animation: treatmentPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes treatmentPulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+}
+
+.treatment-icon:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  background: #3A2A1A;
+  color: #F5EDE3;
+  font-size: 11px;
+  font-weight: 400;
+  padding: 8px 12px;
+  border-radius: 8px;
+  white-space: normal;
+  width: 220px;
+  line-height: 1.4;
+  z-index: 1000;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.treatment-icon:hover::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 8px;
+  border: 5px solid transparent;
+  border-top-color: #3A2A1A;
+  z-index: 1000;
+}
+
+.cases-detail-card .treatment-icon {
+  position: static;
+  display: inline-flex;
+  margin-left: 8px;
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+}
+
+.cases-detail-card .treatment-checking {
+  position: static;
+  margin-left: 8px;
+  display: inline-block;
 }

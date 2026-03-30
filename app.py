@@ -18,6 +18,8 @@ PROTECTED_JSON_PATHS = frozenset(
         "/chat/case/ask",
         "/case/describe",
         "/chat/case/describe",
+        "/case/treatment",
+        "/chat/case/treatment",
     }
 )
 # Note: login JSON responses for these paths use _is_protected_json_path(request.path),
@@ -61,6 +63,8 @@ _missing = {
     "/chat/case/ask",
     "/case/describe",
     "/chat/case/describe",
+    "/case/treatment",
+    "/chat/case/treatment",
 } - {r.rule for r in app.url_map.iter_rules()}
 if _missing:
     raise RuntimeError(
