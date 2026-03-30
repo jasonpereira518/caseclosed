@@ -40,6 +40,7 @@ let clarificationAnswers = [];
 let clarifyAttempts = 0;
 let contextId = null;
 let currentAnalysis = {};
+let currentTimeline = [];
 let currentCases = [];
 let sessionHistory = [];
 let pendingDeleteContextId = null;
@@ -61,10 +62,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadContext();
     await loadSessionHistory();
     setupSidebar();
-    
+
     // Setup tab switching
     setupTabs();
-    
+
     // Setup event listeners
     setupEventListeners();
     setupMainContentSidebarClose();
@@ -76,15 +77,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 function setupTabs() {
     const tabs = document.querySelectorAll('.panel-tab');
     const tabContents = document.querySelectorAll('.panel-tab-content');
-    
+
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             const targetTab = tab.getAttribute('data-tab');
-            
+
             // Update active states
             tabs.forEach(t => t.classList.remove('active'));
             tabContents.forEach(tc => tc.classList.remove('active'));
-            
+
             tab.classList.add('active');
             document.getElementById(`tab-${targetTab}`).classList.add('active');
         });
@@ -98,28 +99,28 @@ function setupEventListeners() {
     // PDF Upload
     uploadBtn.addEventListener('click', () => pdfInput.click());
     pdfInput.addEventListener('change', handlePDFUpload);
-    
+
     // Analyze button
     analyzeBtn.addEventListener('click', handleAnalyze);
-    
+
     // Draft button
     draftBtn.addEventListener('click', () => {
         // Switch to draft tab
         document.querySelector('[data-tab="draft"]').click();
     });
-    
+
     // Draft generate button
     draftGenerateBtn.addEventListener('click', handleDraftGenerate);
-    
+
     // Draft download button
     const draftDownloadBtn = document.getElementById('draft-download-btn');
     if (draftDownloadBtn) {
         draftDownloadBtn.addEventListener('click', handleDraftDownload);
     }
-    
+
     // Chat form
     chatForm.addEventListener('submit', handleChatSubmit);
-    
+
     // Handle multi-line input: Enter submits, Shift+Enter creates new line
     chatInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -127,7 +128,7 @@ function setupEventListeners() {
             chatForm.dispatchEvent(new Event('submit'));
         }
     });
-    
+
     // Auto-resize textarea
     chatInput.addEventListener('input', autoResizeTextarea);
 
@@ -384,6 +385,7 @@ function applyContextToUI(nextContextId, context) {
     contextId = nextContextId || contextId;
     const safeContext = context || {};
     currentAnalysis = safeContext.analysis || {};
+    currentTimeline = safeContext.timeline || [];
     currentCases = safeContext.cases || [];
 
     renderChatFromContext(safeContext);
@@ -477,6 +479,7 @@ function clearPanelsForNewSession() {
     clarificationAnswers = [];
     clarifyAttempts = 0;
     currentAnalysis = {};
+    currentTimeline = [];
     currentCases = [];
     updateAnalysisPanel({});
     updateCasesPanel([]);
@@ -649,24 +652,24 @@ function updateRoleSelector(role) {
 async function handlePDFUpload() {
     if (!pdfInput.files.length) return;
     const file = pdfInput.files[0];
-    
-        appendMessage('bot', `Uploading <b>${file.name}</b>...`);
-    
+
+    appendMessage('bot', `Uploading <b>${file.name}</b>...`);
+
     const formData = new FormData();
     formData.append('pdf', file);
-    
+
     try {
         const res = await fetch('/upload', { method: 'POST', body: formData });
         const data = await res.json();
-        
+
         if (data.error) {
             appendMessage('bot', `Error: ${data.error}`);
             return;
         }
-        
+
         appendMessage('bot', `Uploaded: <b>${data.filename}</b>`);
         appendMessage('bot', `<i>Extracted text preview:</i><br>${data.text.substring(0, 300)}...`);
-        
+
         contextId = data.context_id;
         const uploadCid = data.context_id;
         const prevEntry = sessionHistory.find((s) => s.context_id === uploadCid);
@@ -682,9 +685,10 @@ async function handlePDFUpload() {
         renderSessionList();
 
         // Role selector will be updated if needed
-        
+
         if (data.analysis) {
             currentAnalysis = data.analysis;
+            currentTimeline = data.timeline || [];
             updateAnalysisPanel(data.analysis);
             // Switch to analysis tab
             document.querySelector('[data-tab="analysis"]').click();
@@ -703,26 +707,27 @@ async function handleAnalyze() {
         appendMessage('bot', 'Please upload a PDF or describe your case first.');
         return;
     }
-    
+
     appendMessage('bot', 'Analyzing case...');
     showAnalysisSkeleton();
-    
+
     try {
         const res = await fetch('/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ context_id: contextId })
         });
-        
+
         const data = await res.json();
-        
+
         if (data.error) {
             appendMessage('bot', `Error: ${data.error}`);
             return;
         }
-        
+
         if (data.analysis) {
             currentAnalysis = data.analysis;
+            currentTimeline = data.timeline || [];
             updateAnalysisPanel(data.analysis);
             appendMessage('bot', 'Analysis complete! Check the Analysis panel.');
             // Switch to analysis tab
@@ -746,9 +751,9 @@ async function handleChatSubmit(e) {
     appendMessage('user', message.replace(/\n/g, '<br>'));
     chatInput.value = '';
     autoResizeTextarea();
-    
+
     const thinking = appendLoadingMessage('Analyzing your case...');
-    
+
     try {
         // Always send the message - backend will extract answers if in clarification mode
         const body = {
@@ -756,16 +761,16 @@ async function handleChatSubmit(e) {
             clarify_attempts: clarifyAttempts,
             context_id: contextId
         };
-        
+
         const res = await fetch('/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
         });
-        
+
         const data = await res.json();
         removeMessage(thinking);
-        
+
         // Handle clarifying
         if (data.status === 'clarifying') {
             clarifyMode = true;
@@ -773,22 +778,23 @@ async function handleChatSubmit(e) {
             contextId = data.context_id;
             // Role selector will be updated if needed
             clarificationAnswers = [];
-            
+
             let questionsText = '<b>I need a bit more information:</b><br><br>';
             data.questions.forEach((q, idx) => {
                 questionsText += `${idx + 1}. ${q}<br>`;
             });
             questionsText += '<br>Please provide answers to these questions in your next message.';
             appendMessage('bot', questionsText);
-            
+
             if (data.analysis) {
                 showAnalysisSkeleton();
                 currentAnalysis = data.analysis;
+                currentTimeline = data.timeline || [];
                 updateAnalysisPanel(data.analysis);
             }
             return;
         }
-        
+
         // Handle results
         if (data.status === 'results') {
             clarifyMode = false;
@@ -806,13 +812,14 @@ async function handleChatSubmit(e) {
                     hist._animateTitleNext = true;
                 }
             }
-            
+
             if (data.analysis) {
                 showAnalysisSkeleton();
                 currentAnalysis = data.analysis;
+                currentTimeline = data.timeline || [];
                 updateAnalysisPanel(data.analysis);
             }
-            
+
             if (data.cases && data.cases.length > 0) {
                 showCasesSkeleton();
                 currentCases = data.cases;
@@ -823,12 +830,12 @@ async function handleChatSubmit(e) {
             } else {
                 appendMessage('bot', 'No relevant cases found.');
             }
-            
+
             appendMessage('bot', 'You can add more information to refine the search or generate a document.');
             renderSessionList();
             return;
         }
-        
+
         if (data.status === 'error') {
             appendMessage('bot', `${data.message}`);
         }
@@ -847,35 +854,35 @@ async function handleDraftDownload() {
         appendMessage('bot', 'Please generate a document first.');
         return;
     }
-    
+
     const docType = document.getElementById('draft-type').value;
-    
+
     try {
         const res = await fetch('/download-draft', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ context_id: contextId, doc_type: docType })
         });
-        
+
         // Check content type to determine if it's an error (JSON) or PDF
         const contentType = res.headers.get('content-type');
-        
+
         if (!res.ok || contentType.includes('application/json')) {
             // It's an error response
             const error = await res.json();
             appendMessage('bot', `Error: ${error.error || 'Download failed'}`);
             return;
         }
-        
+
         // It's a PDF response
         const blob = await res.blob();
-        
+
         // Check if blob is actually a PDF
         if (blob.size === 0) {
             appendMessage('bot', 'Error: PDF file is empty.');
             return;
         }
-        
+
         // Get filename from Content-Disposition header or use default
         let filename = `legal_${docType}_${contextId.substring(0, 8)}.pdf`;
         const contentDisposition = res.headers.get('content-disposition');
@@ -885,7 +892,7 @@ async function handleDraftDownload() {
                 filename = filenameMatch[1].replace(/['"]/g, '');
             }
         }
-        
+
         // Create download link and trigger download
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -894,13 +901,13 @@ async function handleDraftDownload() {
         a.download = filename;
         document.body.appendChild(a);
         a.click();
-        
+
         // Clean up
         setTimeout(() => {
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
         }, 100);
-        
+
         appendMessage('bot', `PDF downloaded successfully!`);
     } catch (err) {
         appendMessage('bot', `Download failed: ${err.message}`);
@@ -916,26 +923,26 @@ async function handleDraftGenerate() {
         appendMessage('bot', 'Please upload a PDF or describe your case first.');
         return;
     }
-    
+
     const docType = document.getElementById('draft-type').value;
     const draftContent = document.getElementById('draft-content');
-    
+
     showDraftSkeleton();
-    
+
     try {
         const res = await fetch('/draft', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ context_id: contextId, doc_type: docType })
         });
-        
+
         const data = await res.json();
-        
+
         if (data.error) {
             draftContent.innerHTML = `<p class="empty-state">Error: ${data.error}</p>`;
             return;
         }
-        
+
         if (data.document) {
             displayDraft(data.document);
             // Show download button
@@ -953,23 +960,28 @@ async function handleDraftGenerate() {
 // =====================================================
 function updateAnalysisPanel(analysis) {
     const content = document.getElementById('analysis-content');
-    
+
     if (!analysis || Object.keys(analysis).length === 0) {
         content.innerHTML = '<p class="empty-state">No analysis available yet. Upload a PDF or describe your case to begin.</p>';
         return;
     }
-    
+
     let html = '';
-    
+
     // Facts
     if (analysis.facts && analysis.facts.length > 0) {
         html += '<div class="analysis-section"><h4>Facts</h4><ul>';
-        analysis.facts.forEach(fact => {
-            html += `<li>${escapeHtml(fact)}</li>`;
+        analysis.facts.forEach((fact, i) => {
+            const cls = i >= 4 ? ' class="facts-hidden"' : '';
+            html += `<li${cls}>${escapeHtml(fact)}</li>`;
         });
-        html += '</ul></div>';
+        html += '</ul>';
+        if (analysis.facts.length > 4) {
+            html += '<button class="facts-toggle" onclick="toggleAnalysisList(this)">See more ▾</button>';
+        }
+        html += '</div>';
     }
-    
+
     // Parties
     if (analysis.parties && analysis.parties.length > 0) {
         html += '<div class="analysis-section"><h4>Parties</h4>';
@@ -980,7 +992,7 @@ function updateAnalysisPanel(analysis) {
         });
         html += '</div>';
     }
-    
+
     // Jurisdictions
     if (analysis.jurisdictions && analysis.jurisdictions.length > 0) {
         html += '<div class="analysis-section"><h4>Jurisdictions</h4><ul>';
@@ -989,30 +1001,148 @@ function updateAnalysisPanel(analysis) {
         });
         html += '</ul></div>';
     }
-    
+
     // Legal Issues
     if (analysis.legal_issues && analysis.legal_issues.length > 0) {
         html += '<div class="analysis-section"><h4>Legal Issues</h4><ul>';
-        analysis.legal_issues.forEach(issue => {
-            html += `<li>${escapeHtml(issue)}</li>`;
+        analysis.legal_issues.forEach((issue, i) => {
+            const cls = i >= 4 ? ' class="facts-hidden"' : '';
+            html += `<li${cls}>${escapeHtml(issue)}</li>`;
         });
-        html += '</ul></div>';
+        html += '</ul>';
+        if (analysis.legal_issues.length > 4) {
+            html += '<button class="facts-toggle" onclick="toggleAnalysisList(this)">See more ▾</button>';
+        }
+        html += '</div>';
     }
-    
+
     // Causes of Action
     if (analysis.causes_of_action && analysis.causes_of_action.length > 0) {
         html += '<div class="analysis-section"><h4>Causes of Action</h4><ul>';
-        analysis.causes_of_action.forEach(cause => {
-            html += `<li>${escapeHtml(cause)}</li>`;
+        analysis.causes_of_action.forEach((cause, i) => {
+            const cls = i >= 4 ? ' class="facts-hidden"' : '';
+            html += `<li${cls}>${escapeHtml(cause)}</li>`;
         });
-        html += '</ul></div>';
+        html += '</ul>';
+        if (analysis.causes_of_action.length > 4) {
+            html += '<button class="facts-toggle" onclick="toggleAnalysisList(this)">See more ▾</button>';
+        }
+        html += '</div>';
     }
-    
+
     if (!html) {
         html = '<p class="empty-state">Analysis in progress...</p>';
+    } else {
+        html += renderTimeline(currentTimeline);
     }
-    
+
     content.innerHTML = html;
+}
+
+function toggleAnalysisList(btn) {
+    const list = btn.previousElementSibling;
+    if (!list || list.tagName !== 'UL') return;
+
+    const isExpanded = btn.textContent.includes('less');
+    const items = list.querySelectorAll('li:nth-child(n+5)');
+
+    items.forEach(item => {
+        if (isExpanded) {
+            item.classList.add('facts-hidden');
+        } else {
+            item.classList.remove('facts-hidden');
+        }
+    });
+
+    btn.textContent = isExpanded ? 'See more ▾' : 'See less ▴';
+}
+
+function renderTimeline(events) {
+    const evs = events || [];
+
+    let html = `
+        <div class="timeline-section">
+            <h4 class="analysis-section-title">Case Timeline</h4>
+            <div class="timeline-container">
+    `;
+
+    evs.forEach((event, index) => {
+        let rawCat = (event.category || 'event').toLowerCase();
+        if (rawCat !== 'incident' && rawCat !== 'event') rawCat = 'event';
+
+        const categoryClass = `tag-${rawCat}`;
+        const categoryLabel = rawCat === 'incident' ? 'Incident' : 'Event';
+        const dateDisplay = event.date || 'Date Unknown';
+        const isManual = event.source === 'manual' ? '<span class="timeline-manual-tag">Manual</span>' : '';
+
+        html += `
+            <div class="timeline-event">
+                <div class="timeline-marker"></div>
+                <div class="timeline-event-content">
+                    <div class="timeline-date">${dateDisplay}</div>
+                    <div class="timeline-details">
+                        <span class="timeline-tag ${categoryClass}">${categoryLabel}</span>
+                        ${isManual}
+                        <p class="timeline-description">${event.description || ''}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `
+            </div>
+            <div class="timeline-add-event">
+                <input type="text" id="timeline-new-date" placeholder="Date (e.g., Jan 5, 2024)" />
+                <input type="text" id="timeline-new-desc" placeholder="Describe the event..." />
+                <button id="timeline-add-btn" onclick="submitManualTimelineEvent()">+ Add</button>
+            </div>
+        </div>
+    `;
+
+    return html;
+}
+
+function submitManualTimelineEvent() {
+    const dateInput = document.getElementById('timeline-new-date');
+    const descInput = document.getElementById('timeline-new-desc');
+    if (!dateInput || !descInput) return;
+
+    const date = dateInput.value.trim();
+    const desc = descInput.value.trim();
+
+    if (!desc) return;
+
+    fetch('/timeline/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            context_id: contextId,
+            date: date || 'Unknown',
+            description: desc,
+            category: 'event'
+        })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.timeline) {
+                currentTimeline = data.timeline;
+                dateInput.value = '';
+                descInput.value = '';
+                updateTimelineInPanel(data.timeline);
+            }
+        })
+        .catch(err => console.error('Failed to add event:', err));
+}
+
+function updateTimelineInPanel(timeline) {
+    const section = document.querySelector('.timeline-section');
+    if (section) {
+        const parent = section.parentElement;
+        section.remove();
+        parent.insertAdjacentHTML('beforeend', renderTimeline(timeline));
+    }
 }
 
 function getRelevanceClass(score) {
@@ -1257,7 +1387,7 @@ function renderCaseDetailRelevanceSection(caseData) {
     const relClass = getRelevanceClass(score);
     const reasonRaw = caseData.relevance_reason != null ? String(caseData.relevance_reason).trim() : '';
     const reasonHtml = reasonRaw ? ` — ${escapeHtml(reasonRaw)}` : '';
-    
+
     let treatmentHtml = '';
     if (caseData.treatment && caseData.treatment.checked) {
         treatmentHtml = getTreatmentBadgeHtml(caseData.treatment);
@@ -1391,16 +1521,16 @@ async function submitCasesPanelAsk() {
 
 function getTreatmentBadgeHtml(treatment) {
     if (!treatment || !treatment.checked || treatment.status === 'unknown') return '';
-    
+
     const config = {
         'negative': { icon: '✗', class: 'treatment-negative', tooltip: `Automated citation check found this case may have been ${treatment.label || 'negatively treated'}. ${treatment.details || ''} Always verify with Westlaw or Lexis.` },
         'warning': { icon: '⚠', class: 'treatment-warning', tooltip: `Automated citation check found this case may have been ${treatment.label || 'questioned'}. ${treatment.details || ''} Always verify with Westlaw or Lexis.` },
         'good': { icon: '✓', class: 'treatment-good', tooltip: 'Automated citation check found no negative treatment for this case. Always verify with Westlaw or Lexis.' }
     };
-    
+
     const badge = config[treatment.status];
     if (!badge) return '';
-    
+
     return `<span class="treatment-icon ${badge.class}" title="${badge.tooltip}">${badge.icon}</span>`;
 }
 
@@ -1411,31 +1541,31 @@ function loadCaseTreatment(caseIndex, badgePlaceholder) {
         credentials: 'same-origin',
         body: JSON.stringify({ context_id: contextId, case_index: caseIndex })
     })
-    .then(res => res.json())
-    .then(data => {
-        if (data.treatment) {
-            // Update local case data
-            if (currentCases[caseIndex]) {
-                currentCases[caseIndex].treatment = data.treatment;
+        .then(res => res.json())
+        .then(data => {
+            if (data.treatment) {
+                // Update local case data
+                if (currentCases[caseIndex]) {
+                    currentCases[caseIndex].treatment = data.treatment;
+                }
+                // Replace placeholder with badge
+                if (badgePlaceholder) {
+                    badgePlaceholder.innerHTML = getTreatmentBadgeHtml(data.treatment);
+                }
+                // Also update the other view's placeholder if it exists (sync list & detail)
+                const listPlaceholder = document.getElementById(`treatment-badge-${caseIndex}`);
+                if (listPlaceholder && listPlaceholder !== badgePlaceholder) {
+                    listPlaceholder.innerHTML = getTreatmentBadgeHtml(data.treatment);
+                }
+                const detailPlaceholder = document.getElementById(`detail-treatment-badge-${caseIndex}`);
+                if (detailPlaceholder && detailPlaceholder !== badgePlaceholder) {
+                    detailPlaceholder.innerHTML = getTreatmentBadgeHtml(data.treatment);
+                }
             }
-            // Replace placeholder with badge
-            if (badgePlaceholder) {
-                badgePlaceholder.innerHTML = getTreatmentBadgeHtml(data.treatment);
-            }
-            // Also update the other view's placeholder if it exists (sync list & detail)
-            const listPlaceholder = document.getElementById(`treatment-badge-${caseIndex}`);
-            if (listPlaceholder && listPlaceholder !== badgePlaceholder) {
-                listPlaceholder.innerHTML = getTreatmentBadgeHtml(data.treatment);
-            }
-            const detailPlaceholder = document.getElementById(`detail-treatment-badge-${caseIndex}`);
-            if (detailPlaceholder && detailPlaceholder !== badgePlaceholder) {
-                detailPlaceholder.innerHTML = getTreatmentBadgeHtml(data.treatment);
-            }
-        }
-    })
-    .catch(() => {
-        if (badgePlaceholder) badgePlaceholder.innerHTML = '';
-    });
+        })
+        .catch(() => {
+            if (badgePlaceholder) badgePlaceholder.innerHTML = '';
+        });
 }
 
 function loadAllTreatments(cases) {
@@ -1465,14 +1595,14 @@ function renderCasesList(cases) {
         const relevanceClass = getRelevanceClass(score);
         const dim = relevanceDimensionsDataAttributes(c.relevance_dimensions);
         const tooltipClass = dim.hasTooltip ? ' relevance-score--tooltip' : '';
-        
+
         let treatmentHtml = '';
         if (c.treatment && c.treatment.checked) {
             treatmentHtml = getTreatmentBadgeHtml(c.treatment);
         } else {
             treatmentHtml = '<span class="treatment-checking">●</span>';
         }
-        
+
         html += `
             <div class="case-item" data-case-index="${i}">
                 <div class="case-title case-title--detail">

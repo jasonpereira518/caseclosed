@@ -188,6 +188,10 @@ def chat():
         # Sort by descending relevance
         results.sort(key=lambda x: x["relevance_score"], reverse=True)
         context["cases"] = results
+        
+        from services.llm import extract_timeline
+        timeline = extract_timeline(combined_text)
+        context["timeline"] = timeline
     except Exception as e:
         print(f"[ERROR] Full traceback:")
         traceback.print_exc()
@@ -225,6 +229,7 @@ def chat():
             "query": context["search_query"],
             "summary": summary,
             "analysis": analysis,
+            "timeline": context.get("timeline", []),
             "cases": results,
         }
     )

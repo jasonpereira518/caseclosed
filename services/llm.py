@@ -704,3 +704,129 @@ def draft_legal_document(context: dict, doc_type: str = "memo") -> str:
         return response.text.strip()
     except Exception as e:
         return f"[Error drafting document: {e}]"
+
+
+def extract_timeline(text: str) -> list:
+    if not text or not text.strip():
+        return []
+        
+    prompt = """You are an expert legal assistant building a chronological timeline of events for a case.
+Read the following case context and extract all key events.
+
+For each event, determine:
+- A date: Use the exact date if known (e.g., "January 5, 2024"). If only the month is known, use that (e.g., "March 2024"). If only the year is known, use that (e.g., "2024"). If no date can be determined, use "Date Unknown".
+- A clear, concise description of what happened
+- A category: Use "incident" ONLY for events involving a potential crime, arrest, or violent/illegal act. For everything else (employment changes, filings, meetings, policy changes, communications, medical events, etc.), use "event".
+
+Output ONLY valid JSON as a list of objects in this exact format:
+[
+  {
+    "date": "January 5, 2024",
+    "description": "Clear, concise description of the event",
+    "category": "incident" or "event"
+  }
+]
+
+Order the events strictly chronologically. Every event MUST have a date field, even if it is "Date Unknown".
+
+Context:
+%s""" % text
+    try:
+        response = client.chats.create(model="gemini-2.5-flash").send_message(prompt)
+        text = response.text.strip()
+        
+        if text.startswith("```"):
+            lines = text.split("\n")
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() in ("```", "```json"):
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+            
+        import json
+        import re
+        
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            match = re.search(r"\[.*\]", text, re.S)
+            if match:
+                try:
+                    parsed = json.loads(match.group(0))
+                except Exception:
+                    parsed = []
+            else:
+                parsed = []
+                
+        if not isinstance(parsed, list):
+            return []
+            
+        valid_events = []
+        for e in parsed:
+            if not isinstance(e, dict): continue
+            cat = str(e.get("category", "event")).lower()
+            if cat not in {"incident", "event"}:
+                cat = "event"
+            valid_events.append({
+                "date": str(e.get("date", "")).strip()[:100],
+                "description": str(e.get("description", "")).strip(),
+                "category": cat,
+                "source": "auto"
+            })
+            
+        return sort_timeline(valid_events)
+    except Exception:
+        return []
+
+
+def sort_timeline(events: list) -> list:
+    import re
+
+    def parse_date(dstr):
+        if not dstr or str(dstr).strip().lower() in ("date unknown", "unknown", ""):
+            return (1, 0)
+
+        dstr = str(dstr).strip()
+        
+        # Exact YYYY-MM-DD
+        m = re.match(r'^(\d{4})-(\d{2})-(\d{2})', dstr)
+        if m:
+            return (0, int(m.group(1)) * 10000 + int(m.group(2)) * 100 + int(m.group(3)))
+
+        months = {"jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3, 
+                  "apr": 4, "april": 4, "may": 5, "jun": 6, "june": 6, "jul": 7, "july": 7, 
+                  "aug": 8, "august": 8, "sep": 9, "september": 9, "oct": 10, "october": 10, 
+                  "nov": 11, "november": 11, "dec": 12, "december": 12}
+        
+        year = 9999
+        month = 12
+        day = 31
+
+        y_match = re.search(r'\b(19|20)\d{2}\b', dstr)
+        if y_match:
+            year = int(y_match.group())
+
+        dstr_lower = dstr.lower()
+        for m_name, m_num in months.items():
+            if re.search(r'\b' + m_name + r'\b', dstr_lower):
+                month = m_num
+                break
+                
+        d_match = re.search(r'\b([1-9]|[12]\d|3[01])(st|nd|rd|th|,)?\b', dstr_lower)
+        if d_match:
+            try:
+                val = int(d_match.group(1))
+                if val != year:
+                    day = val
+            except:
+                pass
+
+        if year == 9999:
+            return (1, 0)
+
+        return (0, year * 10000 + month * 100 + day)
+
+    try:
+        return sorted(events, key=lambda e: parse_date(e.get("date", "")))
+    except Exception:
+        return events
