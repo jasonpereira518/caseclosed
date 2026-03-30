@@ -2045,3 +2045,64 @@ body:not(.sidebar-collapsed) #sidebar-toggle {
     color: #A06E4F;
     text-decoration: underline;
 }
+
+/* ----------------------------------------------------
+   STATUTES PANEL
+   ---------------------------------------------------- */
+.statutes-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #E8E0D8;
+}
+
+.statutes-disclaimer {
+    font-size: 11px;
+    color: #9E8E7E;
+    font-style: italic;
+    margin-bottom: 14px;
+}
+
+.statute-card {
+    background: #FFFFFF;
+    border: 1px solid #EDE7DD;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+}
+
+.statute-code {
+    font-size: 14px;
+    font-weight: 600;
+    color: #3A2A1A;
+}
+
+.statute-title {
+    font-size: 13px;
+    color: #6B5744;
+    margin-top: 2px;
+}
+
+.statute-jurisdiction {
+    font-size: 11px;
+    color: #9E8E7E;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.statute-description {
+    font-size: 13px;
+    color: #3A2A1A;
+    line-height: 1.5;
+    margin-top: 10px;
+}
+
+.statute-relevance {
+    font-size: 12px;
+    color: #8B7355;
+    font-style: italic;
+    line-height: 1.4;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #F0EBE3;
+}

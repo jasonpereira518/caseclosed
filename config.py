@@ -33,9 +33,11 @@ GOOGLE_OAUTH_CLIENT_SECRETS = os.getenv("GOOGLE_OAUTH_CLIENT_SECRETS", "client_s
 OAUTH_REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI", "http://localhost:5050/auth/callback")
 
 # Model configuration
-CLARIFIER_MODEL = os.getenv("CLARIFIER_MODEL", "gemini-2.5-flash")
-SUMMARIZER_MODEL = os.getenv("SUMMARIZER_MODEL", "gemini-2.5-flash")
-SCORER_MODEL = os.getenv("SCORER_MODEL", "gemini-2.5-flash")
-ANALYZER_MODEL = os.getenv("ANALYZER_MODEL", "gemini-2.5-pro")
-DRAFT_MODEL = os.getenv("DRAFT_MODEL", "gemini-2.5-pro")
-QUERY_MODEL = os.getenv("QUERY_MODEL", "gemini-2.5-pro")
+CLARIFIER_MODEL = os.getenv("CLARIFIER_MODEL", "gemini-2.5-flash-lite")
+SUMMARIZER_MODEL = os.getenv("SUMMARIZER_MODEL", "gemini-2.5-flash-lite")
+SCORER_MODEL = os.getenv("SCORER_MODEL", "gemini-2.5-flash-lite")
+ANALYZER_MODEL = os.getenv("ANALYZER_MODEL", "gemini-2.5-flash-lite")
+DRAFT_MODEL = os.getenv("DRAFT_MODEL", "gemini-2.5-flash-lite")
+QUERY_MODEL = os.getenv("QUERY_MODEL", "gemini-2.5-flash-lite")
+TIMELINE_MODEL = os.getenv("TIMELINE_MODEL", "gemini-2.5-flash-lite")
+STATUTES_MODEL = os.getenv("STATUTES_MODEL", "gemini-2.5-flash-lite")

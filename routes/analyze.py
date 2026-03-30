@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
 from models.context import get_context as get_stored_context, get_or_create_context
-from services.llm import extract_structured_analysis, extract_timeline, sort_timeline
+from services.llm import extract_structured_analysis, extract_timeline, sort_timeline, extract_statutes
 
 
 analyze_bp = Blueprint("analyze", __name__)
@@ -26,6 +26,7 @@ def analyze():
 
     analysis = extract_structured_analysis(text)
     timeline = extract_timeline(text)
+    statutes = extract_statutes(text, analysis)
 
     # Update context if provided
     if context_id:
@@ -34,10 +35,11 @@ def analyze():
             return jsonify({"error": "forbidden"}), 403
         ctx["analysis"] = analysis
         ctx["timeline"] = timeline
+        ctx["statutes"] = statutes
         if not ctx["description"]:
             ctx["description"] = text
 
-    return jsonify({"status": "success", "analysis": analysis, "timeline": timeline, "context_id": context_id})
+    return jsonify({"status": "success", "analysis": analysis, "timeline": timeline, "statutes": statutes, "context_id": context_id})
 
 
 @analyze_bp.route("/timeline/add", methods=["POST"])

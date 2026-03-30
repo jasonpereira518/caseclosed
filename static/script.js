@@ -41,6 +41,7 @@ let clarifyAttempts = 0;
 let contextId = null;
 let currentAnalysis = {};
 let currentTimeline = [];
+let currentStatutes = [];
 let currentCases = [];
 let sessionHistory = [];
 let pendingDeleteContextId = null;
@@ -386,6 +387,7 @@ function applyContextToUI(nextContextId, context) {
     const safeContext = context || {};
     currentAnalysis = safeContext.analysis || {};
     currentTimeline = safeContext.timeline || [];
+    currentStatutes = safeContext.statutes || [];
     currentCases = safeContext.cases || [];
 
     renderChatFromContext(safeContext);
@@ -480,6 +482,7 @@ function clearPanelsForNewSession() {
     clarifyAttempts = 0;
     currentAnalysis = {};
     currentTimeline = [];
+    currentStatutes = [];
     currentCases = [];
     updateAnalysisPanel({});
     updateCasesPanel([]);
@@ -689,6 +692,7 @@ async function handlePDFUpload() {
         if (data.analysis) {
             currentAnalysis = data.analysis;
             currentTimeline = data.timeline || [];
+            currentStatutes = data.statutes || [];
             updateAnalysisPanel(data.analysis);
             // Switch to analysis tab
             document.querySelector('[data-tab="analysis"]').click();
@@ -728,6 +732,7 @@ async function handleAnalyze() {
         if (data.analysis) {
             currentAnalysis = data.analysis;
             currentTimeline = data.timeline || [];
+            currentStatutes = data.statutes || [];
             updateAnalysisPanel(data.analysis);
             appendMessage('bot', 'Analysis complete! Check the Analysis panel.');
             // Switch to analysis tab
@@ -790,6 +795,7 @@ async function handleChatSubmit(e) {
                 showAnalysisSkeleton();
                 currentAnalysis = data.analysis;
                 currentTimeline = data.timeline || [];
+                currentStatutes = data.statutes || [];
                 updateAnalysisPanel(data.analysis);
             }
             return;
@@ -817,6 +823,7 @@ async function handleChatSubmit(e) {
                 showAnalysisSkeleton();
                 currentAnalysis = data.analysis;
                 currentTimeline = data.timeline || [];
+                currentStatutes = data.statutes || [];
                 updateAnalysisPanel(data.analysis);
             }
 
@@ -1033,10 +1040,36 @@ function updateAnalysisPanel(analysis) {
     if (!html) {
         html = '<p class="empty-state">Analysis in progress...</p>';
     } else {
+        html += renderStatutes(currentStatutes);
         html += renderTimeline(currentTimeline);
     }
 
     content.innerHTML = html;
+}
+
+function renderStatutes(statutes) {
+    if (!statutes || statutes.length === 0) return '';
+    
+    let html = `
+        <div class="statutes-section">
+            <h4 class="analysis-section-title">Relevant Statutes</h4>
+            <p class="statutes-disclaimer">Statutes identified by AI — verify with official sources.</p>
+    `;
+    
+    statutes.forEach(s => {
+        html += `
+            <div class="statute-card">
+              <div class="statute-code">${escapeHtml(s.code || '')}</div>
+              <div class="statute-title">${escapeHtml(s.title || '')}</div>
+              <div class="statute-jurisdiction">${escapeHtml(s.jurisdiction || '')}</div>
+              <div class="statute-description">${escapeHtml(s.description || '')}</div>
+              <div class="statute-relevance">${escapeHtml(s.relevance || '')}</div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
 }
 
 function toggleAnalysisList(btn) {

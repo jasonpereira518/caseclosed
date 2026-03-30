@@ -732,7 +732,7 @@ Order the events strictly chronologically. Every event MUST have a date field, e
 Context:
 %s""" % text
     try:
-        response = client.chats.create(model="gemini-2.5-flash").send_message(prompt)
+        response = client.chats.create(model=config.TIMELINE_MODEL).send_message(prompt)
         text = response.text.strip()
         
         if text.startswith("```"):
@@ -775,6 +775,85 @@ Context:
             })
             
         return sort_timeline(valid_events)
+    except Exception:
+        return []
+
+
+def extract_statutes(text: str, analysis: dict) -> list:
+    if not text or not analysis:
+        return []
+        
+    import json
+    analysis_json = json.dumps(analysis, indent=2)
+
+    prompt = """You are an expert legal assistant. Based on the following case facts and the structured analysis (specifically the jurisdiction, causes of action, and legal issues), identify 3-5 specific legal statutes or codes that are most likely relevant to this case.
+
+Case Context:
+%s
+
+Analysis:
+%s
+
+For each statute, provide:
+1. "code": The official citation format (e.g., "NC Gen. Stat. § 14-33").
+2. "title": The formal name or title of the statute.
+3. "description": A plain-language summary of what the statute governs.
+4. "relevance": Specifically how this statute applies to the facts outlined in the context.
+5. "jurisdiction": The state or federal jurisdiction of the statute.
+
+Output ONLY valid JSON as a list of objects in this exact format:
+[
+  {
+    "code": "...",
+    "title": "...",
+    "description": "...",
+    "relevance": "...",
+    "jurisdiction": "..."
+  }
+]
+If you cannot verify or identify specific statutes with a high degree of confidence, output an empty array [].""" % (text, analysis_json)
+
+    try:
+        response = client.chats.create(model=config.STATUTES_MODEL).send_message(prompt)
+        res_text = response.text.strip()
+        
+        if res_text.startswith("```"):
+            lines = res_text.split("\n")
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() in ("```", "```json"):
+                lines = lines[:-1]
+            res_text = "\n".join(lines).strip()
+            
+        import re
+        
+        try:
+            parsed = json.loads(res_text)
+        except Exception:
+            match = re.search(r"\[.*\]", res_text, re.S)
+            if match:
+                try:
+                    parsed = json.loads(match.group(0))
+                except Exception:
+                    parsed = []
+            else:
+                parsed = []
+                
+        if not isinstance(parsed, list):
+            return []
+            
+        valid_statutes = []
+        for s in parsed:
+            if not isinstance(s, dict): continue
+            valid_statutes.append({
+                "code": str(s.get("code", "")).strip()[:100],
+                "title": str(s.get("title", "")).strip(),
+                "description": str(s.get("description", "")).strip(),
+                "relevance": str(s.get("relevance", "")).strip(),
+                "jurisdiction": str(s.get("jurisdiction", "")).strip()
+            })
+            
+        return valid_statutes
     except Exception:
         return []
 

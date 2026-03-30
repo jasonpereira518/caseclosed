@@ -75,6 +75,7 @@ def default_context():
         "search_query": "",
         "cases": [],
         "timeline": [],
+        "statutes": [],
         "title": "New Session",
         "created_at": now,
         "updated_at": now,
