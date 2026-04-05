@@ -83,6 +83,9 @@ def chat():
 
         # Check if we still need more info
         needs_more, questions = check_if_more_info_needed(message, combined_text, context.get("analysis"))
+        
+        if isinstance(questions, list) and len(questions) > 5:
+            questions = questions[:5]
 
         if needs_more and questions and clarify_attempts < 2:
             context["pending_questions"] = questions
@@ -111,6 +114,9 @@ def chat():
         # First time or no pending questions - check if we need info
         combined_text = (context["description"] + " " + message).strip()
         needs_more, questions = check_if_more_info_needed(message, combined_text, context.get("analysis"))
+
+        if isinstance(questions, list) and len(questions) > 5:
+            questions = questions[:5]
 
         if needs_more and questions:
             context["description"] += " " + message
@@ -189,12 +195,15 @@ def chat():
         results.sort(key=lambda x: x["relevance_score"], reverse=True)
         context["cases"] = results
         
-        from services.llm import extract_timeline, extract_statutes
+        from services.llm import extract_timeline, extract_statutes, extract_case_strength
         timeline = extract_timeline(combined_text)
         context["timeline"] = timeline
         
         statutes = extract_statutes(combined_text, analysis)
         context["statutes"] = statutes
+
+        strength = extract_case_strength(combined_text, analysis, statutes, results)
+        context["strength"] = strength
     except Exception as e:
         print(f"[ERROR] Full traceback:")
         traceback.print_exc()
@@ -234,6 +243,7 @@ def chat():
             "analysis": analysis,
             "timeline": context.get("timeline", []),
             "statutes": context.get("statutes", []),
+            "strength": context.get("strength", {}),
             "cases": results,
         }
     )

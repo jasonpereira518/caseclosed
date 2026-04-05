@@ -3,8 +3,9 @@ import requests
 
 import config
 
-
 def query_courtlistener(query: str):
+    import re
+    query = re.sub(r'[{}\[\]\\`"\'()]', '', query).strip()
     base = config.COURTLISTENER_BASE_URL
     headers = {}
     if config.COURTLISTENER_TOKEN:

@@ -36,9 +36,7 @@ def ask_clarifying_questions(user_input: str, existing_analysis: dict = None, de
     prompt = (
         f"You are a professional legal paralegal assisting a lawyer in building a legal argument.\n"
         f"Given the user's most recent message:\n'{user_input}'\n\n"
-        f"And the known case context below:\n{context_text}\n"
-        "Ask up to 3 clarifying questions **only** about information that is missing and critical for legal analysis — "
-        "such as damages, contract terms, jurisdiction, causes of action, or key facts.\n"
+        "Ask a maximum of 4-5 clarifying questions. Focus only on the most critical missing information needed to proceed with legal analysis. Do not ask more than 5 questions.\n"
         "Do NOT ask about information already in the context.\n"
         "If you already have sufficient facts, respond exactly with 'NO QUESTIONS NEEDED'."
     )
@@ -48,7 +46,8 @@ def ask_clarifying_questions(user_input: str, existing_analysis: dict = None, de
         lines = [q.strip() for q in response.text.splitlines() if q.strip()]
         if any("NO QUESTIONS NEEDED" in q.upper() for q in lines):
             return []
-        return lines[:3]
+        lines = lines[:5]
+        return lines
     except Exception as e:
         return [f"[Error asking clarifications: {e}]"]
 
@@ -138,6 +137,8 @@ def check_if_more_info_needed(user_message: str, existing_context: str, analysis
                 questions = []
             # Filter redundant ones before returning
             questions = filter_redundant_questions(questions, analysis)
+            if isinstance(questions, list) and len(questions) > 5:
+                questions = questions[:5]
             return needs_more, questions
     except Exception:
         pass
@@ -300,7 +301,9 @@ def generate_query(summary: str, analysis: dict = None) -> str:
         
         import re
         ans = ans.replace('"', '').replace("'", "")
+        ans = ans.replace('{', '').replace('}', '').replace('[', '').replace(']', '').replace('\\', '').replace('`', '')
         ans = ans.replace('\n', ' ')
+        ans = re.sub(r'[^a-zA-Z0-9\s-]', '', ans)
         ans = re.sub(r'\s+', ' ', ans).strip()
         if len(ans) > 100:
             ans = ans[:100]
@@ -856,6 +859,72 @@ If you cannot verify or identify specific statutes with a high degree of confide
         return valid_statutes
     except Exception:
         return []
+
+
+def extract_case_strength(text: str, analysis: dict, statutes: list, cases: list) -> dict:
+    default_resp = {"rating": "Insufficient Information", "explanation": "Unable to assess case strength at this time."}
+    if not text or not analysis:
+        return default_resp
+        
+    import json
+    analysis_json = json.dumps(analysis, indent=2)
+    statutes_json = json.dumps(statutes, indent=2)
+    cases_summary = []
+    if cases:
+        for c in cases:
+            cases_summary.append({
+                "title": c.get("title", ""),
+                "score": c.get("relevance_score", 0),
+                "treatment": c.get("treatment", {}).get("status", "unknown")
+            })
+    cases_json = json.dumps(cases_summary, indent=2)
+
+    prompt = """You are an expert legal assistant. Based on the following context, evaluate the overall strength of the user's legal position.
+
+Case Context:
+%s
+
+Structured Analysis:
+%s
+
+Identified Statutes:
+%s
+
+Retrieved Case Law:
+%s
+
+Provide a strength assessment on the following scale:
+- "Strong": Facts strongly support the claims, favorable case law exists, clear statutory basis.
+- "Moderate": Case has merits but faces significant evidentiary, statutory, or case law hurdles.
+- "Weak": Facts do not support claims, negative case treatment, or lacks statutory foundation.
+- "Insufficient Information": Not enough case facts, statutes, or retrieved cases to reasonably make a judgment.
+
+Output ONLY valid JSON in this exact format:
+{
+  "rating": "Strong" | "Moderate" | "Weak" | "Insufficient Information",
+  "explanation": "A 2-3 sentence explanation of WHY the case is rated this way, highlighting key strengths and weaknesses."
+}
+""" % (text, analysis_json, statutes_json, cases_json)
+
+    try:
+        response = client.chats.create(model=config.STRENGTH_MODEL).send_message(prompt)
+        res_text = response.text.strip()
+        
+        parsed = extract_json_object(res_text)
+        if not isinstance(parsed, dict):
+            return default_resp
+            
+        rating = str(parsed.get("rating", "")).strip()
+        valid_ratings = {"Strong", "Moderate", "Weak", "Insufficient Information"}
+        if rating not in valid_ratings:
+            rating = "Insufficient Information"
+            
+        return {
+            "rating": rating,
+            "explanation": str(parsed.get("explanation", "")).strip()
+        }
+    except Exception:
+        return default_resp
 
 
 def sort_timeline(events: list) -> list:

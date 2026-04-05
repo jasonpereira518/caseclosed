@@ -2106,3 +2106,71 @@ body:not(.sidebar-collapsed) #sidebar-toggle {
     padding-top: 8px;
     border-top: 1px solid #F0EBE3;
 }
+
+/* ----------------------------------------------------
+   STRENGTH METER PANEL
+   ---------------------------------------------------- */
+.strength-section {
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #E8E0D8;
+}
+
+.strength-header-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.strength-label {
+    font-size: 16px;
+    font-weight: 600;
+    color: #3A2A1A;
+}
+
+.strength-badge {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 6px;
+}
+
+.badge-strong { background: #E8F5E9; color: #4A7C59; }
+.badge-moderate { background: #FFF3E0; color: #E69138; }
+.badge-weak { background: #FDE8E8; color: #CC0000; }
+.badge-insufficient-information { background: #F0F0F0; color: #9E8E7E; }
+
+.strength-bar-track {
+    width: 100%;
+    height: 8px;
+    background: #EDE7DD;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.strength-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.8s ease;
+}
+
+.fill-strong { background: #4A7C59; }
+.fill-moderate { background: #E69138; }
+.fill-weak { background: #CC0000; }
+.fill-insufficient-information { background: #9E8E7E; }
+
+.strength-explanation {
+    font-size: 13px;
+    color: #3A2A1A;
+    line-height: 1.5;
+    margin: 0 0 8px 0;
+}
+
+.strength-disclaimer {
+    font-size: 11px;
+    color: #9E8E7E;
+    font-style: italic;
+    margin: 0;
+}

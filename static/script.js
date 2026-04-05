@@ -42,6 +42,7 @@ let contextId = null;
 let currentAnalysis = {};
 let currentTimeline = [];
 let currentStatutes = [];
+let currentStrength = {};
 let currentCases = [];
 let sessionHistory = [];
 let pendingDeleteContextId = null;
@@ -388,6 +389,7 @@ function applyContextToUI(nextContextId, context) {
     currentAnalysis = safeContext.analysis || {};
     currentTimeline = safeContext.timeline || [];
     currentStatutes = safeContext.statutes || [];
+    currentStrength = safeContext.strength || {};
     currentCases = safeContext.cases || [];
 
     renderChatFromContext(safeContext);
@@ -483,6 +485,7 @@ function clearPanelsForNewSession() {
     currentAnalysis = {};
     currentTimeline = [];
     currentStatutes = [];
+    currentStrength = {};
     currentCases = [];
     updateAnalysisPanel({});
     updateCasesPanel([]);
@@ -693,6 +696,7 @@ async function handlePDFUpload() {
             currentAnalysis = data.analysis;
             currentTimeline = data.timeline || [];
             currentStatutes = data.statutes || [];
+            currentStrength = data.strength || {};
             updateAnalysisPanel(data.analysis);
             // Switch to analysis tab
             document.querySelector('[data-tab="analysis"]').click();
@@ -733,6 +737,7 @@ async function handleAnalyze() {
             currentAnalysis = data.analysis;
             currentTimeline = data.timeline || [];
             currentStatutes = data.statutes || [];
+            currentStrength = data.strength || {};
             updateAnalysisPanel(data.analysis);
             appendMessage('bot', 'Analysis complete! Check the Analysis panel.');
             // Switch to analysis tab
@@ -796,6 +801,7 @@ async function handleChatSubmit(e) {
                 currentAnalysis = data.analysis;
                 currentTimeline = data.timeline || [];
                 currentStatutes = data.statutes || [];
+                currentStrength = data.strength || {};
                 updateAnalysisPanel(data.analysis);
             }
             return;
@@ -824,6 +830,7 @@ async function handleChatSubmit(e) {
                 currentAnalysis = data.analysis;
                 currentTimeline = data.timeline || [];
                 currentStatutes = data.statutes || [];
+                currentStrength = data.strength || {};
                 updateAnalysisPanel(data.analysis);
             }
 
@@ -974,7 +981,10 @@ function updateAnalysisPanel(analysis) {
     }
 
     let html = '';
-
+    
+    // Case Strength
+    html += renderStrengthMeter(currentStrength);
+    
     // Facts
     if (analysis.facts && analysis.facts.length > 0) {
         html += '<div class="analysis-section"><h4>Facts</h4><ul>';
@@ -1070,6 +1080,35 @@ function renderStatutes(statutes) {
     
     html += '</div>';
     return html;
+}
+
+function renderStrengthMeter(strength) {
+    if (!strength || !strength.rating) return '';
+    
+    const ratingKey = strength.rating.toLowerCase().replace(/\s+/g, '-');
+    
+    const fillWidths = {
+        'strong': '100%',
+        'moderate': '60%',
+        'weak': '25%',
+        'insufficient-information': '5%'
+    };
+    
+    const fillWidth = fillWidths[ratingKey] || '5%';
+    
+    return `
+        <div class="strength-section">
+            <div class="strength-header-wrap">
+                <span class="strength-label">Case Strength</span>
+                <span class="strength-badge badge-${ratingKey}">${strength.rating}</span>
+            </div>
+            <div class="strength-bar-track">
+                <div class="strength-bar-fill fill-${ratingKey}" style="width: ${fillWidth}"></div>
+            </div>
+            <p class="strength-explanation">${strength.explanation || ''}</p>
+            <p class="strength-disclaimer">AI assessment — not legal advice.</p>
+        </div>
+    `;
 }
 
 function toggleAnalysisList(btn) {

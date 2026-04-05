@@ -76,6 +76,7 @@ def default_context():
         "cases": [],
         "timeline": [],
         "statutes": [],
+        "strength": {},
         "title": "New Session",
         "created_at": now,
         "updated_at": now,
