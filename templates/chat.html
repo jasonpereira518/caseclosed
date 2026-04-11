@@ -58,6 +58,10 @@
                         <span class="icon"><i class="fas fa-file-alt"></i></span>
                         <span class="btn-text">Draft</span>
                     </button>
+                    <button type="button" class="toolbar-btn" id="intake-btn" title="Client Intake Form">
+                        <span class="icon"><i class="fas fa-clipboard-list"></i></span>
+                        <span class="btn-text">Intake</span>
+                    </button>
                     <input type="file" name="pdf" accept="application/pdf" id="pdf-input" style="display: none;" aria-hidden="true">
                 </div>
             </div>
@@ -130,6 +134,11 @@
                 <div class="panel-tab-content" id="tab-draft">
                     <div class="panel-section">
                         <h3 class="section-title">Legal Document</h3>
+                        <div class="draft-actions">
+                          <button class="draft-export-btn" id="draft-export-btn" style="display: none;">
+                            <i class="fa fa-download"></i> Export as Word
+                          </button>
+                        </div>
                         <div class="draft-controls">
                             <select id="draft-type" class="draft-select">
                                 <option value="memo">Legal Memo</option>
@@ -145,6 +154,115 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <div class="modal-overlay" id="intake-modal" style="display:none;">
+      <div class="intake-form-card">
+        <div class="intake-header">
+          <h3>Client Intake Form</h3>
+          <button class="intake-close" id="intake-close">✕</button>
+        </div>
+        <div class="intake-body">
+          <div class="intake-field">
+            <label>Case Title <span class="required">*</span></label>
+            <input type="text" id="intake-case-title" placeholder="e.g., State v. Smith" />
+          </div>
+
+          <div class="intake-field">
+            <label>Legal Category <span class="required">*</span></label>
+            <select id="intake-legal-category">
+              <option value="" disabled selected>Select category...</option>
+              <option>Criminal</option>
+              <option>Civil</option>
+              <option>Family</option>
+              <option>Employment</option>
+              <option>Immigration</option>
+              <option>Personal Injury</option>
+              <option>Real Estate</option>
+              <option>Intellectual Property</option>
+              <option>Contract</option>
+              <option>Other</option>
+            </select>
+          </div>
+
+          <div class="intake-field">
+            <label>Jurisdiction <span class="required">*</span></label>
+            <select id="intake-jurisdiction">
+              <option value="" disabled selected>Select state/jurisdiction...</option>
+              <option>Alabama</option><option>Alaska</option><option>Arizona</option>
+              <option>Arkansas</option><option>California</option><option>Colorado</option>
+              <option>Connecticut</option><option>Delaware</option><option>Florida</option>
+              <option>Georgia</option><option>Hawaii</option><option>Idaho</option>
+              <option>Illinois</option><option>Indiana</option><option>Iowa</option>
+              <option>Kansas</option><option>Kentucky</option><option>Louisiana</option>
+              <option>Maine</option><option>Maryland</option><option>Massachusetts</option>
+              <option>Michigan</option><option>Minnesota</option><option>Mississippi</option>
+              <option>Missouri</option><option>Montana</option><option>Nebraska</option>
+              <option>Nevada</option><option>New Hampshire</option><option>New Jersey</option>
+              <option>New Mexico</option><option>New York</option><option>North Carolina</option>
+              <option>North Dakota</option><option>Ohio</option><option>Oklahoma</option>
+              <option>Oregon</option><option>Pennsylvania</option><option>Rhode Island</option>
+              <option>South Carolina</option><option>South Dakota</option><option>Tennessee</option>
+              <option>Texas</option><option>Utah</option><option>Vermont</option>
+              <option>Virginia</option><option>Washington</option><option>West Virginia</option>
+              <option>Wisconsin</option><option>Wyoming</option><option>District of Columbia</option>
+              <option>Federal</option><option>Other / International</option>
+            </select>
+          </div>
+
+          <div class="intake-field">
+            <label>Court Level</label>
+            <select id="intake-court-level">
+              <option value="" disabled selected>Select court level...</option>
+              <option>Lower Court</option>
+              <option>Appeals Court</option>
+              <option>Supreme Court</option>
+              <option>Not Yet Filed</option>
+            </select>
+          </div>
+
+          <div class="intake-field">
+            <label>Your Role <span class="required">*</span></label>
+            <div class="intake-radio-group">
+              <label class="intake-radio"><input type="radio" name="intake-role" value="Plaintiff" /> Plaintiff</label>
+              <label class="intake-radio"><input type="radio" name="intake-role" value="Defendant" /> Defendant</label>
+              <label class="intake-radio"><input type="radio" name="intake-role" value="Third Party" /> Third Party</label>
+              <label class="intake-radio"><input type="radio" name="intake-role" value="Witness" /> Witness</label>
+            </div>
+          </div>
+
+          <div class="intake-field">
+            <label>Facts / Description <span class="required">*</span></label>
+            <textarea id="intake-description" rows="5" placeholder="Describe the legal situation in detail..."></textarea>
+          </div>
+
+          <div class="intake-field">
+            <label>Key Dates</label>
+            <div id="intake-dates-container">
+              <div class="intake-date-row">
+                <input type="date" class="intake-date-input" />
+                <input type="text" class="intake-date-label" placeholder="What happened on this date?" />
+              </div>
+            </div>
+            <button type="button" class="intake-add-date" id="intake-add-date">+ Add Date</button>
+          </div>
+
+          <div class="intake-field">
+            <label>Prior Legal Actions <span class="optional">(optional)</span></label>
+            <textarea id="intake-prior-actions" rows="2" placeholder="Any previous filings, motions, or legal actions..."></textarea>
+          </div>
+
+          <div class="intake-field">
+            <label>Opposing Party Details <span class="optional">(optional)</span></label>
+            <input type="text" id="intake-opposing-party" placeholder="Name or description of the opposing party" />
+          </div>
+        </div>
+
+        <div class="intake-footer">
+          <button class="intake-cancel" id="intake-cancel-btn">Cancel</button>
+          <button class="intake-submit" id="intake-submit-btn">Submit & Analyze</button>
+        </div>
+      </div>
     </div>
 
     <div class="modal-overlay" id="delete-modal" style="display:none;">

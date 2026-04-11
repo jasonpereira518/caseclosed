@@ -13,6 +13,7 @@ PROTECTED_JSON_PATHS = frozenset(
         "/upload",
         "/analyze",
         "/draft",
+        "/draft/export",
         "/context",
         "/case/ask",
         "/chat/case/ask",
@@ -21,6 +22,7 @@ PROTECTED_JSON_PATHS = frozenset(
         "/case/treatment",
         "/chat/case/treatment",
         "/timeline/add",
+        "/intake",
     }
 )
 # Note: login JSON responses for these paths use _is_protected_json_path(request.path),

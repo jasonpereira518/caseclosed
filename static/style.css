@@ -990,6 +990,7 @@ body:not(.sidebar-collapsed) #sidebar-toggle {
     padding: 12px 18px;
     line-height: 1.6;
     word-wrap: break-word;
+    white-space: pre-wrap;
     overflow-wrap: anywhere;
     font-size: 14px;
     box-sizing: border-box;
@@ -2173,4 +2174,243 @@ body:not(.sidebar-collapsed) #sidebar-toggle {
     color: #9E8E7E;
     font-style: italic;
     margin: 0;
+}
+
+/* ----------------------------------------------------
+   INTAKE MODAL PANEL
+   ---------------------------------------------------- */
+.intake-form-card {
+  background: #FFFFFF;
+  border-radius: 14px;
+  max-width: 640px;
+  width: 94%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  overflow: hidden;
+}
+
+.intake-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #E8E0D8;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.intake-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #3A2A1A;
+  margin: 0;
+}
+
+.intake-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #9E8E7E;
+  cursor: pointer;
+}
+
+.intake-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.intake-field {
+  margin-bottom: 18px;
+}
+
+.intake-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3A2A1A;
+  margin-bottom: 6px;
+}
+
+.required { color: #CC0000; }
+.optional { color: #9E8E7E; font-weight: 400; font-style: italic; }
+
+.intake-field input[type="text"],
+.intake-field textarea,
+.intake-field select,
+.intake-field input[type="date"] {
+  width: 100%;
+  border: 1px solid #E0D5C8;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  background: #FDFCFA;
+  box-sizing: border-box;
+}
+
+.intake-field input:focus,
+.intake-field textarea:focus,
+.intake-field select:focus,
+.intake-field input[type="date"]:focus {
+  border-color: #B8805F;
+  box-shadow: 0 0 0 3px rgba(184, 128, 95, 0.1);
+}
+
+.intake-radio-group {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.intake-radio {
+  font-size: 13px;
+  color: #3A2A1A;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.intake-date-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.intake-date-input {
+  width: 160px;
+  flex-shrink: 0;
+}
+
+.intake-date-label {
+  flex: 1;
+}
+
+.intake-add-date {
+  background: none;
+  border: none;
+  color: #B8805F;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.intake-add-date:hover {
+  text-decoration: underline;
+}
+
+.intake-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #E8E0D8;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.intake-cancel {
+  background: #F5EDE3;
+  color: #6B5744;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.intake-cancel:hover { background: #EDE3D5; }
+
+.intake-submit {
+  background: #B8805F;
+  color: #FFF;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.intake-submit:hover { background: #A06E4F; }
+
+.intake-submit:disabled {
+  background: #D4C4B0;
+  cursor: not-allowed;
+}
+
+.intake-error {
+  border-color: #CC0000 !important;
+}
+
+.app-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: #3A2A1A;
+  color: #F5EDE3;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  z-index: 5000;
+  opacity: 0;
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+.app-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.app-toast-success {
+  background: #4A7C59;
+}
+
+.app-toast-error {
+  background: #CC0000;
+}
+
+.app-toast-info {
+  background: #3A2A1A;
+}
+
+.draft-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #E8E0D8;
+}
+
+.draft-export-btn {
+  background: #B8805F;
+  color: #FFF;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s ease;
+}
+
+.draft-export-btn:hover {
+  background: #A06E4F;
+}
+
+.draft-export-btn:disabled {
+  background: #D4C4B0;
+  cursor: not-allowed;
+}
+
+.draft-export-btn i {
+  font-size: 12px;
 }

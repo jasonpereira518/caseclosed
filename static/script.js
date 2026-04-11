@@ -2,6 +2,26 @@
 // @dev-owner: Sarah M.
 // Keep these in sync with the backend state model
 
+function showToast(message, type = 'success') {
+    const existing = document.getElementById('app-toast');
+    if (existing) existing.remove();
+    
+    const toast = document.createElement('div');
+    toast.id = 'app-toast';
+    toast.className = `app-toast app-toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    // Trigger animation
+    requestAnimationFrame(() => toast.classList.add('visible'));
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('visible');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
 // Redirect to login on 401 (session expired / not authenticated)
 (function () {
     const nativeFetch = window.fetch.bind(window);
@@ -44,6 +64,7 @@ let currentTimeline = [];
 let currentStatutes = [];
 let currentStrength = {};
 let currentCases = [];
+let currentDraft = null;
 let sessionHistory = [];
 let pendingDeleteContextId = null;
 let casesViewState = 'list';
@@ -71,6 +92,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Setup event listeners
     setupEventListeners();
     setupMainContentSidebarClose();
+    setupIntakeModal();
 });
 
 // =====================================================
@@ -119,6 +141,12 @@ function setupEventListeners() {
     if (draftDownloadBtn) {
         draftDownloadBtn.addEventListener('click', handleDraftDownload);
     }
+    
+    // Draft Export button
+    const exportBtn = document.getElementById('draft-export-btn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', handleDraftExport);
+    }
 
     // Chat form
     chatForm.addEventListener('submit', handleChatSubmit);
@@ -166,6 +194,166 @@ function setupEventListeners() {
         document.addEventListener('click', () => {
             roleMenuEl.classList.remove('show');
         });
+    }
+}
+
+function setupIntakeModal() {
+    const intakeBtn = document.getElementById('intake-btn');
+    const modal = document.getElementById('intake-modal');
+    const closeBtn = document.getElementById('intake-close');
+    const cancelBtn = document.getElementById('intake-cancel-btn');
+    const submitBtn = document.getElementById('intake-submit-btn');
+    const addDateBtn = document.getElementById('intake-add-date');
+    const datesContainer = document.getElementById('intake-dates-container');
+
+    function resetIntakeForm() {
+        document.getElementById('intake-case-title').value = '';
+        document.getElementById('intake-legal-category').value = '';
+        document.getElementById('intake-jurisdiction').value = '';
+        document.getElementById('intake-court-level').value = '';
+        const roleRadios = document.querySelectorAll('input[name="intake-role"]');
+        roleRadios.forEach(r => r.checked = false);
+        document.getElementById('intake-description').value = '';
+        document.getElementById('intake-prior-actions').value = '';
+        document.getElementById('intake-opposing-party').value = '';
+        datesContainer.innerHTML = `
+            <div class="intake-date-row">
+                <input type="date" class="intake-date-input" />
+                <input type="text" class="intake-date-label" placeholder="What happened on this date?" />
+            </div>
+        `;
+        // Clear errors
+        const fields = document.querySelectorAll('.intake-error');
+        fields.forEach(f => f.classList.remove('intake-error'));
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit & Analyze';
+    }
+
+    if (intakeBtn) {
+        intakeBtn.addEventListener('click', () => {
+             if (!contextId) {
+                 resetIntakeForm();
+             }
+             modal.style.display = 'flex';
+        });
+    }
+
+    if (closeBtn) closeBtn.addEventListener('click', () => modal.style.display = 'none');
+    if (cancelBtn) cancelBtn.addEventListener('click', () => modal.style.display = 'none');
+
+    if (addDateBtn) {
+        addDateBtn.addEventListener('click', () => {
+            const row = document.createElement('div');
+            row.className = 'intake-date-row';
+            row.innerHTML = `
+                <input type="date" class="intake-date-input" />
+                <input type="text" class="intake-date-label" placeholder="What happened on this date?" />
+            `;
+            datesContainer.appendChild(row);
+        });
+    }
+
+    if (submitBtn) {
+         submitBtn.addEventListener('click', async () => {
+             const title = document.getElementById('intake-case-title');
+             const cat = document.getElementById('intake-legal-category');
+             const jur = document.getElementById('intake-jurisdiction');
+             const role = document.querySelector('input[name="intake-role"]:checked');
+             const desc = document.getElementById('intake-description');
+             const roleRadiosGrp = document.querySelector('.intake-radio-group');
+
+             let hasError = false;
+             const required = [title, cat, jur, desc];
+             required.forEach(el => {
+                 if (!el.value.trim()) {
+                     el.classList.add('intake-error');
+                     hasError = true;
+                 } else {
+                     el.classList.remove('intake-error');
+                 }
+             });
+
+             if (!role) {
+                 roleRadiosGrp.style.border = '1px solid #CC0000';
+                 roleRadiosGrp.style.padding = '4px';
+                 roleRadiosGrp.style.borderRadius = '8px';
+                 hasError = true;
+             } else {
+                 roleRadiosGrp.style.border = 'none';
+                 roleRadiosGrp.style.padding = '0';
+             }
+
+             if (hasError) return;
+
+             const dateRows = datesContainer.querySelectorAll('.intake-date-row');
+             const keyDates = [];
+             dateRows.forEach(r => {
+                 const d = r.querySelector('.intake-date-input').value;
+                 const l = r.querySelector('.intake-date-label').value;
+                 if (d || l) keyDates.push({ date: d, label: l });
+             });
+
+             const payload = {
+                 context_id: contextId,
+                 case_title: title.value.trim(),
+                 legal_category: cat.value,
+                 jurisdiction: jur.value,
+                 court_level: document.getElementById('intake-court-level').value,
+                 user_role: role.value,
+                 description: desc.value.trim(),
+                 key_dates: keyDates,
+                 prior_legal_actions: document.getElementById('intake-prior-actions').value.trim(),
+                 opposing_party: document.getElementById('intake-opposing-party').value.trim()
+             };
+
+             submitBtn.disabled = true;
+             submitBtn.textContent = 'Analyzing...';
+             document.body.style.cursor = 'wait';
+
+             try {
+                const res = await fetch('/intake', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                
+                if (!res.ok) throw new Error(data.error || 'Server error');
+                
+                contextId = data.context_id;
+                currentAnalysis = data.analysis || {};
+                currentTimeline = data.timeline || [];
+                currentStatutes = data.statutes || [];
+                currentStrength = data.strength || {};
+                
+                updateAnalysisPanel(data.analysis);
+                document.querySelector('[data-tab="analysis"]').click();
+                
+                if (data.messages && data.messages.length > 0) {
+                     const lastMsg = data.messages[data.messages.length - 1];
+                     appendMessage('user', lastMsg.content);
+                } else {
+                     appendMessage('user', '[Client Intake Form Submitted]');
+                }
+                
+                if (data.title) {
+                    const titleEl = document.getElementById('sidebar-session-title');
+                    if (titleEl) {
+                        titleEl.textContent = data.title;
+                    }
+                }
+                await loadSessionHistory();
+                
+                modal.style.display = 'none';
+                showToast('Case intake submitted and analyzed', 'success');
+             } catch (err) {
+                 alert('Error processing intake: ' + err.message);
+                 submitBtn.disabled = false;
+                 submitBtn.textContent = 'Submit & Analyze';
+             } finally {
+                 document.body.style.cursor = 'default';
+             }
+         });
     }
 }
 
@@ -388,7 +576,7 @@ function applyContextToUI(nextContextId, context) {
     const safeContext = context || {};
     currentAnalysis = safeContext.analysis || {};
     currentTimeline = safeContext.timeline || [];
-    currentStatutes = safeContext.statutes || [];
+    currentStatutes = safeContext.statutes || {};
     currentStrength = safeContext.strength || {};
     currentCases = safeContext.cases || [];
 
@@ -428,19 +616,28 @@ function renderChatFromContext(context) {
 function updateDraftPanel(draft) {
     const draftContent = document.getElementById('draft-content');
     const draftDownloadBtn = document.getElementById('draft-download-btn');
+    const draftExportBtn = document.getElementById('draft-export-btn');
     if (!draftContent) return;
 
     if (draft && String(draft).trim()) {
         displayDraft(String(draft));
+        currentDraft = String(draft);
         if (draftDownloadBtn) {
             draftDownloadBtn.style.display = 'inline-block';
+        }
+        if (draftExportBtn) {
+            draftExportBtn.style.display = 'inline-block';
         }
         return;
     }
 
+    currentDraft = null;
     draftContent.innerHTML = '<p class="empty-state">Click "Generate Document" to create a legal memo or brief based on your case analysis.</p>';
     if (draftDownloadBtn) {
         draftDownloadBtn.style.display = 'none';
+    }
+    if (draftExportBtn) {
+        draftExportBtn.style.display = 'none';
     }
 }
 
@@ -950,7 +1147,13 @@ async function handleDraftGenerate() {
             body: JSON.stringify({ context_id: contextId, doc_type: docType })
         });
 
-        const data = await res.json();
+        let data;
+        try {
+            data = await res.json();
+        } catch (e) {
+            draftContent.innerHTML = '<p class="empty-state">Received invalid response from server.</p>';
+            return;
+        }
 
         if (data.error) {
             draftContent.innerHTML = `<p class="empty-state">Error: ${data.error}</p>`;
@@ -959,14 +1162,62 @@ async function handleDraftGenerate() {
 
         if (data.document) {
             displayDraft(data.document);
-            // Show download button
+            currentDraft = data.document;
             document.getElementById('draft-download-btn').style.display = 'inline-block';
+            document.getElementById('draft-export-btn').style.display = 'inline-block';
             appendMessage('bot', `Generated ${docType}! Check the Draft panel.`);
+        } else {
+            draftContent.innerHTML = '<p class="empty-state">Draft generation failed.</p>';
         }
     } catch (err) {
         draftContent.innerHTML = '<p class="empty-state">Draft generation failed.</p>';
         console.error(err);
     }
+}
+
+function handleDraftExport() {
+    if (!currentDraft || currentDraft.trim() === '') {
+        showToast('No draft to export. Generate a draft first.', 'error');
+        return;
+    }
+    
+    const exportBtn = document.getElementById('draft-export-btn');
+    const originalText = exportBtn.innerHTML;
+    exportBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Exporting...';
+    exportBtn.disabled = true;
+    
+    fetch('/draft/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ 
+            context_id: contextId,
+            draft_text: currentDraft
+        })
+    })
+    .then(res => {
+        if (!res.ok) throw new Error('Export failed');
+        return res.blob();
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'legal_memo.docx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        showToast('Draft exported successfully', 'success');
+    })
+    .catch(err => {
+        console.error('Export error:', err);
+        showToast('Failed to export draft', 'error');
+    })
+    .finally(() => {
+        exportBtn.innerHTML = originalText;
+        exportBtn.disabled = false;
+    });
 }
 
 // =====================================================
