@@ -392,3 +392,33 @@ def case_treatment():
         return jsonify({"treatment": treatment_result})
     except Exception:
         return jsonify({"treatment": default_error})
+
+
+@chat_bp.route("/case/bookmark", methods=["POST"])
+@login_required
+def bookmark_case():
+    print(f"[DEBUG BOOKMARK] Route hit, method: {request.method}")
+    data = request.json or {}
+    context_id = data.get("context_id")
+    case_index = data.get("case_index")
+    bookmarked = data.get("bookmarked", False)
+
+    if not context_id or case_index is None:
+        return jsonify({"error": "Missing parameters"}), 400
+
+    user_id = str(current_user.get_id())
+    if not context_belongs_to_user(context_id, user_id):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    ctx = get_context(context_id)
+    if not ctx:
+        return jsonify({"error": "Context not found"}), 404
+
+    cases = ctx.get("cases", [])
+    if case_index < 0 or case_index >= len(cases):
+        return jsonify({"error": "Invalid case index"}), 400
+
+    cases[case_index]["bookmarked"] = bookmarked
+    ctx["cases"] = cases  # Mutate to trigger save in FirestoreBackedDict
+
+    return jsonify({"status": "ok", "bookmarked": bookmarked})

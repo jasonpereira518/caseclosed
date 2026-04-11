@@ -68,6 +68,7 @@ let currentDraft = null;
 let sessionHistory = [];
 let pendingDeleteContextId = null;
 let casesViewState = 'list';
+let currentCasesFilter = 'all';
 let activeCaseIndex = null;
 
 /* Init & Setup
@@ -147,6 +148,21 @@ function setupEventListeners() {
     if (exportBtn) {
         exportBtn.addEventListener('click', handleDraftExport);
     }
+
+    // Shortcuts and Switching bindings
+    document.getElementById('shortcuts-close')?.addEventListener('click', () => {
+        document.getElementById('shortcuts-modal').style.display = 'none';
+    });
+
+    const isMac = navigator.platform.toUpperCase().includes('MAC');
+    const cmdKey = isMac ? '⌘' : 'Ctrl+';
+    document.querySelectorAll('.shortcut-keys').forEach(el => {
+       el.textContent = el.textContent.replace('⌘', cmdKey);
+    });
+
+    document.getElementById('quick-switcher-input')?.addEventListener('input', (e) => {
+        renderQuickSwitcherResults(e.target.value);
+    });
 
     // Chat form
     chatForm.addEventListener('submit', handleChatSubmit);
@@ -1854,7 +1870,7 @@ function getTreatmentBadgeHtml(treatment) {
     const badge = config[treatment.status];
     if (!badge) return '';
 
-    return `<span class="treatment-icon ${badge.class}" title="${badge.tooltip}">${badge.icon}</span>`;
+    return `<span class="treatment-icon ${badge.class}" title="${escapeHtml(badge.tooltip)}">${badge.icon}</span>`;
 }
 
 function loadCaseTreatment(caseIndex, badgePlaceholder) {
@@ -1907,13 +1923,30 @@ function renderCasesList(cases) {
     if (!content) return;
     setCasesTabDetailLayout(false);
 
-    if (!cases || cases.length === 0) {
-        content.innerHTML = '<p class="empty-state">No cases found yet.</p>';
+    let html = `
+      <div class="cases-filter">
+        <button class="cases-filter-btn ${currentCasesFilter === 'all' ? 'active' : ''}" data-filter="all">All Cases</button>
+        <button class="cases-filter-btn ${currentCasesFilter === 'bookmarked' ? 'active' : ''}" data-filter="bookmarked">★ Bookmarked</button>
+      </div>
+    `;
+
+    const casesToRender = (cases || []).map((c, index) => ({...c, originalIndex: index})).filter(c => {
+        if (currentCasesFilter === 'bookmarked') return c.bookmarked === true;
+        return true;
+    });
+
+    if (!casesToRender || casesToRender.length === 0) {
+        if (currentCasesFilter === 'bookmarked') {
+            html += '<p class="empty-state">No bookmarked cases yet. Click the star on any case to bookmark it.</p>';
+        } else {
+            html += '<p class="empty-state">No cases found yet.</p>';
+        }
+        content.innerHTML = html;
+        bindFilterButtons(content);
         return;
     }
 
-    let html = '';
-    cases.forEach((c, i) => {
+    casesToRender.forEach((c) => {
         const score = c.relevance_score ?? c.initial_score ?? 0;
         const relevanceClass = getRelevanceClass(score);
         const dim = relevanceDimensionsDataAttributes(c.relevance_dimensions);
@@ -1927,10 +1960,13 @@ function renderCasesList(cases) {
         }
 
         html += `
-            <div class="case-item" data-case-index="${i}">
+            <div class="case-item" data-case-index="${c.originalIndex}">
+                <button class="case-star ${c.bookmarked ? 'bookmarked' : ''}" data-case-index="${c.originalIndex}">
+                    ${c.bookmarked ? '★' : '☆'}
+                </button>
+                <span class="treatment-placeholder" id="treatment-badge-${c.originalIndex}">${treatmentHtml}</span>
                 <div class="case-title case-title--detail">
                     ${escapeHtml(c.title || 'Untitled')}
-                    <span class="treatment-placeholder" id="treatment-badge-${i}">${treatmentHtml}</span>
                 </div>
                 ${c.citation ? `<div class="case-citation">${escapeHtml(c.citation)}</div>` : ''}
                 <div class="case-relevance">
@@ -1944,9 +1980,65 @@ function renderCasesList(cases) {
     });
 
     content.innerHTML = html;
+    bindFilterButtons(content);
+    bindCaseBookmarks(content);
     bindRelevanceScoreTooltips(content);
     bindCaseDetailTitleClicks(content);
-    loadAllTreatments(cases);
+    loadAllTreatments(casesToRender);
+}
+
+function bindFilterButtons(content) {
+    const btns = content.querySelectorAll('.cases-filter-btn');
+    btns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            currentCasesFilter = btn.getAttribute('data-filter');
+            renderCasesList(currentCases);
+        });
+    });
+}
+
+function bindCaseBookmarks(content) {
+    const stars = content.querySelectorAll('.case-star');
+    stars.forEach(star => {
+        star.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const index = parseInt(star.getAttribute('data-case-index'));
+            const isBookmarked = !star.classList.contains('bookmarked');
+            
+            // Optimistic UI update
+            star.classList.toggle('bookmarked');
+            star.textContent = isBookmarked ? '★' : '☆';
+            if (currentCases && currentCases[index]) {
+                currentCases[index].bookmarked = isBookmarked;
+            }
+            
+            // Re-render immediately so the filter applies if we are in bookmarked view
+            if (currentCasesFilter === 'bookmarked' && !isBookmarked) {
+                renderCasesList(currentCases);
+            }
+
+            try {
+                const res = await fetch('/case/bookmark', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        context_id: contextId,
+                        case_index: index,
+                        bookmarked: isBookmarked
+                    })
+                });
+                if (!res.ok) throw new Error("Failed to bookmark");
+            } catch (err) {
+                console.error(err);
+                if (currentCases && currentCases[index]) {
+                    currentCases[index].bookmarked = !isBookmarked;
+                }
+                renderCasesList(currentCases);
+                showToast("Failed to bookmark case", "error");
+            }
+        });
+    });
 }
 
 function updateCasesPanel(cases) {
@@ -2083,3 +2175,126 @@ function triggerSendIconAnimation() {
     }, { once: true });
 }
 
+// =====================================================
+// QUICK SWITCHER & MODALS
+// =====================================================
+
+function openQuickSwitcher() {
+    const modal = document.getElementById('quick-switcher-modal');
+    modal.style.display = 'flex';
+    const input = document.getElementById('quick-switcher-input');
+    input.value = '';
+    renderQuickSwitcherResults('');
+    setTimeout(() => input.focus(), 50);
+}
+
+function renderQuickSwitcherResults(query) {
+    const container = document.getElementById('quick-switcher-results');
+    const filtered = sessionHistory.filter(s => 
+        (s.title || '').toLowerCase().includes(query.toLowerCase())
+    ).slice(0, 8);
+    
+    container.innerHTML = filtered.map(s => `
+        <div class="quick-switcher-item" data-id="${s.context_id}">
+            ${escapeHtml(s.title || 'Untitled')}
+        </div>
+    `).join('') || '<div class="quick-switcher-empty">No sessions found</div>';
+    
+    container.querySelectorAll('.quick-switcher-item').forEach(item => {
+        item.addEventListener('click', () => {
+            switchSession(item.dataset.id);
+            document.getElementById('quick-switcher-modal').style.display = 'none';
+        });
+    });
+}
+
+function openShortcutsHelp() {
+    document.getElementById('shortcuts-modal').style.display = 'flex';
+}
+
+// =====================================================
+// GLOBAL KEYDOWN EVENTS
+// =====================================================
+
+document.addEventListener('keydown', (e) => {
+    const isMac = navigator.platform.toUpperCase().includes('MAC');
+    const cmdKey = isMac ? e.metaKey : e.ctrlKey;
+    const target = e.target;
+    const isInputFocused = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+    
+    // Cmd+Enter — send message (only when chat input is focused)
+    if (cmdKey && e.key === 'Enter' && target.id === 'chat-input') {
+        e.preventDefault();
+        document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+        return;
+    }
+    
+    // Esc — close modals/sidebar (always works)
+    if (e.key === 'Escape') {
+        // Close any visible modal
+        const modals = document.querySelectorAll('.modal-overlay');
+        let modalClosed = false;
+        modals.forEach(m => {
+            if (m.style.display !== 'none' && m.offsetParent !== null) {
+                m.style.display = 'none';
+                modalClosed = true;
+            }
+        });
+        if (modalClosed) return;
+        
+        // Close sidebar if open
+        if (!document.body.classList.contains('sidebar-collapsed')) {
+            document.body.classList.add('sidebar-collapsed');
+            const toggle = document.getElementById('sidebar-toggle');
+            if (toggle) toggle.innerHTML = '<i class="fa fa-bars"></i>';
+        }
+        return;
+    }
+    
+    // Don't fire other shortcuts while typing in inputs
+    if (isInputFocused) return;
+    
+    // Cmd+N — new session
+    if (cmdKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        document.getElementById('new-session-btn')?.click();
+        return;
+    }
+    
+    // Cmd+K — quick switcher
+    if (cmdKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        openQuickSwitcher();
+        return;
+    }
+    
+    // Cmd+B — toggle sidebar
+    if (cmdKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        document.getElementById('sidebar-toggle')?.click();
+        return;
+    }
+    
+    // Cmd+1/2/3 — switch tabs
+    if (cmdKey && ['1', '2', '3'].includes(e.key)) {
+        e.preventDefault();
+        const tabs = ['analysis', 'cases', 'draft'];
+        const tab = tabs[parseInt(e.key) - 1];
+        document.querySelector(`.panel-tab[data-tab="${tab}"]`)?.click();
+        return;
+    }
+    
+    // Cmd+I — open intake
+    if (cmdKey && e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        document.getElementById('intake-btn')?.click();
+        return;
+    }
+    
+    // ? — show help modal
+    if (e.key === '?' && e.shiftKey) {
+        e.preventDefault();
+        openShortcutsHelp();
+        return;
+    }
+});

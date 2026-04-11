@@ -275,5 +275,35 @@
             </div>
         </div>
     </div>
+
+    <!-- Quick Switcher Modal -->
+    <div class="modal-overlay" id="quick-switcher-modal" style="display:none;">
+    <div class="quick-switcher-card">
+        <input type="text" id="quick-switcher-input" placeholder="Search sessions..." />
+        <div class="quick-switcher-results" id="quick-switcher-results"></div>
+    </div>
+    </div>
+
+    <!-- Shortcuts Help Modal -->
+    <div class="modal-overlay" id="shortcuts-modal" style="display:none;">
+    <div class="shortcuts-card">
+        <div class="shortcuts-header">
+        <h3>Keyboard Shortcuts</h3>
+        <button id="shortcuts-close">✕</button>
+        </div>
+        <div class="shortcuts-list">
+        <div class="shortcut-row"><span class="shortcut-keys">⌘N</span><span>New Session</span></div>
+        <div class="shortcut-row"><span class="shortcut-keys">⌘K</span><span>Quick Session Switch</span></div>
+        <div class="shortcut-row"><span class="shortcut-keys">⌘B</span><span>Toggle Sidebar</span></div>
+        <div class="shortcut-row"><span class="shortcut-keys">⌘I</span><span>Open Intake Form</span></div>
+        <div class="shortcut-row"><span class="shortcut-keys">⌘1</span><span>Analysis Tab</span></div>
+        <div class="shortcut-row"><span class="shortcut-keys">⌘2</span><span>Cases Tab</span></div>
+        <div class="shortcut-row"><span class="shortcut-keys">⌘3</span><span>Draft Tab</span></div>
+        <div class="shortcut-row"><span class="shortcut-keys">⌘↵</span><span>Send Message</span></div>
+        <div class="shortcut-row"><span class="shortcut-keys">Esc</span><span>Close Modal / Sidebar</span></div>
+        <div class="shortcut-row"><span class="shortcut-keys">?</span><span>Show This Help</span></div>
+        </div>
+    </div>
+    </div>
 </div>
 {% endblock %}
