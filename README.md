@@ -142,8 +142,6 @@ All values are read from the environment (and optionally `.env` via `python-dote
 ## Contributors
 
 - Sai Yadavalli — AI Engineer  
-- Sedat Unal — Full-stack Developer  
 - Jason Pereira — Frontend Developer & UI/UX Designer  
-- Saksham Anand — Backend Developer  
 
-Built as part of an AI hackathon project.
+Initially built as part of an AI hackathon project. Now, backed by 1789 Student Venture Fund.

@@ -71,6 +71,111 @@ let casesViewState = 'list';
 let currentCasesFilter = 'all';
 let activeCaseIndex = null;
 
+let sessionSecondsAccumulated = 0;
+let lastActivityTime = Date.now();
+let timerInterval = null;
+let pendingSecondsToSync = 0;
+const IDLE_THRESHOLD_MS = 60000; // 1 minute idle = pause
+
+function formatTime(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
+
+function updateTimerDisplay() {
+    const display = document.getElementById('session-timer');
+    if (display) display.textContent = formatTime(sessionSecondsAccumulated);
+}
+
+function startSessionTimer(initialSeconds = 0) {
+    stopSessionTimer();
+    sessionSecondsAccumulated = initialSeconds;
+    lastActivityTime = Date.now();
+    updateTimerDisplay();
+    
+    timerInterval = setInterval(() => {
+        const now = Date.now();
+        const timeSinceActivity = now - lastActivityTime;
+        
+        if (timeSinceActivity < IDLE_THRESHOLD_MS) {
+            sessionSecondsAccumulated += 1;
+            pendingSecondsToSync += 1;
+            updateTimerDisplay();
+            
+            // Also update the sidebar card for the active session live (locally only)
+            const session = sessionHistory.find(s => s.context_id === contextId);
+            if (session) {
+                session.total_seconds = (session.total_seconds || 0) + 1;
+                // Update just the time display element directly without full re-render
+                const card = document.querySelector(`.session-card[data-context-id="${CSS.escape(contextId)}"]`);
+                if (card) {
+                    const timeEl = card.querySelector('.session-time-display');
+                    if (timeEl) timeEl.textContent = `⏱ ${formatTime(session.total_seconds)}`;
+                }
+            }
+            
+            // Sync to backend every 30 seconds (separate from display)
+            if (pendingSecondsToSync >= 30) {
+                syncTimeToBackend();
+            }
+        }
+    }, 1000);
+}
+
+function stopSessionTimer() {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+    if (pendingSecondsToSync > 0) {
+        syncTimeToBackend();
+    }
+}
+
+function syncTimeToBackend() {
+    if (!contextId || pendingSecondsToSync === 0) return;
+    const seconds = pendingSecondsToSync;
+    pendingSecondsToSync = 0;
+    
+    console.log('[SYNC] Sending', seconds, 'seconds for context', contextId);
+    fetch('/session/track-time', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ context_id: contextId, seconds })
+    })
+    .then(r => { console.log('[SYNC] Response status:', r.status); return r.json(); })
+    .then(data => {
+        console.log('[SYNC] Response data:', data);
+        const session = sessionHistory.find(s => s.context_id === contextId);
+        if (session && data.total_seconds !== undefined) {
+            session.total_seconds = data.total_seconds;
+        }
+    })
+    .catch(() => { pendingSecondsToSync += seconds; });
+}
+
+// Track user activity
+['click', 'keydown', 'mousemove', 'scroll'].forEach(event => {
+    document.addEventListener(event, () => {
+        lastActivityTime = Date.now();
+    });
+});
+
+// Sync on page unload
+window.addEventListener('beforeunload', () => {
+    if (pendingSecondsToSync > 0 && contextId) {
+        // Use sendBeacon for reliable unload-time sending
+        const data = JSON.stringify({ context_id: contextId, seconds: pendingSecondsToSync });
+        navigator.sendBeacon('/session/track-time', new Blob([data], { type: 'application/json' }));
+        pendingSecondsToSync = 0;
+    }
+});
+
 /* Init & Setup
  * TODO: Consider moving to TypeScript for better type safety
  * Fix: CASE-245 - Add error handling for context load failure
@@ -162,6 +267,11 @@ function setupEventListeners() {
 
     document.getElementById('quick-switcher-input')?.addEventListener('input', (e) => {
         renderQuickSwitcherResults(e.target.value);
+    });
+
+    document.getElementById('time-report-btn')?.addEventListener('click', openTimeReport);
+    document.getElementById('time-report-close')?.addEventListener('click', () => {
+        document.getElementById('time-report-modal').style.display = 'none';
     });
 
     // Chat form
@@ -464,6 +574,9 @@ async function loadContext() {
     try {
         const res = await fetch('/context');
         const data = await res.json();
+        if (data.context) {
+            data.context.total_seconds = data.total_seconds || data.context.total_seconds || 0;
+        }
         applyContextToUI(data.context_id, data.context);
     } catch (err) {
         console.error('Error loading context:', err);
@@ -475,7 +588,8 @@ async function loadSessionHistory() {
         const res = await fetch('/contexts');
         const data = await res.json();
         sessionHistory = data.contexts || [];
-        if (data.active_context_id) {
+        console.log('[LOAD-HISTORY] Sessions:', sessionHistory.map(s => ({ id: s.context_id, total: s.total_seconds })));
+        if (data.active_context_id && !contextId) {
             contextId = data.active_context_id;
         }
         renderSessionList();
@@ -536,6 +650,7 @@ function typeTitle(element, text, speed = 40, cardEl = null) {
 }
 
 function renderSessionList() {
+    console.log('[RENDER] Rendering sidebar with active contextId:', contextId);
     if (!sessionListEl) return;
     if (!sessionHistory.length) {
         sessionListEl.innerHTML = '<p class="sidebar-empty">No sessions yet.</p>';
@@ -552,6 +667,7 @@ function renderSessionList() {
                 <div class="session-main">
                     <div class="session-title">${title}</div>
                     <div class="session-time">${escapeHtml(ts)}</div>
+                    <div class="session-time-display">⏱ ${formatTime(item.total_seconds || 0)}</div>
                 </div>
                 <button type="button" class="session-menu-btn" data-menu-btn="${escapeHtml(item.context_id)}">...</button>
                 <div class="session-menu" data-menu="${escapeHtml(item.context_id)}">
@@ -590,6 +706,9 @@ function formatRelativeTime(isoString) {
 function applyContextToUI(nextContextId, context) {
     contextId = nextContextId || contextId;
     const safeContext = context || {};
+    
+    console.log('[TIMER] Starting with saved seconds:', safeContext.total_seconds || 0);
+    startSessionTimer(safeContext.total_seconds || 0);
     currentAnalysis = safeContext.analysis || {};
     currentTimeline = safeContext.timeline || [];
     currentStatutes = safeContext.statutes || {};
@@ -744,6 +863,11 @@ async function switchSession(targetContextId) {
     if (card) {
         card.classList.add('is-loading');
     }
+    stopSessionTimer();
+    
+    console.log('[SWITCH-1] User clicked, newContextId:', targetContextId);
+    console.log('[SWITCH-2] Current global contextId BEFORE:', contextId);
+    
     showChatSkeleton();
     showAnalysisSkeleton();
     showCasesSkeleton();
@@ -758,7 +882,22 @@ async function switchSession(targetContextId) {
             return;
         }
         const data = await res.json();
-        applyContextToUI(data.context_id, data.context || {});
+        const newContextId = data.switched_to || targetContextId;
+        
+        console.log('[SWITCH-3] Fetch returned, data.context_id:', data.switched_to);
+        console.log('[SWITCH-4] About to set contextId');
+        
+        contextId = newContextId;
+        console.log('[SWITCH-5] contextId now equals:', contextId);
+        
+        const savedSeconds = data.total_seconds || data.context?.total_seconds || 0;
+        console.log('[TIMER-SWITCH] data.total_seconds:', data.total_seconds, 'data.context.total_seconds:', data.context?.total_seconds);
+        
+        applyContextToUI(contextId, data.context || {});
+        startSessionTimer(savedSeconds);
+        
+        console.log('[SWITCH-6] About to call renderSessionList with contextId:', contextId);
+        
         await loadSessionHistory();
         if (window.innerWidth < 768) closeSidebar();
     } catch (err) {
@@ -1253,7 +1392,7 @@ function updateAnalysisPanel(analysis) {
     html += renderStrengthMeter(currentStrength);
     
     // Facts
-    if (analysis.facts && analysis.facts.length > 0) {
+    if (Array.isArray(analysis.facts) && analysis.facts.length > 0) {
         html += '<div class="analysis-section"><h4>Facts</h4><ul>';
         analysis.facts.forEach((fact, i) => {
             const cls = i >= 4 ? ' class="facts-hidden"' : '';
@@ -1267,7 +1406,7 @@ function updateAnalysisPanel(analysis) {
     }
 
     // Parties
-    if (analysis.parties && analysis.parties.length > 0) {
+    if (Array.isArray(analysis.parties) && analysis.parties.length > 0) {
         html += '<div class="analysis-section"><h4>Parties</h4>';
         analysis.parties.forEach(party => {
             const name = party.name || party;
@@ -1278,7 +1417,7 @@ function updateAnalysisPanel(analysis) {
     }
 
     // Jurisdictions
-    if (analysis.jurisdictions && analysis.jurisdictions.length > 0) {
+    if (Array.isArray(analysis.jurisdictions) && analysis.jurisdictions.length > 0) {
         html += '<div class="analysis-section"><h4>Jurisdictions</h4><ul>';
         analysis.jurisdictions.forEach(jur => {
             html += `<li>${escapeHtml(jur)}</li>`;
@@ -1287,7 +1426,7 @@ function updateAnalysisPanel(analysis) {
     }
 
     // Legal Issues
-    if (analysis.legal_issues && analysis.legal_issues.length > 0) {
+    if (Array.isArray(analysis.legal_issues) && analysis.legal_issues.length > 0) {
         html += '<div class="analysis-section"><h4>Legal Issues</h4><ul>';
         analysis.legal_issues.forEach((issue, i) => {
             const cls = i >= 4 ? ' class="facts-hidden"' : '';
@@ -1301,7 +1440,7 @@ function updateAnalysisPanel(analysis) {
     }
 
     // Causes of Action
-    if (analysis.causes_of_action && analysis.causes_of_action.length > 0) {
+    if (Array.isArray(analysis.causes_of_action) && analysis.causes_of_action.length > 0) {
         html += '<div class="analysis-section"><h4>Causes of Action</h4><ul>';
         analysis.causes_of_action.forEach((cause, i) => {
             const cls = i >= 4 ? ' class="facts-hidden"' : '';
@@ -1325,7 +1464,7 @@ function updateAnalysisPanel(analysis) {
 }
 
 function renderStatutes(statutes) {
-    if (!statutes || statutes.length === 0) return '';
+    if (!Array.isArray(statutes) || statutes.length === 0) return '';
     
     let html = `
         <div class="statutes-section">
@@ -1397,7 +1536,7 @@ function toggleAnalysisList(btn) {
 }
 
 function renderTimeline(events) {
-    const evs = events || [];
+    const evs = Array.isArray(events) ? events : [];
 
     let html = `
         <div class="timeline-section">
@@ -2212,6 +2351,28 @@ function openShortcutsHelp() {
     document.getElementById('shortcuts-modal').style.display = 'flex';
 }
 
+function openTimeReport() {
+    document.getElementById('time-report-modal').style.display = 'flex';
+    const list = document.getElementById('time-report-list');
+    const grandTotal = document.getElementById('time-report-grand-total');
+    
+    let totalSecs = 0;
+    const sorted = [...sessionHistory].sort((a, b) => (b.total_seconds || 0) - (a.total_seconds || 0));
+    
+    list.innerHTML = sorted.map(s => {
+        const secs = s.total_seconds || 0;
+        totalSecs += secs;
+        return `
+            <div class="time-report-row">
+                <span class="time-report-title">${escapeHtml(s.title || 'Untitled')}</span>
+                <span class="time-report-value">${formatTime(secs)}</span>
+            </div>
+        `;
+    }).join('');
+    
+    grandTotal.textContent = formatTime(totalSecs);
+}
+
 // =====================================================
 // GLOBAL KEYDOWN EVENTS
 // =====================================================
@@ -2297,4 +2458,108 @@ document.addEventListener('keydown', (e) => {
         openShortcutsHelp();
         return;
     }
+});
+
+// Voice Input Web Speech API integration
+let recognition = null;
+let isRecording = false;
+let interimTranscript = '';
+let baseInputValue = '';
+
+function initSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        const micBtn = document.getElementById('mic-btn');
+        if (micBtn) {
+            micBtn.style.display = 'none';
+            console.warn('Speech recognition not supported in this browser');
+        }
+        return;
+    }
+    
+    recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    
+    recognition.onresult = (event) => {
+        let finalTranscript = '';
+        let interim = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+                finalTranscript += transcript + ' ';
+            } else {
+                interim += transcript;
+            }
+        }
+        
+        const input = document.getElementById('chat-input');
+        if (finalTranscript) {
+            baseInputValue += finalTranscript;
+        }
+        input.value = baseInputValue + interim;
+        input.dispatchEvent(new Event('input'));
+    };
+    
+    recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        stopRecording();
+        if (event.error === 'not-allowed') {
+            showToast('Microphone access denied', 'error');
+        } else if (event.error !== 'aborted') {
+            showToast('Voice input error: ' + event.error, 'error');
+        }
+    };
+    
+    recognition.onend = () => {
+        if (isRecording) {
+            // Restart if user hasn't manually stopped (continuous mode)
+            try { recognition.start(); } catch(e) {}
+        }
+    };
+}
+
+function startRecording() {
+    if (!recognition) return;
+    
+    const input = document.getElementById('chat-input');
+    baseInputValue = input.value ? input.value + (input.value.endsWith(' ') ? '' : ' ') : '';
+    
+    try {
+        recognition.start();
+        isRecording = true;
+        const micBtn = document.getElementById('mic-btn');
+        micBtn.classList.add('recording');
+        micBtn.title = 'Click to stop dictation';
+        showToast('Listening...', 'info');
+    } catch (e) {
+        console.error('Failed to start recording:', e);
+    }
+}
+
+function stopRecording() {
+    isRecording = false;
+    if (recognition) {
+        try { recognition.stop(); } catch(e) {}
+    }
+    const micBtn = document.getElementById('mic-btn');
+    if (micBtn) {
+        micBtn.classList.remove('recording');
+        micBtn.title = 'Click to dictate';
+    }
+}
+
+function toggleRecording() {
+    if (isRecording) {
+        stopRecording();
+    } else {
+        startRecording();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initSpeechRecognition();
+    document.getElementById('mic-btn')?.addEventListener('click', toggleRecording);
 });

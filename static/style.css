@@ -2564,3 +2564,142 @@ body:not(.sidebar-collapsed) #sidebar-toggle {
   min-width: 50px;
   text-align: center;
 }
+
+.session-timer-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.8);
+  margin-left: 14px;
+  padding: 3px 10px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 6px;
+}
+
+.session-time-display {
+  font-size: 10px;
+  color: #9E8E7E;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.time-report-card {
+  background: #FFFFFF;
+  border-radius: 14px;
+  width: 92%;
+  max-width: 520px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  overflow: hidden;
+}
+
+.time-report-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid #E8E0D8;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.time-report-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #3A2A1A;
+}
+
+#time-report-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #9E8E7E;
+  cursor: pointer;
+}
+
+.time-report-total {
+  padding: 20px 24px;
+  background: #F5EDE3;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.time-report-total-label {
+  font-size: 13px;
+  color: #6B5744;
+}
+
+.time-report-total-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: #3A2A1A;
+}
+
+.time-report-list {
+  overflow-y: auto;
+  padding: 8px 0;
+  max-height: 400px;
+}
+
+.time-report-row {
+  padding: 12px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  border-bottom: 1px solid #F0EBE3;
+}
+
+.time-report-row:last-child { border-bottom: none; }
+
+.time-report-title {
+  color: #3A2A1A;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 12px;
+}
+
+.time-report-value {
+  color: #B8805F;
+  font-weight: 600;
+}
+
+/* Voice Input Microphone Button */
+.mic-btn {
+    background: transparent;
+    border: none;
+    color: #9E8E7E;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 8px;
+    border-radius: 50%;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+}
+
+.mic-btn:hover {
+    background: rgba(184, 128, 95, 0.1);
+    color: #B8805F;
+}
+
+.mic-btn.recording {
+    color: #FFFFFF;
+    background: #CC0000;
+    animation: micPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes micPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(204, 0, 0, 0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(204, 0, 0, 0); }
+}

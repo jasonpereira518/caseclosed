@@ -18,7 +18,13 @@
         <div class="chat-pane">
             <div class="chat-header">
                 <div class="chat-header-content">
-                    <h2 class="chat-title">Legal Assistant</h2>
+                    <h2 class="chat-title">
+                        Legal Assistant
+                        <span class="session-timer-wrap">
+                          <i class="fa fa-clock"></i>
+                          <span id="session-timer">0s</span>
+                        </span>
+                    </h2>
                     <div class="chat-header-actions">
                         <div class="role-selector" id="role-selector">
                             <span class="role-label">Role:</span>
@@ -62,6 +68,10 @@
                         <span class="icon"><i class="fas fa-clipboard-list"></i></span>
                         <span class="btn-text">Intake</span>
                     </button>
+                    <button type="button" class="toolbar-btn" id="time-report-btn" title="Time Report">
+                        <span class="icon"><i class="fas fa-clock"></i></span>
+                        <span class="btn-text">Time Report</span>
+                    </button>
                     <input type="file" name="pdf" accept="application/pdf" id="pdf-input" style="display: none;" aria-hidden="true">
                 </div>
             </div>
@@ -84,6 +94,9 @@
                     autocomplete="off"
                     rows="1"
                 ></textarea>
+                <button type="button" class="mic-btn" id="mic-btn" title="Click to dictate">
+                    <i class="fas fa-microphone"></i>
+                </button>
                 <button type="submit" aria-label="Send message" class="send-btn">
                     <span class="send-icon"><i class="fas fa-paper-plane"></i></span>
                 </button>
@@ -303,6 +316,21 @@
         <div class="shortcut-row"><span class="shortcut-keys">Esc</span><span>Close Modal / Sidebar</span></div>
         <div class="shortcut-row"><span class="shortcut-keys">?</span><span>Show This Help</span></div>
         </div>
+    </div>
+    </div>
+
+    <!-- Time Report Modal -->
+    <div class="modal-overlay" id="time-report-modal" style="display:none;">
+    <div class="time-report-card">
+        <div class="time-report-header">
+        <h3>Time Report</h3>
+        <button id="time-report-close">✕</button>
+        </div>
+        <div class="time-report-total">
+        <span class="time-report-total-label">Total Time Across All Sessions</span>
+        <span class="time-report-total-value" id="time-report-grand-total">0h 0m</span>
+        </div>
+        <div class="time-report-list" id="time-report-list"></div>
     </div>
     </div>
 </div>

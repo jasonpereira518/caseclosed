@@ -22,6 +22,7 @@ PROTECTED_JSON_PATHS = frozenset(
         "/case/treatment",
         "/chat/case/treatment",
         "/case/bookmark",
+        "/session/track-time",
         "/timeline/add",
         "/intake",
     }

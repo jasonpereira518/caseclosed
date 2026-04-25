@@ -34,6 +34,12 @@ class FirestoreBackedDict(dict):
         super().__setitem__(key, value)
         _touch_updated_at(self)
         save_context(self._context_id, dict(self))
+        
+    def set(self, key, value, touch=True):
+        super().__setitem__(key, value)
+        if touch:
+            _touch_updated_at(self)
+        save_context(self._context_id, dict(self))
 
     def update(self, *args, **kwargs):
         super().update(*args, **kwargs)
@@ -67,6 +73,7 @@ def default_context():
     now = _now_iso()
     return {
         "description": "",
+        "total_seconds": 0,
         "clarify_attempts": 0,
         "pending_questions": [],
         "messages": [],
@@ -168,6 +175,7 @@ def list_user_contexts(user_id):
             {
                 "context_id": doc.id,
                 "title": data.get("title", "New Session"),
+                "total_seconds": data.get("total_seconds", 0),
                 "created_at": data.get("created_at"),
                 "updated_at": data.get("updated_at"),
             }
