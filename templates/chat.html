@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="workspace-container" role="main">
+<div class="workspace-container" role="main" data-user-name="{{ user_name or user_email or '' }}">
     <button class="sidebar-toggle" id="sidebar-toggle" title="Toggle sidebar" aria-label="Toggle sidebar">☰</button>
     <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
     <div class="sidebar" id="sidebar">
@@ -52,10 +52,11 @@
                 </div>
                 <!-- Toolbar -->
                 <div class="toolbar">
-                    <button type="button" class="toolbar-btn" id="upload-btn" title="Upload PDF">
-                        <span class="icon"><i class="fas fa-file-pdf"></i></span>
-                        <span class="btn-text">Upload PDF</span>
+                    <button type="button" class="toolbar-btn" id="upload-btn" title="Upload Documents">
+                        <span class="icon"><i class="fa fa-upload"></i></span>
+                        <span class="btn-text">Upload</span>
                     </button>
+                    <input type="file" id="file-upload-input" multiple accept=".pdf,.docx,.doc,.txt" style="display:none;" />
                     <button type="button" class="toolbar-btn" id="analyze-btn" title="Analyze Case">
                         <span class="icon"><i class="fas fa-brain"></i></span>
                         <span class="btn-text">Analyze</span>
@@ -95,7 +96,7 @@
                     rows="1"
                 ></textarea>
                 <button type="button" class="mic-btn" id="mic-btn" title="Click to dictate">
-                    <i class="fas fa-microphone"></i>
+                  <i class="fa fa-microphone"></i>
                 </button>
                 <button type="submit" aria-label="Send message" class="send-btn">
                     <span class="send-icon"><i class="fas fa-paper-plane"></i></span>
@@ -289,11 +290,22 @@
         </div>
     </div>
 
-    <!-- Quick Switcher Modal -->
+    <!-- Global Search Modal -->
     <div class="modal-overlay" id="quick-switcher-modal" style="display:none;">
-    <div class="quick-switcher-card">
-        <input type="text" id="quick-switcher-input" placeholder="Search sessions..." />
-        <div class="quick-switcher-results" id="quick-switcher-results"></div>
+    <div class="global-search-card">
+        <div class="global-search-input-row">
+            <span class="global-search-icon"><i class="fas fa-search"></i></span>
+            <input type="text" id="quick-switcher-input" placeholder="Search across all sessions, cases, notes…" autocomplete="off" />
+            <kbd class="global-search-kbd">ESC</kbd>
+        </div>
+        <div class="global-search-filters" id="global-search-filters">
+            <button class="global-search-filter active" data-filter="all">All</button>
+            <button class="global-search-filter" data-filter="sessions">Sessions</button>
+            <button class="global-search-filter" data-filter="cases">Cases</button>
+            <button class="global-search-filter" data-filter="notes">Notes</button>
+            <button class="global-search-filter" data-filter="messages">Messages</button>
+        </div>
+        <div class="global-search-results" id="quick-switcher-results" role="listbox"></div>
     </div>
     </div>
 
@@ -313,6 +325,7 @@
         <div class="shortcut-row"><span class="shortcut-keys">⌘2</span><span>Cases Tab</span></div>
         <div class="shortcut-row"><span class="shortcut-keys">⌘3</span><span>Draft Tab</span></div>
         <div class="shortcut-row"><span class="shortcut-keys">⌘↵</span><span>Send Message</span></div>
+        <div class="shortcut-row"><span class="shortcut-keys">⌘⇧N</span><span>Focus Case Notes</span></div>
         <div class="shortcut-row"><span class="shortcut-keys">Esc</span><span>Close Modal / Sidebar</span></div>
         <div class="shortcut-row"><span class="shortcut-keys">?</span><span>Show This Help</span></div>
         </div>
@@ -331,6 +344,31 @@
         <span class="time-report-total-value" id="time-report-grand-total">0h 0m</span>
         </div>
         <div class="time-report-list" id="time-report-list"></div>
+    </div>
+    </div>
+    </div>
+
+    <!-- Drop Zone Overlay -->
+    <div class="drop-zone-overlay" id="drop-zone" style="display:none;">
+    <div class="drop-zone-content">
+        <i class="fa fa-cloud-upload"></i>
+        <p>Drop files here</p>
+        <span>PDF, DOCX, TXT</span>
+    </div>
+    </div>
+
+    <!-- Document Manager Modal -->
+    <div class="modal-overlay" id="doc-manager-modal" style="display:none;">
+    <div class="doc-manager-card">
+        <div class="doc-manager-header">
+        <h3>Uploaded Documents</h3>
+        <button id="doc-manager-close">✕</button>
+        </div>
+        <div class="doc-manager-list" id="doc-manager-list"></div>
+        <div class="doc-manager-footer">
+        <button class="doc-manager-upload-more" id="doc-manager-upload-more">+ Upload More</button>
+        <button class="doc-manager-done" id="doc-manager-done">Done</button>
+        </div>
     </div>
     </div>
 </div>

@@ -25,6 +25,10 @@ PROTECTED_JSON_PATHS = frozenset(
         "/session/track-time",
         "/timeline/add",
         "/intake",
+        "/documents/toggle",
+        "/documents/delete",
+        "/case/notes",
+        "/search",
     }
 )
 # Note: login JSON responses for these paths use _is_protected_json_path(request.path),

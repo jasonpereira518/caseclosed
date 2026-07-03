@@ -10,7 +10,7 @@ from .llm import (
     draft_legal_document,
 )
 from .courtlistener import query_courtlistener
-from .pdf import allowed_file, save_uploaded_pdf, extract_pdf_text
+from .pdf import process_upload, allowed_file
 from .firestore import (
     get_firestore_client,
     save_context,

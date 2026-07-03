@@ -73,6 +73,7 @@ def default_context():
     now = _now_iso()
     return {
         "description": "",
+        "uploaded_documents": [],
         "total_seconds": 0,
         "clarify_attempts": 0,
         "pending_questions": [],

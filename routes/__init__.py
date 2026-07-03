@@ -6,6 +6,8 @@ from .analyze import analyze_bp
 from .draft import draft_bp
 from .context import context_bp
 from .intake import intake_bp
+from .notes import notes_bp
+from .search import search_bp
 
 
 def register_blueprints(app):
@@ -17,4 +19,6 @@ def register_blueprints(app):
     app.register_blueprint(draft_bp)
     app.register_blueprint(context_bp)
     app.register_blueprint(intake_bp)
+    app.register_blueprint(notes_bp)
+    app.register_blueprint(search_bp)
 

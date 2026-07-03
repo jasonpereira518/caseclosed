@@ -42,6 +42,7 @@ const pdfInput = document.querySelector('#pdf-input');
 const analyzeBtn = document.querySelector('#analyze-btn');
 const draftBtn = document.querySelector('#draft-btn');
 const draftGenerateBtn = document.querySelector('#draft-generate-btn');
+let currentUploadedDocs = [];
 const roleToggleBtn = document.getElementById('role-toggle');
 const roleMenuEl = document.getElementById('role-menu');
 const roleSelectedTextEl = document.getElementById('role-selected-text');
@@ -176,11 +177,145 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
+/* ----- Voice Input Feature ----- */
+let recognition = null;
+let isRecording = false;
+let interimTranscript = '';
+let baseInputValue = '';
+
+function formatTranscript(text) {
+    if (!text) return text;
+    // Capitalize first letter of the entire text
+    text = text.charAt(0).toUpperCase() + text.slice(1);
+    // Capitalize first letter after sentence-ending punctuation (. ! ?)
+    text = text.replace(/([.!?]\s+)([a-z])/g, (match, p1, p2) => p1 + p2.toUpperCase());
+    // Capitalize "i" when used as a pronoun (standalone)
+    text = text.replace(/\bi\b/g, 'I');
+    // Capitalize common proper nouns/starts
+    text = text.replace(/\bi'(m|ve|ll|d)\b/gi, (match) => 'I\'' + match.slice(2));
+    // Add period at the end if the text doesn't end with punctuation
+    if (text.length > 0 && !/[.!?,;:]$/.test(text.trim())) {
+        text = text.trim() + '.';
+    }
+    return text;
+}
+
+function initSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        const micBtn = document.getElementById('mic-btn');
+        if (micBtn) {
+            micBtn.style.display = 'none';
+            console.warn('Speech recognition not supported in this browser');
+        }
+        return;
+    }
+    
+    recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    
+    recognition.onresult = (event) => {
+        let finalTranscript = '';
+        let interim = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+                finalTranscript += transcript + ' ';
+            } else {
+                interim += transcript;
+            }
+        }
+        
+        const input = document.getElementById('chat-input');
+        if (finalTranscript) {
+            finalTranscript = formatTranscript(finalTranscript.replace(/\s+/g, ' ').trim());
+            baseInputValue = baseInputValue.trimEnd() + (baseInputValue ? ' ' : '') + finalTranscript;
+        }
+        interim = interim.replace(/\s+/g, ' ').trim();
+        input.value = baseInputValue + interim;
+        
+        if (finalTranscript) {
+            input.classList.add('voice-typing');
+            setTimeout(() => input.classList.remove('voice-typing'), 400);
+        }
+        
+        input.dispatchEvent(new Event('input'));
+    };
+    
+    recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        stopRecording();
+        if (event.error === 'not-allowed') {
+            showToast('Microphone access denied', 'error');
+        } else if (event.error !== 'aborted') {
+            showToast('Voice input error: ' + event.error, 'error');
+        }
+    };
+    
+    recognition.onend = () => {
+        if (isRecording) {
+            try { recognition.start(); } catch(e) {}
+        }
+    };
+}
+
+function startRecording() {
+    if (!recognition) return;
+    
+    const input = document.getElementById('chat-input');
+    baseInputValue = input.value.trimEnd() + (input.value.trim() ? ' ' : '');
+    
+    try {
+        recognition.start();
+        isRecording = true;
+        input.classList.add('voice-active');
+        const micBtn = document.getElementById('mic-btn');
+        micBtn.classList.add('recording');
+        micBtn.title = 'Click to stop dictation';
+        showToast('Listening...', 'info');
+    } catch (e) {
+        console.error('Failed to start recording:', e);
+    }
+}
+
+function stopRecording() {
+    isRecording = false;
+    if (recognition) {
+        try { recognition.stop(); } catch(e) {}
+    }
+    const input = document.getElementById('chat-input');
+    if (input && input.value.trim()) {
+        let val = input.value.trim();
+        val = val.charAt(0).toUpperCase() + val.slice(1);
+        input.value = val;
+    }
+
+    const micBtn = document.getElementById('mic-btn');
+    if (micBtn) {
+        micBtn.classList.remove('recording');
+        micBtn.title = 'Click to dictate';
+    }
+    if (input) input.classList.remove('voice-active');
+}
+
+function toggleRecording() {
+    if (isRecording) {
+        stopRecording();
+    } else {
+        startRecording();
+    }
+}
+
 /* Init & Setup
  * TODO: Consider moving to TypeScript for better type safety
  * Fix: CASE-245 - Add error handling for context load failure
  */
 document.addEventListener('DOMContentLoaded', async () => {
+    initSpeechRecognition();
+    document.getElementById('mic-btn')?.addEventListener('click', toggleRecording);
     // Show loading skeletons until initial data arrives.
     showChatSkeleton();
     showAnalysisSkeleton();
@@ -226,9 +361,15 @@ function setupTabs() {
 // EVENT LISTENERS
 // =====================================================
 function setupEventListeners() {
-    // PDF Upload
-    uploadBtn.addEventListener('click', () => pdfInput.click());
-    pdfInput.addEventListener('change', handlePDFUpload);
+    // Document Upload
+    document.getElementById('upload-btn')?.addEventListener('click', () => {
+        if (typeof currentUploadedDocs !== 'undefined' && currentUploadedDocs.length > 0) {
+            openDocManager();
+        } else {
+            document.getElementById('file-upload-input').click();
+        }
+    });
+    document.getElementById('file-upload-input')?.addEventListener('change', handleFileUpload);
 
     // Analyze button
     analyzeBtn.addEventListener('click', handleAnalyze);
@@ -265,8 +406,21 @@ function setupEventListeners() {
        el.textContent = el.textContent.replace('⌘', cmdKey);
     });
 
-    document.getElementById('quick-switcher-input')?.addEventListener('input', (e) => {
-        renderQuickSwitcherResults(e.target.value);
+    const _gsInput = document.getElementById('quick-switcher-input');
+    if (_gsInput) {
+        _gsInput.addEventListener('input', (e) => {
+            _globalSearchOnInput(e.target.value);
+        });
+        _gsInput.addEventListener('keydown', _globalSearchKeydown);
+    }
+    // Bind filter tab clicks
+    document.querySelectorAll('.global-search-filter').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.global-search-filter').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            _gsActiveFilter = btn.getAttribute('data-filter');
+            _globalSearchRenderFiltered();
+        });
     });
 
     document.getElementById('time-report-btn')?.addEventListener('click', openTimeReport);
@@ -706,6 +860,7 @@ function formatRelativeTime(isoString) {
 function applyContextToUI(nextContextId, context) {
     contextId = nextContextId || contextId;
     const safeContext = context || {};
+    currentUploadedDocs = safeContext.uploaded_documents || [];
     
     console.log('[TIMER] Starting with saved seconds:', safeContext.total_seconds || 0);
     startSessionTimer(safeContext.total_seconds || 0);
@@ -1007,54 +1162,232 @@ function updateRoleSelector(role) {
 // =====================================================
 // PDF UPLOAD
 // =====================================================
-async function handlePDFUpload() {
-    if (!pdfInput.files.length) return;
-    const file = pdfInput.files[0];
-
-    appendMessage('bot', `Uploading <b>${file.name}</b>...`);
-
+async function handleFileUpload(event) {
+    const files = event.target.files;
+    if (!files.length) return;
+    
+    const existingNames = currentUploadedDocs ? currentUploadedDocs.map(d => d.filename) : [];
     const formData = new FormData();
-    formData.append('pdf', file);
-
-    try {
-        const res = await fetch('/upload', { method: 'POST', body: formData });
-        const data = await res.json();
-
-        if (data.error) {
-            appendMessage('bot', `Error: ${data.error}`);
-            return;
-        }
-
-        appendMessage('bot', `Uploaded: <b>${data.filename}</b>`);
-        appendMessage('bot', `<i>Extracted text preview:</i><br>${data.text.substring(0, 300)}...`);
-
-        contextId = data.context_id;
-        const uploadCid = data.context_id;
-        const prevEntry = sessionHistory.find((s) => s.context_id === uploadCid);
-        const wasNewSessionTitle = prevEntry && prevEntry.title === 'New Session';
-
-        await loadSessionHistory();
-        if (wasNewSessionTitle && uploadCid) {
-            const cur = sessionHistory.find((s) => s.context_id === uploadCid);
-            if (cur && cur.title && cur.title !== 'New Session') {
-                cur._animateTitleNext = true;
+    
+    for (let f of files) {
+        let name = f.name;
+        if (existingNames.includes(name)) {
+            let lastDotIndex = name.lastIndexOf('.');
+            let base = lastDotIndex !== -1 ? name.substring(0, lastDotIndex) : name;
+            let ext = lastDotIndex !== -1 ? name.substring(lastDotIndex) : '';
+            let counter = 1;
+            while (existingNames.includes(`${base} (${counter})${ext}`)) {
+                counter++;
             }
+            name = `${base} (${counter})${ext}`;
         }
-        renderSessionList();
-
-        // Role selector will be updated if needed
-
-        if (data.analysis) {
-            currentAnalysis = data.analysis;
-            currentTimeline = data.timeline || [];
-            currentStatutes = data.statutes || [];
-            currentStrength = data.strength || {};
-            updateAnalysisPanel(data.analysis);
-            // Switch to analysis tab
-            document.querySelector('[data-tab="analysis"]').click();
+        existingNames.push(name);
+        formData.append('files', f, name);
+    }
+    formData.append('context_id', contextId);
+    
+    showToast('Uploading documents...', 'info');
+    
+    try {
+        const res = await fetch('/upload', {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: formData
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            showToast(`${data.documents.length} file(s) uploaded`, 'success');
+            
+            // Reload global tracking context
+            await loadSessionHistory();
+            
+            // Re-sync UI state mappings
+            if (data.documents && data.documents.length) {
+                currentUploadedDocs = currentUploadedDocs.concat(data.documents);
+            }
+            openDocManager();
+        } else if (data.error) {
+            showToast(`Upload failed: ${data.error}`, 'error');
         }
     } catch (err) {
-        appendMessage('bot', 'Upload failed.');
+        showToast('Upload failed due to network error.', 'error');
+        console.error(err);
+    }
+    
+    event.target.value = ''; // reset input
+}
+
+// Prevent browser from opening dropped files
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    document.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    });
+});
+
+document.addEventListener('dragenter', (e) => {
+    const dropZone = document.getElementById('drop-zone');
+    if (dropZone) dropZone.style.display = 'flex';
+});
+
+document.getElementById('drop-zone')?.addEventListener('dragleave', (e) => {
+    // Only hide if leaving the drop zone entirely (not entering a child element)
+    if (e.target === document.getElementById('drop-zone')) {
+        document.getElementById('drop-zone').style.display = 'none';
+    }
+});
+
+document.getElementById('drop-zone')?.addEventListener('drop', (e) => {
+    document.getElementById('drop-zone').style.display = 'none';
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        const input = document.getElementById('file-upload-input');
+        if (input) {
+            input.files = files;
+            input.dispatchEvent(new Event('change'));
+        }
+    }
+});
+
+function openDocManager() {
+    const modal = document.getElementById('doc-manager-modal');
+    if (modal) modal.style.display = 'flex';
+    renderDocList();
+}
+
+document.getElementById('doc-manager-close')?.addEventListener('click', () => {
+    document.getElementById('doc-manager-modal').style.display = 'none';
+});
+
+document.getElementById('doc-manager-done')?.addEventListener('click', () => {
+    document.getElementById('doc-manager-modal').style.display = 'none';
+});
+
+document.getElementById('doc-manager-upload-more')?.addEventListener('click', () => {
+    document.getElementById('file-upload-input').click();
+});
+
+function renderDocList() {
+    const list = document.getElementById('doc-manager-list');
+    if (!list) return;
+
+    const docs = currentUploadedDocs || [];
+    const loggedInUser = document.querySelector('.workspace-container')?.getAttribute('data-user-name') || '';
+    const todayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    // Backfill metadata for any older documents missing it
+    docs.forEach(doc => {
+        if (!doc.uploaded_by) doc.uploaded_by = loggedInUser || 'You';
+        if (!doc.uploaded_at) doc.uploaded_at = todayStr;
+    });
+    
+    list.innerHTML = docs.map((doc, i) => `
+        <div class="doc-item" onmousemove="showDocTooltip(event, this)" onmouseleave="hideDocTooltip()" data-preview="${escapeHtml(doc.text?.substring(0, 400) || '')}">
+            <div class="doc-info" style="display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="doc-number" style="color: #9E8E7E; font-size: 13px; font-weight: 500;">${i + 1}.</span>
+                    <span class="doc-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${doc.filename}</span>
+                </div>
+                <span style="font-size: 11px; color: #9E8E7E; margin-left: 20px;">Uploaded by ${doc.uploaded_by} • ${doc.uploaded_at}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
+                <label class="doc-toggle">
+                    <input type="checkbox" class="modern-toggle" ${doc.included ? 'checked' : ''} 
+                        onchange="toggleDocument(${i}, this.checked)" />
+                    <span class="toggle-slider"></span>
+                    <span class="toggle-label">Include</span>
+                </label>
+                <button class="doc-delete-btn ${pendingDocDeleteIndex === i ? 'confirm' : ''}" onclick="promptDeleteDocument(event, ${i})" title="${pendingDocDeleteIndex === i ? 'Confirm Delete' : 'Delete Document'}">
+                    ${pendingDocDeleteIndex === i ? '<i class="fa fa-trash-o"></i><i class="fa fa-check" style="margin-left: 4px; font-size: 10px;"></i>' : '<i class="fa fa-trash"></i>'}
+                </button>
+            </div>
+        </div>
+    `).join('') || '<p class="doc-empty">No documents uploaded yet.</p>';
+}
+
+function escapeHtml(unsafe) {
+    return (unsafe || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+let floatingDocTooltip = null;
+
+function showDocTooltip(e, el) {
+    if (!floatingDocTooltip) {
+        floatingDocTooltip = document.createElement('div');
+        floatingDocTooltip.className = 'doc-floating-tooltip';
+        document.body.appendChild(floatingDocTooltip);
+    }
+    const text = el.getAttribute('data-preview');
+    if (!text) return;
+    
+    floatingDocTooltip.textContent = text + '...';
+    floatingDocTooltip.style.display = 'block';
+    
+    // Position near cursor
+    floatingDocTooltip.style.left = (e.clientX + 15) + 'px';
+    floatingDocTooltip.style.top = (e.clientY + 15) + 'px';
+}
+
+function hideDocTooltip() {
+    if (floatingDocTooltip) floatingDocTooltip.style.display = 'none';
+}
+
+let pendingDocDeleteIndex = -1;
+
+function promptDeleteDocument(event, index) {
+    if (pendingDocDeleteIndex === index) {
+        pendingDocDeleteIndex = -1;
+        executeDeleteDocument(index);
+    } else {
+        pendingDocDeleteIndex = index;
+        renderDocList();
+        setTimeout(() => {
+            if (pendingDocDeleteIndex === index) {
+                pendingDocDeleteIndex = -1;
+                renderDocList();
+            }
+        }, 3000);
+    }
+}
+
+async function toggleDocument(index, included) {
+    try {
+        await fetch('/documents/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ context_id: contextId, doc_index: index, included })
+        });
+        if (currentUploadedDocs[index]) {
+            currentUploadedDocs[index].included = included;
+        }
+        renderDocList();
+        showToast(included ? 'Document included in analysis' : 'Document removed from analysis', 'info');
+    } catch(err) {
+        showToast('Failed to toggle document', 'error');
+        console.error(err);
+    }
+}
+
+async function executeDeleteDocument(index) {
+    try {
+        const res = await fetch('/documents/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ context_id: contextId, doc_index: index })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+            currentUploadedDocs.splice(index, 1);
+            showToast('Document securely deleted.', 'success');
+            renderDocList();
+        } else {
+            showToast('Failed to delete document.', 'error');
+        }
+    } catch (err) {
+        showToast('Error deleting document.', 'error');
         console.error(err);
     }
 }
@@ -1884,6 +2217,197 @@ function renderCaseDetailRelevanceSection(caseData) {
     relEl.innerHTML = `Relevance: <span class="relevance-score ${relClass}">${score}%</span> <span class="treatment-placeholder" id="detail-treatment-badge-${activeCaseIndex}">${treatmentHtml}</span>${reasonHtml}`;
 }
 
+// =====================================================
+// CASE NOTES
+// =====================================================
+let _notesDebounceTimer = null;
+let _notesSaving = false;
+
+function _setNotesStatus(status, text) {
+    const el = document.getElementById('case-notes-status');
+    if (!el) return;
+    el.className = 'case-notes-status visible ' + status;
+    el.textContent = text;
+    if (status === 'saved') {
+        setTimeout(() => {
+            if (el.textContent === text) {
+                el.classList.remove('visible');
+            }
+        }, 3000);
+    }
+}
+
+function _updateNotesCharCount() {
+    const ta = document.getElementById('case-notes-textarea');
+    const counter = document.getElementById('case-notes-char-count');
+    if (ta && counter) {
+        counter.textContent = `${ta.value.length} chars`;
+    }
+}
+
+function _formatNotesTimestamp(isoStr) {
+    if (!isoStr) return '';
+    try {
+        const d = new Date(isoStr);
+        return 'Saved ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (_) {
+        return '';
+    }
+}
+
+async function saveCaseNote(caseIndex, content) {
+    if (_notesSaving) return;
+    _notesSaving = true;
+    _setNotesStatus('saving', 'Saving...');
+    try {
+        const res = await fetch('/case/notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                context_id: contextId,
+                case_index: caseIndex,
+                content: content
+            })
+        });
+        if (!res.ok) throw new Error('Save failed');
+        const data = await res.json();
+        // Update local case data
+        if (currentCases && currentCases[caseIndex]) {
+            currentCases[caseIndex].notes = content;
+            currentCases[caseIndex].notes_updated_at = data.updated_at;
+        }
+        const tsEl = document.getElementById('case-notes-timestamp');
+        if (tsEl) tsEl.textContent = _formatNotesTimestamp(data.updated_at);
+        _setNotesStatus('saved', 'Saved ✓');
+    } catch (err) {
+        console.error('Notes save error:', err);
+        _setNotesStatus('error', 'Error saving');
+        showToast('Failed to save note', 'error');
+    } finally {
+        _notesSaving = false;
+    }
+}
+
+async function deleteCaseNote(caseIndex) {
+    _setNotesStatus('saving', 'Deleting...');
+    try {
+        const res = await fetch('/case/notes', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                context_id: contextId,
+                case_index: caseIndex
+            })
+        });
+        if (!res.ok) throw new Error('Delete failed');
+        if (currentCases && currentCases[caseIndex]) {
+            currentCases[caseIndex].notes = '';
+            delete currentCases[caseIndex].notes_updated_at;
+        }
+        const ta = document.getElementById('case-notes-textarea');
+        if (ta) ta.value = '';
+        _updateNotesCharCount();
+        const tsEl = document.getElementById('case-notes-timestamp');
+        if (tsEl) tsEl.textContent = '';
+        _setNotesStatus('saved', 'Note deleted');
+        showToast('Note deleted', 'success');
+    } catch (err) {
+        console.error('Notes delete error:', err);
+        _setNotesStatus('error', 'Error deleting');
+        showToast('Failed to delete note', 'error');
+    }
+}
+
+function _scheduleNoteSave(caseIndex) {
+    clearTimeout(_notesDebounceTimer);
+    _notesDebounceTimer = setTimeout(() => {
+        const ta = document.getElementById('case-notes-textarea');
+        if (ta) saveCaseNote(caseIndex, ta.value);
+    }, 2000);
+}
+
+function buildCaseNotesHtml(caseData) {
+    const notesContent = escapeHtml(caseData.notes || '');
+    const tsText = _formatNotesTimestamp(caseData.notes_updated_at || '');
+    const hasNotes = (caseData.notes || '').trim().length > 0;
+    return `
+        <div class="case-notes-section${hasNotes ? ' expanded' : ''}" id="case-notes-section">
+            <div class="case-notes-header" id="case-notes-toggle">
+                <div class="case-notes-header-left">
+                    <span class="notes-icon">📝</span>
+                    <span>Notes</span>
+                </div>
+                <div class="case-notes-header-right">
+                    <span class="case-notes-status" id="case-notes-status"></span>
+                    <span class="case-notes-chevron" id="case-notes-chevron">▾</span>
+                </div>
+            </div>
+            <div class="case-notes-body">
+                <div class="case-notes-body-inner">
+                    <textarea
+                        class="case-notes-textarea"
+                        id="case-notes-textarea"
+                        placeholder="Add notes about this case..."
+                        aria-label="Case notes"
+                    >${notesContent}</textarea>
+                    <div class="case-notes-footer">
+                        <span class="case-notes-char-count" id="case-notes-char-count">${(caseData.notes || '').length} chars</span>
+                        <div class="case-notes-actions">
+                            <span class="case-notes-timestamp" id="case-notes-timestamp">${tsText}</span>
+                            <button class="case-notes-delete-btn" id="case-notes-delete" title="Delete note">🗑</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function bindCaseNotesPanel(caseIndex) {
+    const section = document.getElementById('case-notes-section');
+    const toggle = document.getElementById('case-notes-toggle');
+    const ta = document.getElementById('case-notes-textarea');
+    const deleteBtn = document.getElementById('case-notes-delete');
+    if (!section || !toggle || !ta) return;
+
+    // Toggle expand/collapse
+    toggle.addEventListener('click', () => {
+        section.classList.toggle('expanded');
+        if (section.classList.contains('expanded')) {
+            ta.focus();
+        }
+    });
+
+    // Auto-save on input (debounced 2s)
+    ta.addEventListener('input', () => {
+        _updateNotesCharCount();
+        _scheduleNoteSave(caseIndex);
+    });
+
+    // Save on blur
+    ta.addEventListener('blur', () => {
+        clearTimeout(_notesDebounceTimer);
+        const current = ta.value;
+        const saved = (currentCases && currentCases[caseIndex]) ? (currentCases[caseIndex].notes || '') : '';
+        if (current !== saved) {
+            saveCaseNote(caseIndex, current);
+        }
+    });
+
+    // Delete button
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!ta.value.trim()) return;
+            if (confirm('Delete this note? This cannot be undone.')) {
+                deleteCaseNote(caseIndex);
+            }
+        });
+    }
+}
+
 function renderCaseDetailView(caseData) {
     const content = document.getElementById('cases-content');
     if (!content) return;
@@ -1909,6 +2433,7 @@ function renderCaseDetailView(caseData) {
                 <div class="cases-detail-card-citation">${citationSafe}</div>
                 <div class="cases-detail-card-relevance" id="case-description-relevance"></div>
             </div>
+            ${buildCaseNotesHtml(caseData)}
             <div class="cases-detail-scroll-area" id="cases-detail-scroll">
                 <p class="cases-detail-chat-prompt" id="cases-detail-chat-prompt">Ask a question about this case or how it relates to your situation.</p>
                 <div class="cases-detail-chat" id="cases-detail-chat"></div>
@@ -1923,6 +2448,7 @@ function renderCaseDetailView(caseData) {
     renderCaseDetailRelevanceSection(caseData);
     renderCaseDetailFollowUps(caseData);
     bindCasesDetailScrollCondense();
+    bindCaseNotesPanel(activeCaseIndex);
 
     document.getElementById('cases-detail-send')?.addEventListener('click', submitCasesPanelAsk);
     document.getElementById('cases-detail-question')?.addEventListener('keydown', (e) => {
@@ -2315,36 +2841,291 @@ function triggerSendIconAnimation() {
 }
 
 // =====================================================
-// QUICK SWITCHER & MODALS
+// GLOBAL SEARCH
 // =====================================================
+let _gsDebounceTimer = null;
+let _gsResults = [];
+let _gsActiveFilter = 'all';
+let _gsActiveIndex = -1;
+let _gsLastQuery = '';
+
+const _GS_RECENT_KEY = 'caseclosed_recent_searches';
+const _GS_MAX_RECENT = 5;
+
+function _gsGetRecent() {
+    try {
+        return JSON.parse(localStorage.getItem(_GS_RECENT_KEY) || '[]').slice(0, _GS_MAX_RECENT);
+    } catch (_) {
+        return [];
+    }
+}
+
+function _gsSaveRecent(query) {
+    if (!query || !query.trim()) return;
+    const q = query.trim();
+    let recent = _gsGetRecent().filter(r => r.toLowerCase() !== q.toLowerCase());
+    recent.unshift(q);
+    recent = recent.slice(0, _GS_MAX_RECENT);
+    try {
+        localStorage.setItem(_GS_RECENT_KEY, JSON.stringify(recent));
+    } catch (_) { /* ignore */ }
+}
 
 function openQuickSwitcher() {
     const modal = document.getElementById('quick-switcher-modal');
     modal.style.display = 'flex';
     const input = document.getElementById('quick-switcher-input');
     input.value = '';
-    renderQuickSwitcherResults('');
+    _gsResults = [];
+    _gsActiveIndex = -1;
+    _gsActiveFilter = 'all';
+    _gsLastQuery = '';
+    // Reset filter tabs
+    document.querySelectorAll('.global-search-filter').forEach(b => b.classList.remove('active'));
+    document.querySelector('.global-search-filter[data-filter="all"]')?.classList.add('active');
+    _gsRenderDefault();
     setTimeout(() => input.focus(), 50);
 }
 
-function renderQuickSwitcherResults(query) {
+function _closeGlobalSearch() {
+    document.getElementById('quick-switcher-modal').style.display = 'none';
+}
+
+function _gsRenderDefault() {
     const container = document.getElementById('quick-switcher-results');
-    const filtered = sessionHistory.filter(s => 
-        (s.title || '').toLowerCase().includes(query.toLowerCase())
-    ).slice(0, 8);
-    
-    container.innerHTML = filtered.map(s => `
-        <div class="quick-switcher-item" data-id="${s.context_id}">
-            ${escapeHtml(s.title || 'Untitled')}
-        </div>
-    `).join('') || '<div class="quick-switcher-empty">No sessions found</div>';
-    
-    container.querySelectorAll('.quick-switcher-item').forEach(item => {
+    if (!container) return;
+    let html = '';
+
+    // Recent searches
+    const recent = _gsGetRecent();
+    if (recent.length) {
+        html += '<div class="gs-recent-header"><i class="fa fa-clock gs-recent-icon"></i> Recent Searches</div>';
+        recent.forEach(q => {
+            html += `<div class="gs-recent-item" data-query="${escapeHtml(q)}"><span class="gs-recent-icon"><i class="fa fa-search"></i></span>${escapeHtml(q)}</div>`;
+        });
+    }
+
+    // Session list
+    if (sessionHistory.length) {
+        html += '<div class="gs-section-header">Sessions</div>';
+        sessionHistory.slice(0, 8).forEach(s => {
+            const ts = formatRelativeTime(s.updated_at || s.created_at);
+            html += `<div class="gs-session-item" data-context-id="${escapeHtml(s.context_id)}"><span class="gs-session-title">${escapeHtml(s.title || 'New Session')}</span><span class="gs-session-time">${escapeHtml(ts)}</span></div>`;
+        });
+    }
+
+    if (!html) {
+        html = '<div class="gs-empty"><div class="gs-empty-icon">🔍</div>Type to search across all your sessions</div>';
+    }
+
+    container.innerHTML = html;
+    _gsBindDefaultClicks(container);
+}
+
+function _gsBindDefaultClicks(container) {
+    container.querySelectorAll('.gs-recent-item').forEach(item => {
         item.addEventListener('click', () => {
-            switchSession(item.dataset.id);
-            document.getElementById('quick-switcher-modal').style.display = 'none';
+            const q = item.getAttribute('data-query');
+            const input = document.getElementById('quick-switcher-input');
+            if (input) {
+                input.value = q;
+                _globalSearchOnInput(q);
+            }
         });
     });
+    container.querySelectorAll('.gs-session-item').forEach(item => {
+        item.addEventListener('click', () => {
+            switchSession(item.getAttribute('data-context-id'));
+            _closeGlobalSearch();
+        });
+    });
+}
+
+function _globalSearchOnInput(value) {
+    const query = (value || '').trim();
+    if (!query) {
+        clearTimeout(_gsDebounceTimer);
+        _gsResults = [];
+        _gsLastQuery = '';
+        _gsRenderDefault();
+        return;
+    }
+    // Debounce 300ms
+    clearTimeout(_gsDebounceTimer);
+    _gsDebounceTimer = setTimeout(() => _gsExecuteSearch(query), 300);
+}
+
+async function _gsExecuteSearch(query) {
+    _gsLastQuery = query;
+    const container = document.getElementById('quick-switcher-results');
+    if (!container) return;
+
+    container.innerHTML = '<div class="gs-loading"><span class="loading-spinner" aria-hidden="true"></span>Searching…</div>';
+
+    try {
+        const res = await fetch('/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ query: query })
+        });
+        if (!res.ok) throw new Error('Search failed');
+        const data = await res.json();
+        _gsResults = data.results || [];
+        _gsActiveIndex = -1;
+        _gsSaveRecent(query);
+        _globalSearchRenderFiltered();
+    } catch (err) {
+        console.error('Search error:', err);
+        container.innerHTML = '<div class="gs-empty"><div class="gs-empty-icon">⚠️</div>Search failed. Please try again.</div>';
+    }
+}
+
+function _globalSearchRenderFiltered() {
+    const container = document.getElementById('quick-switcher-results');
+    if (!container) return;
+
+    let filtered = _gsResults;
+    if (_gsActiveFilter !== 'all') {
+        const typeMap = {
+            'sessions': 'session',
+            'cases': 'case',
+            'notes': 'note',
+            'messages': 'message'
+        };
+        const t = typeMap[_gsActiveFilter];
+        if (t) filtered = _gsResults.filter(r => r.type === t);
+    }
+
+    if (!filtered.length) {
+        container.innerHTML = '<div class="gs-empty"><div class="gs-empty-icon">🔍</div>No results found.<br>Try different keywords or clear filters.</div>';
+        return;
+    }
+
+    const badgeMap = {
+        'session': { label: 'Session', cls: 'badge-session' },
+        'case': { label: 'Case', cls: 'badge-case' },
+        'note': { label: 'Note', cls: 'badge-note' },
+        'message': { label: 'Message', cls: 'badge-message' }
+    };
+
+    container.innerHTML = filtered.map((r, i) => {
+        const badge = badgeMap[r.type] || badgeMap['session'];
+        const meta = r.session_title && r.session_title !== r.title
+            ? `<div class="gs-result-meta">${escapeHtml(r.session_title)}</div>`
+            : '';
+        return `
+            <div class="gs-result-item${i === _gsActiveIndex ? ' gs-active' : ''}" data-gs-index="${i}" role="option">
+                <span class="gs-result-badge ${badge.cls}">${badge.label}</span>
+                <div class="gs-result-body">
+                    <div class="gs-result-title">${escapeHtml(r.title || 'Untitled')}</div>
+                    <div class="gs-result-snippet">${r.snippet || ''}</div>
+                    ${meta}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    _gsBindResultClicks(container, filtered);
+}
+
+function _gsBindResultClicks(container, filtered) {
+    container.querySelectorAll('.gs-result-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const idx = parseInt(item.getAttribute('data-gs-index'), 10);
+            _gsOpenResult(filtered[idx]);
+        });
+    });
+}
+
+async function _gsOpenResult(result) {
+    if (!result) return;
+    _closeGlobalSearch();
+
+    // Switch to the session
+    if (result.context_id && result.context_id !== contextId) {
+        await switchSession(result.context_id);
+    }
+
+    // Navigate to the right tab/view
+    if (result.type === 'case' || result.type === 'note') {
+        // Switch to Cases tab
+        document.querySelector('.panel-tab[data-tab="cases"]')?.click();
+        // Open case detail if we have an index
+        if (result.case_index != null && currentCases[result.case_index]) {
+            setTimeout(() => {
+                showCaseDetail(result.case_index);
+                // If it's a note, expand the notes panel
+                if (result.type === 'note') {
+                    setTimeout(() => {
+                        const notesSection = document.getElementById('case-notes-section');
+                        const notesTa = document.getElementById('case-notes-textarea');
+                        if (notesSection && !notesSection.classList.contains('expanded')) {
+                            notesSection.classList.add('expanded');
+                        }
+                        if (notesTa) notesTa.focus();
+                    }, 200);
+                }
+            }, 300);
+        }
+    }
+}
+
+function _globalSearchKeydown(e) {
+    const container = document.getElementById('quick-switcher-results');
+    if (!container) return;
+    const query = (document.getElementById('quick-switcher-input')?.value || '').trim();
+
+    if (query) {
+        // Navigating search results
+        const items = container.querySelectorAll('.gs-result-item');
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            _gsActiveIndex = Math.min(_gsActiveIndex + 1, items.length - 1);
+            _gsUpdateActive(items);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            _gsActiveIndex = Math.max(_gsActiveIndex - 1, -1);
+            _gsUpdateActive(items);
+        } else if (e.key === 'Enter' && _gsActiveIndex >= 0) {
+            e.preventDefault();
+            const filtered = _gsActiveFilter === 'all'
+                ? _gsResults
+                : _gsResults.filter(r => {
+                    const typeMap = { 'sessions': 'session', 'cases': 'case', 'notes': 'note', 'messages': 'message' };
+                    return r.type === typeMap[_gsActiveFilter];
+                });
+            _gsOpenResult(filtered[_gsActiveIndex]);
+        }
+    } else {
+        // Navigating session list
+        const items = container.querySelectorAll('.gs-session-item');
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            _gsActiveIndex = Math.min(_gsActiveIndex + 1, items.length - 1);
+            _gsUpdateActive(items, 'gs-session-item');
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            _gsActiveIndex = Math.max(_gsActiveIndex - 1, -1);
+            _gsUpdateActive(items, 'gs-session-item');
+        } else if (e.key === 'Enter' && _gsActiveIndex >= 0 && items[_gsActiveIndex]) {
+            e.preventDefault();
+            const cid = items[_gsActiveIndex].getAttribute('data-context-id');
+            if (cid) {
+                switchSession(cid);
+                _closeGlobalSearch();
+            }
+        }
+    }
+}
+
+function _gsUpdateActive(items, itemClass) {
+    items.forEach((el, i) => {
+        el.classList.toggle('gs-active', i === _gsActiveIndex);
+    });
+    if (_gsActiveIndex >= 0 && items[_gsActiveIndex]) {
+        items[_gsActiveIndex].scrollIntoView({ block: 'nearest' });
+    }
 }
 
 function openShortcutsHelp() {
@@ -2452,114 +3233,24 @@ document.addEventListener('keydown', (e) => {
         return;
     }
     
+    // Cmd+Shift+N — focus case notes
+    if (cmdKey && e.shiftKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        const notesSection = document.getElementById('case-notes-section');
+        const notesTa = document.getElementById('case-notes-textarea');
+        if (notesSection && notesTa) {
+            if (!notesSection.classList.contains('expanded')) {
+                notesSection.classList.add('expanded');
+            }
+            notesTa.focus();
+        }
+        return;
+    }
+    
     // ? — show help modal
     if (e.key === '?' && e.shiftKey) {
         e.preventDefault();
         openShortcutsHelp();
         return;
     }
-});
-
-// Voice Input Web Speech API integration
-let recognition = null;
-let isRecording = false;
-let interimTranscript = '';
-let baseInputValue = '';
-
-function initSpeechRecognition() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-        const micBtn = document.getElementById('mic-btn');
-        if (micBtn) {
-            micBtn.style.display = 'none';
-            console.warn('Speech recognition not supported in this browser');
-        }
-        return;
-    }
-    
-    recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-    
-    recognition.onresult = (event) => {
-        let finalTranscript = '';
-        let interim = '';
-        
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-                finalTranscript += transcript + ' ';
-            } else {
-                interim += transcript;
-            }
-        }
-        
-        const input = document.getElementById('chat-input');
-        if (finalTranscript) {
-            baseInputValue += finalTranscript;
-        }
-        input.value = baseInputValue + interim;
-        input.dispatchEvent(new Event('input'));
-    };
-    
-    recognition.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        stopRecording();
-        if (event.error === 'not-allowed') {
-            showToast('Microphone access denied', 'error');
-        } else if (event.error !== 'aborted') {
-            showToast('Voice input error: ' + event.error, 'error');
-        }
-    };
-    
-    recognition.onend = () => {
-        if (isRecording) {
-            // Restart if user hasn't manually stopped (continuous mode)
-            try { recognition.start(); } catch(e) {}
-        }
-    };
-}
-
-function startRecording() {
-    if (!recognition) return;
-    
-    const input = document.getElementById('chat-input');
-    baseInputValue = input.value ? input.value + (input.value.endsWith(' ') ? '' : ' ') : '';
-    
-    try {
-        recognition.start();
-        isRecording = true;
-        const micBtn = document.getElementById('mic-btn');
-        micBtn.classList.add('recording');
-        micBtn.title = 'Click to stop dictation';
-        showToast('Listening...', 'info');
-    } catch (e) {
-        console.error('Failed to start recording:', e);
-    }
-}
-
-function stopRecording() {
-    isRecording = false;
-    if (recognition) {
-        try { recognition.stop(); } catch(e) {}
-    }
-    const micBtn = document.getElementById('mic-btn');
-    if (micBtn) {
-        micBtn.classList.remove('recording');
-        micBtn.title = 'Click to dictate';
-    }
-}
-
-function toggleRecording() {
-    if (isRecording) {
-        stopRecording();
-    } else {
-        startRecording();
-    }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    initSpeechRecognition();
-    document.getElementById('mic-btn')?.addEventListener('click', toggleRecording);
 });
