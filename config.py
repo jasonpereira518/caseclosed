@@ -23,8 +23,9 @@ COURTLISTENER_TOKEN = os.getenv("COURTLISTENER_TOKEN")
 COURTLISTENER_BASE_URL = os.getenv("COURTLISTENER_BASE_URL", "https://www.courtlistener.com/api/rest/v4/search/")
 GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "key.json")
 
-# Firebase / Firestore (context persistence)
-FIREBASE_CREDENTIALS = os.getenv("FIREBASE_CREDENTIALS", "key.json")
+# Firebase / Firestore (context persistence). When unset, Firebase Admin uses
+# Application Default Credentials (for example, the Cloud Run service identity).
+FIREBASE_CREDENTIALS = os.getenv("FIREBASE_CREDENTIALS")
 FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "user_contexts")
 FIRESTORE_USERS_COLLECTION = os.getenv("FIRESTORE_USERS_COLLECTION", "users")
 

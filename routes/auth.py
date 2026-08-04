@@ -102,12 +102,12 @@ def oauth_callback():
         return "Could not load user after save", 500
 
     login_user(user, remember=True)
-    return redirect(url_for("main.index"))
+    return redirect(url_for("main.workspace"))
 
 
 @auth_bp.route("/logout")
 def logout():
-    """Log out and clear session; redirect to OAuth login."""
+    """Log out, clear the session, and return to the public site."""
     logout_user()
     session.clear()
-    return redirect(url_for("auth.login"))
+    return redirect(url_for("main.index"))

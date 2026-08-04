@@ -1,7 +1,10 @@
 import os
-os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"  # DEV ONLY — remove for production
 
 import config
+
+if config.OAUTH_REDIRECT_URI.startswith(("http://localhost", "http://127.0.0.1")):
+    os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
+
 from flask import Flask, jsonify, redirect, request, url_for
 from flask_login import LoginManager
 

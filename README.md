@@ -2,6 +2,8 @@
 
 **Case Closed** is an AI-powered legal research assistant. It helps you describe a matter (or upload a PDF), surfaces relevant case law from CourtListener, explains relevance, and drafts memo- or brief-style documents—all in a single browser session.
 
+The public landing page is available at `/`. The authenticated litigation workspace is available at `/app`; signed-out visitors are sent through Google OAuth before entering it.
+
 ---
 
 ## Features
@@ -43,7 +45,7 @@ caseclosed/
 │   ├── analyze.py      # POST /analyze
 │   ├── draft.py        # POST /draft
 │   ├── context.py      # GET /context
-│   └── main.py         # GET / (renders UI)
+│   └── main.py         # GET / (landing page), GET /app (workspace)
 ├── services/
 │   ├── llm.py          # Gemini / Vertex AI calls
 │   ├── courtlistener.py
@@ -52,8 +54,8 @@ caseclosed/
 │   └── context.py      # In-memory session context + eviction helpers
 ├── utils/
 │   └── helpers.py      # Shared helpers (e.g. JSON extraction)
-├── static/             # script.js, style.css, icons
-├── templates/          # base.html, chat.html
+├── static/             # application and landing-page scripts, styles, and assets
+├── templates/          # application and landing-page Jinja templates
 └── assets/             # Diagrams / media for docs (e.g. architecture)
 ```
 

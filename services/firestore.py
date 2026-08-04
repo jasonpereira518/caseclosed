@@ -21,7 +21,7 @@ def _ensure_initialized():
     if _init_error is not None:
         return False
     cred_path = config.FIREBASE_CREDENTIALS
-    if not cred_path or not os.path.isfile(cred_path):
+    if cred_path and not os.path.isfile(cred_path):
         _init_error = FileNotFoundError(
             f"Firebase credentials file not found: {cred_path!r}"
         )
@@ -33,8 +33,11 @@ def _ensure_initialized():
         return False
     try:
         if not firebase_admin._apps:
-            cred = credentials.Certificate(cred_path)
-            firebase_admin.initialize_app(cred)
+            if cred_path:
+                cred = credentials.Certificate(cred_path)
+                firebase_admin.initialize_app(cred)
+            else:
+                firebase_admin.initialize_app()
         _db = firestore.client()
         logging.info("Firestore client initialized (collection=%s).", config.FIRESTORE_COLLECTION)
         return True
