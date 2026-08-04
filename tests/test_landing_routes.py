@@ -1,6 +1,5 @@
 import unittest
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from app import app
 from models.user import User
@@ -47,6 +46,11 @@ class LandingRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.headers["Location"].endswith("/auth/login"))
 
+    def test_api_requires_authentication_as_json(self):
+        response = self.client.get("/api/account")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.get_json(), {"error": "unauthorized"})
+
     @patch("models.user.load_user")
     def test_workspace_renders_for_signed_in_user(self, load_user):
         load_user.return_value = self.user
@@ -55,45 +59,49 @@ class LandingRouteTests(unittest.TestCase):
         response = self.client.get("/app")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Legal Assistant", response.data)
         self.assertIn(b"Jordan Parker", response.data)
+        # The workspace shell: history rail, conversation, and the four matter
+        # panels. ("Legal Assistant" was the old chat-pane heading; the redesign
+        # replaced it with the matter caption in the header.)
+        for panel in (b"tab-record", b"tab-chronology", b"tab-authority", b"tab-draft"):
+            self.assertIn(panel, response.data)
+        self.assertNotIn(b"data-demo", response.data)
 
-    @patch("routes.auth.load_user")
-    @patch("routes.auth.save_user")
-    @patch("routes.auth.requests.get")
-    @patch("routes.auth._build_flow")
-    def test_oauth_callback_redirects_to_workspace(
-        self,
-        build_flow,
-        requests_get,
-        save_user,
-        load_user,
+    @patch("routes.auth.ensure_user")
+    @patch("routes.auth.get_firestore_client")
+    @patch("routes.auth.firebase_auth.create_session_cookie")
+    @patch("routes.auth.firebase_auth.verify_id_token")
+    def test_firebase_token_creates_secure_server_session(
+        self, verify_id_token, create_session_cookie, get_firestore_client, ensure_user
     ):
-        flow = MagicMock()
-        flow.credentials = SimpleNamespace(token="test-token")
-        build_flow.return_value = flow
-
-        profile_response = MagicMock()
-        profile_response.json.return_value = {
-            "id": self.user.id,
-            "email": self.user.email,
-            "name": self.user.name,
+        verify_id_token.return_value = {
+            "uid": self.user.id, "email": self.user.email, "email_verified": True,
+            "firebase": {"sign_in_provider": "google.com"},
         }
-        requests_get.return_value = profile_response
-        load_user.return_value = self.user
+        ensure_user.return_value = {"uid": self.user.id, "email": self.user.email}
+        create_session_cookie.return_value = "signed-cookie"
 
-        with self.client.session_transaction() as session:
-            session["oauth_state"] = "expected-state"
-
-        response = self.client.get(
-            "/auth/callback?state=expected-state&code=test-code"
+        response = self.client.post(
+            "/auth/session", json={"id_token": "firebase-id-token"},
+            headers={"Origin": "http://localhost"},
         )
 
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/app"))
-        flow.fetch_token.assert_called_once()
-        profile_response.raise_for_status.assert_called_once()
-        save_user.assert_called_once()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("__session=signed-cookie", response.headers["Set-Cookie"])
+        self.assertIn("HttpOnly", response.headers["Set-Cookie"])
+        verify_id_token.assert_called_once_with("firebase-id-token", check_revoked=True)
+        ensure_user.assert_called_once()
+
+    @patch("routes.auth.get_firestore_client")
+    @patch("routes.auth.firebase_auth.verify_id_token")
+    def test_unverified_password_identity_is_rejected(self, verify_id_token, get_firestore_client):
+        verify_id_token.return_value = {
+            "uid": self.user.id, "email": self.user.email, "email_verified": False,
+            "firebase": {"sign_in_provider": "password"},
+        }
+        response = self.client.post("/auth/session", json={"id_token": "token"})
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("verify", response.get_json()["error"])
 
     @patch("models.user.load_user")
     def test_logout_returns_to_public_landing(self, load_user):

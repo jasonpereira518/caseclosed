@@ -30,6 +30,7 @@ PROTECTED_JSON_PATHS = frozenset(
         "/intake",
         "/documents/toggle",
         "/documents/delete",
+        "/documents/download",
         "/case/notes",
         "/search",
     }
@@ -41,7 +42,7 @@ PROTECTED_JSON_PATHS = frozenset(
 def _is_protected_json_path(path: str) -> bool:
     """Match PROTECTED_JSON_PATHS even when the client uses a trailing slash."""
     key = path.rstrip("/") or "/"
-    return key in PROTECTED_JSON_PATHS
+    return key in PROTECTED_JSON_PATHS or key.startswith("/api/") or key in {"/contexts", "/contexts/new", "/contexts/switch", "/contexts/rename", "/contexts/delete"}
 
 login_manager = LoginManager()
 
@@ -51,6 +52,26 @@ def load_user(user_id):
     from models.user import load_user as load_user_from_store
 
     return load_user_from_store(user_id)
+
+
+@login_manager.request_loader
+def load_user_from_firebase_cookie(req):
+    """Authenticate Firebase session cookies while legacy sessions migrate."""
+    cookie = req.cookies.get(config.AUTH_SESSION_COOKIE)
+    if not cookie:
+        return None
+    try:
+        from firebase_admin import auth as firebase_auth
+        from services.firestore import get_firestore_client
+        from services.tenancy import ensure_user
+        from models.user import load_user as load_user_from_store
+
+        get_firestore_client()
+        claims = firebase_auth.verify_session_cookie(cookie, check_revoked=True)
+        ensure_user(claims)
+        return load_user_from_store(claims["uid"])
+    except Exception:
+        return None
 
 
 @login_manager.unauthorized_handler

@@ -29,7 +29,7 @@ def _now_iso():
 def save_note():
     """Create or update a note on a specific case (upsert)."""
     data = request.get_json(silent=True) or {}
-    context_id = str(data.get("context_id", "")).strip()
+    context_id = str(data.get("matter_id") or data.get("context_id", "")).strip()
     case_index = data.get("case_index")
     content = data.get("content", "")
 
@@ -67,7 +67,7 @@ def save_note():
 def delete_note():
     """Delete (clear) a note from a specific case."""
     data = request.get_json(silent=True) or {}
-    context_id = str(data.get("context_id", "")).strip()
+    context_id = str(data.get("matter_id") or data.get("context_id", "")).strip()
     case_index = data.get("case_index")
 
     if not context_id or case_index is None:

@@ -1,6 +1,7 @@
 import os
 import uuid
 import logging
+import mimetypes
 from docx import Document as DocxDocument
 from pdfminer.high_level import extract_text as extract_pdf_text_miner
 from werkzeug.utils import secure_filename
@@ -47,7 +48,8 @@ def extract_document_text(filepath: str, original_filename: str) -> str:
     else:
         raise ValueError(f'Unsupported file type: .{ext}')
 
-def process_upload(file_obj, upload_folder: str) -> dict:
+def process_upload(file_obj, upload_folder: str, *, workspace_id=None, matter_id=None,
+                   document_id=None) -> dict:
     """End-to-end ingestion: saves, parses, cleans up, and returns payload securely."""
     if not file_obj or not allowed_file(file_obj.filename):
         raise ValueError("Invalid or unsupported file type.")
@@ -55,11 +57,18 @@ def process_upload(file_obj, upload_folder: str) -> dict:
     safe_name, path = secure_save_document(file_obj, upload_folder)
     try:
         text = extract_document_text(path, safe_name)
-        return {
+        payload = {
             "filename": safe_name,
             "text": text,
             "included": False
         }
+        if workspace_id and matter_id and document_id:
+            from services.storage import upload_matter_file
+            payload.update(upload_matter_file(
+                path, workspace_id, matter_id, document_id, safe_name,
+                getattr(file_obj, "mimetype", None) or mimetypes.guess_type(safe_name)[0],
+            ))
+        return payload
     finally:
         cleanup_temp_file(path)
 

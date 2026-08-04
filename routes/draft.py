@@ -18,7 +18,7 @@ draft_bp = Blueprint("draft", __name__)
 def draft():
     """Generate legal memo or brief from context."""
     payload = request.json or {}
-    context_id = payload.get("context_id")
+    context_id = payload.get("matter_id") or payload.get("context_id")
     doc_type = payload.get("doc_type", "memo")  # "memo" or "brief"
 
     if not context_id:
@@ -51,7 +51,7 @@ def draft():
 @login_required
 def draft_export():
     payload = request.json or {}
-    context_id = payload.get("context_id")
+    context_id = payload.get("matter_id") or payload.get("context_id")
     if not context_id:
         return jsonify({"error": "No context_id provided"}), 400
 

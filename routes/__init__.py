@@ -8,6 +8,8 @@ from .context import context_bp
 from .intake import intake_bp
 from .notes import notes_bp
 from .search import search_bp
+from .demo import demo_bp
+from .account import account_bp, internal_bp
 
 
 def register_blueprints(app):
@@ -21,4 +23,6 @@ def register_blueprints(app):
     app.register_blueprint(intake_bp)
     app.register_blueprint(notes_bp)
     app.register_blueprint(search_bp)
-
+    app.register_blueprint(demo_bp)
+    app.register_blueprint(account_bp)
+    app.register_blueprint(internal_bp)

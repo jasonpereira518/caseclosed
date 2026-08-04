@@ -21,6 +21,8 @@ def _ensure_initialized():
     if _init_error is not None:
         return False
     cred_path = config.FIREBASE_CREDENTIALS
+    if not cred_path and config.GOOGLE_APPLICATION_CREDENTIALS and os.path.isfile(config.GOOGLE_APPLICATION_CREDENTIALS):
+        cred_path = config.GOOGLE_APPLICATION_CREDENTIALS
     if cred_path and not os.path.isfile(cred_path):
         _init_error = FileNotFoundError(
             f"Firebase credentials file not found: {cred_path!r}"
@@ -35,9 +37,13 @@ def _ensure_initialized():
         if not firebase_admin._apps:
             if cred_path:
                 cred = credentials.Certificate(cred_path)
-                firebase_admin.initialize_app(cred)
+                options = ({"storageBucket": config.FIREBASE_STORAGE_BUCKET}
+                           if config.FIREBASE_STORAGE_BUCKET else None)
+                firebase_admin.initialize_app(cred, options)
             else:
-                firebase_admin.initialize_app()
+                options = ({"storageBucket": config.FIREBASE_STORAGE_BUCKET}
+                           if config.FIREBASE_STORAGE_BUCKET else None)
+                firebase_admin.initialize_app(options=options)
         _db = firestore.client()
         logging.info("Firestore client initialized (collection=%s).", config.FIRESTORE_COLLECTION)
         return True

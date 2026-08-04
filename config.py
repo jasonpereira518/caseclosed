@@ -1,5 +1,6 @@
 import os
 import tempfile
+import json
 
 from dotenv import load_dotenv
 
@@ -28,6 +29,66 @@ GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "ke
 FIREBASE_CREDENTIALS = os.getenv("FIREBASE_CREDENTIALS")
 FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "user_contexts")
 FIRESTORE_USERS_COLLECTION = os.getenv("FIRESTORE_USERS_COLLECTION", "users")
+FIRESTORE_WORKSPACES_COLLECTION = os.getenv("FIRESTORE_WORKSPACES_COLLECTION", "workspaces")
+FIRESTORE_MATTER_INDEX_COLLECTION = os.getenv("FIRESTORE_MATTER_INDEX_COLLECTION", "matter_index")
+FIRESTORE_INVITATIONS_COLLECTION = os.getenv("FIRESTORE_INVITATIONS_COLLECTION", "workspace_invitations")
+FIRESTORE_JOBS_COLLECTION = os.getenv("FIRESTORE_JOBS_COLLECTION", "account_jobs")
+FIRESTORE_LEGAL_SOURCES_COLLECTION = os.getenv("FIRESTORE_LEGAL_SOURCES_COLLECTION", "legal_sources")
+FIREBASE_STORAGE_BUCKET = os.getenv("FIREBASE_STORAGE_BUCKET")
+
+# Background work. Cloud Tasks is the production transport; inline mode keeps
+# local development usable without starting another process.
+TASKS_MODE = os.getenv("TASKS_MODE", "inline").lower()
+TASKS_PROJECT_ID = os.getenv("TASKS_PROJECT_ID", PROJECT_ID or "")
+TASKS_LOCATION = os.getenv("TASKS_LOCATION", GOOGLE_CLOUD_LOCATION)
+TASKS_QUEUE = os.getenv("TASKS_QUEUE", "caseclosed-jobs")
+TASKS_WORKER_URL = os.getenv("TASKS_WORKER_URL", "")
+TASKS_SERVICE_ACCOUNT = os.getenv("TASKS_SERVICE_ACCOUNT", "")
+INTERNAL_WORKER_TOKEN = os.getenv("INTERNAL_WORKER_TOKEN", "")
+JOB_MAX_ATTEMPTS = int(os.getenv("JOB_MAX_ATTEMPTS", "3"))
+
+# Retrieval. Agent Retrieval / Vector Search 2.0 is optional locally; the
+# Firestore lexical fallback follows the same tenant filters.
+VECTOR_SEARCH_ENABLED = os.getenv("VECTOR_SEARCH_ENABLED", "false").lower() == "true"
+VECTOR_SEARCH_PROJECT_ID = os.getenv("VECTOR_SEARCH_PROJECT_ID", PROJECT_ID or "")
+VECTOR_SEARCH_LOCATION = os.getenv("VECTOR_SEARCH_LOCATION", GOOGLE_CLOUD_LOCATION)
+VECTOR_PRIVATE_COLLECTION = os.getenv("VECTOR_PRIVATE_COLLECTION", "caseclosed-matters")
+VECTOR_LEGAL_COLLECTION = os.getenv("VECTOR_LEGAL_COLLECTION", "caseclosed-law")
+RETRIEVAL_TOP_K = int(os.getenv("RETRIEVAL_TOP_K", "8"))
+
+# Document AI OCR is used when native extraction yields too little text.
+DOCUMENT_AI_PROCESSOR_ID = os.getenv("DOCUMENT_AI_PROCESSOR_ID", "")
+DOCUMENT_AI_LOCATION = os.getenv("DOCUMENT_AI_LOCATION", "us")
+
+# Shared legal corpus synchronization.
+LEGAL_CORPUS_SYNC_TOKEN = os.getenv("LEGAL_CORPUS_SYNC_TOKEN", "")
+LEGAL_CORPUS_DAILY_LIMIT = int(os.getenv("LEGAL_CORPUS_DAILY_LIMIT", "500"))
+
+# Firebase Authentication. FIREBASE_WEB_CONFIG is the JSON object copied from
+# the Firebase console (apiKey, authDomain, projectId, appId, etc.). It is
+# intentionally public client configuration, not a service-account secret.
+try:
+    FIREBASE_WEB_CONFIG = json.loads(os.getenv("FIREBASE_WEB_CONFIG", "{}"))
+except json.JSONDecodeError:
+    FIREBASE_WEB_CONFIG = {}
+AUTH_SESSION_COOKIE = os.getenv("AUTH_SESSION_COOKIE", "__session")
+AUTH_SESSION_DAYS = int(os.getenv("AUTH_SESSION_DAYS", "5"))
+AUTH_COOKIE_SECURE = os.getenv(
+    "AUTH_COOKIE_SECURE", "true" if os.getenv("APP_BASE_URL", "").startswith("https://") else "false"
+).lower() == "true"
+
+# Workspace invitations. In production SMTP is required so invite secrets are
+# not exposed in API responses. Development returns the URL to the caller.
+SMTP_HOST = os.getenv("SMTP_HOST")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USERNAME = os.getenv("SMTP_USERNAME")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+SMTP_FROM = os.getenv("SMTP_FROM")
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:5050")
+INVITATION_TTL_DAYS = int(os.getenv("INVITATION_TTL_DAYS", "7"))
+CLOUD_TASKS_QUEUE = os.getenv("CLOUD_TASKS_QUEUE")
+CLOUD_TASKS_LOCATION = os.getenv("CLOUD_TASKS_LOCATION", GOOGLE_CLOUD_LOCATION)
+JOB_WORKER_SECRET = os.getenv("JOB_WORKER_SECRET")
 
 # Google OAuth (backend)
 GOOGLE_OAUTH_CLIENT_SECRETS = os.getenv("GOOGLE_OAUTH_CLIENT_SECRETS", "client_secret.json")
@@ -43,3 +104,5 @@ QUERY_MODEL = os.getenv("QUERY_MODEL", "gemini-2.5-flash-lite")
 TIMELINE_MODEL = os.getenv("TIMELINE_MODEL", "gemini-2.5-flash-lite")
 STATUTES_MODEL = os.getenv("STATUTES_MODEL", "gemini-2.5-flash-lite")
 STRENGTH_MODEL = os.getenv("STRENGTH_MODEL", "gemini-2.5-flash-lite")
+CHAT_FAST_MODEL = os.getenv("CHAT_FAST_MODEL", SUMMARIZER_MODEL)
+CHAT_REASONING_MODEL = os.getenv("CHAT_REASONING_MODEL", ANALYZER_MODEL)

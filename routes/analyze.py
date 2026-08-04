@@ -14,7 +14,7 @@ def analyze():
     """Extract structured analysis from text or use existing context."""
     payload = request.json or {}
     text = payload.get("text", "").strip()
-    context_id = payload.get("context_id")
+    context_id = payload.get("matter_id") or payload.get("context_id")
 
     uid = str(current_user.get_id())
     if not text and context_id:
@@ -50,7 +50,7 @@ def analyze():
 @login_required
 def add_timeline_event():
     payload = request.json or {}
-    context_id = payload.get("context_id")
+    context_id = payload.get("matter_id") or payload.get("context_id")
     if not context_id:
         return jsonify({"error": "Missing context_id"}), 400
         

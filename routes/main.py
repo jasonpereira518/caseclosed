@@ -24,8 +24,16 @@ def index():
 @login_required
 def workspace():
     return render_template(
-        "chat.html",
+        "workspace.html",
         user_name=current_user.name,
         user_email=current_user.email,
         user_profile_pic=current_user.profile_pic,
     )
+
+
+@main_bp.route("/account")
+@login_required
+def account_center():
+    return render_template("account.html", user_name=current_user.name,
+                           user_email=current_user.email,
+                           user_profile_pic=current_user.profile_pic)

@@ -5,9 +5,8 @@ Firestore context documents (sessions, cases, notes, messages, etc.).
 import re
 from html import escape as html_escape
 
-import config
-from google.cloud.firestore_v1.base_query import FieldFilter
-from services.firestore import get_firestore_client
+from services.matters import list_matters, load_matter
+from services.tenancy import list_workspaces
 
 # Weight map: higher = more relevant when matched
 _FIELD_WEIGHTS = {
@@ -96,17 +95,17 @@ def search_user_contexts(user_id, query, filters=None):
     content_types = set(filters.get("content_types") or
                         ["sessions", "cases", "notes", "messages"])
 
+    results = []
+
+    authorized = []
     try:
-        db = get_firestore_client()
+        for workspace in list_workspaces(str(user_id)):
+            for summary in list_matters(workspace["workspace_id"], str(user_id)):
+                authorized.append((summary["matter_id"], load_matter(summary["matter_id"], str(user_id)) or {}))
     except RuntimeError:
         return []
 
-    col = db.collection(config.FIRESTORE_COLLECTION)
-    results = []
-
-    for doc in col.where(filter=FieldFilter("user_id", "==", str(user_id))).stream():
-        data = doc.to_dict() or {}
-        ctx_id = doc.id
+    for ctx_id, data in authorized:
         sess_title = data.get("title") or "New Session"
         updated_at = data.get("updated_at")
 

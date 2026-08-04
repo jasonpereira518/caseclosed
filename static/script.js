@@ -1,26 +1,97 @@
 // Global State Management
-// @dev-owner: Sarah M.
 // Keep these in sync with the backend state model
 
 function showToast(message, type = 'success') {
+    const region = document.getElementById('toast-region') || document.body;
     const existing = document.getElementById('app-toast');
     if (existing) existing.remove();
-    
+
     const toast = document.createElement('div');
     toast.id = 'app-toast';
     toast.className = `app-toast app-toast-${type}`;
     toast.textContent = message;
-    document.body.appendChild(toast);
-    
-    // Trigger animation
+    region.appendChild(toast);
+
     requestAnimationFrame(() => toast.classList.add('visible'));
-    
-    // Auto-remove after 3 seconds
+
     setTimeout(() => {
         toast.classList.remove('visible');
         setTimeout(() => toast.remove(), 300);
     }, 3000);
 }
+
+/* ===========================================================================
+   Modal controller
+
+   Every dialog previously toggled its own inline style.display and had no
+   focus management at all: no trap, no Esc, no scroll lock, no focus
+   restore. One controller now owns all six.
+   ========================================================================= */
+
+const FOCUSABLE = [
+    'a[href]', 'button:not([disabled])', 'input:not([disabled])',
+    'select:not([disabled])', 'textarea:not([disabled])', '[tabindex]:not([tabindex="-1"])'
+].join(',');
+
+let _modalStack = [];
+
+function _resolveModal(ref) {
+    return typeof ref === 'string' ? document.getElementById(ref) : ref;
+}
+
+function openModal(ref) {
+    const el = _resolveModal(ref);
+    if (!el || _modalStack.includes(el)) return;
+
+    el._returnFocus = document.activeElement;
+    el.hidden = false;
+    _modalStack.push(el);
+    document.body.style.overflow = 'hidden';
+
+    const first = el.querySelector('[data-autofocus]') || el.querySelector(FOCUSABLE);
+    if (first) requestAnimationFrame(() => first.focus());
+}
+
+function closeModal(ref) {
+    const el = _resolveModal(ref);
+    if (!el || el.hidden) return;
+
+    el.hidden = true;
+    _modalStack = _modalStack.filter(m => m !== el);
+    if (!_modalStack.length) document.body.style.overflow = '';
+
+    const back = el._returnFocus;
+    if (back && document.contains(back)) back.focus();
+    el._returnFocus = null;
+}
+
+function topModal() {
+    return _modalStack[_modalStack.length - 1] || null;
+}
+
+// Focus trap + click-outside-to-dismiss, bound once.
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const modal = topModal();
+    if (!modal) return;
+
+    const items = [...modal.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+
+    if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first.focus();
+    }
+}, true);
+
+document.addEventListener('mousedown', (e) => {
+    const modal = topModal();
+    // A click on the scrim itself, never on the panel inside it.
+    if (modal && e.target === modal) closeModal(modal);
+});
 
 // Redirect to login on 401 (session expired / not authenticated)
 (function () {
@@ -322,6 +393,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     showCasesSkeleton();
     showDraftSkeleton();
 
+    await _gsLoadRecent();
     // Load context on page load
     await loadContext();
     await loadSessionHistory();
@@ -347,14 +419,72 @@ function setupTabs() {
         tab.addEventListener('click', () => {
             const targetTab = tab.getAttribute('data-tab');
 
-            // Update active states
-            tabs.forEach(t => t.classList.remove('active'));
-            tabContents.forEach(tc => tc.classList.remove('active'));
-
-            tab.classList.add('active');
-            document.getElementById(`tab-${targetTab}`).classList.add('active');
+            tabs.forEach(t => {
+                const on = t === tab;
+                t.classList.toggle('active', on);
+                t.setAttribute('aria-selected', String(on));
+            });
+            tabContents.forEach(tc => {
+                const on = tc.id === `tab-${targetTab}`;
+                tc.classList.toggle('active', on);
+                tc.hidden = !on;
+            });
         });
     });
+
+    // Authority holds two kinds of law. Case law and statutes answer the same
+    // question, so they share a panel and switch inside it.
+    document.querySelectorAll('.authority-switch__btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const kind = btn.dataset.authority;
+            document.querySelectorAll('.authority-switch__btn').forEach(b => {
+                const on = b === btn;
+                b.classList.toggle('active', on);
+                b.setAttribute('aria-selected', String(on));
+            });
+            document.querySelectorAll('[data-authority-panel]').forEach(p => {
+                p.hidden = p.dataset.authorityPanel !== kind;
+            });
+        });
+    });
+}
+
+/** Keeps the matter caption in the header honest about the active matter. */
+function updateMatterHeader(context) {
+    const titleEl = document.getElementById('matter-title');
+    const metaEl = document.getElementById('matter-meta');
+    if (!titleEl || !metaEl) return;
+
+    const ctx = context || {};
+    titleEl.textContent = ctx.title || 'New matter';
+
+    const intake = ctx.intake || {};
+    const analysis = ctx.analysis || {};
+    const jurisdiction = intake.jurisdiction
+        || (Array.isArray(analysis.jurisdictions) && analysis.jurisdictions[0])
+        || '';
+    const bits = [intake.legal_category, jurisdiction, intake.court_level].filter(Boolean);
+    const docCount = Array.isArray(ctx.uploaded_documents) ? ctx.uploaded_documents.length : 0;
+    if (docCount) bits.push(`${docCount} document${docCount === 1 ? '' : 's'}`);
+
+    metaEl.textContent = bits.length
+        ? bits.join(' · ')
+        : 'Describe the matter or upload a document to begin';
+
+    const docBadge = document.getElementById('doc-count');
+    if (docBadge) {
+        docBadge.textContent = docCount || '';
+        docBadge.hidden = !docCount;
+    }
+}
+
+/** Authority tab count reflects retrieved case law. */
+function updateAuthorityCount(cases) {
+    const el = document.getElementById('authority-count');
+    if (!el) return;
+    const n = Array.isArray(cases) ? cases.length : 0;
+    el.textContent = n || '';
+    el.hidden = !n;
 }
 
 // =====================================================
@@ -383,11 +513,6 @@ function setupEventListeners() {
     // Draft generate button
     draftGenerateBtn.addEventListener('click', handleDraftGenerate);
 
-    // Draft download button
-    const draftDownloadBtn = document.getElementById('draft-download-btn');
-    if (draftDownloadBtn) {
-        draftDownloadBtn.addEventListener('click', handleDraftDownload);
-    }
     
     // Draft Export button
     const exportBtn = document.getElementById('draft-export-btn');
@@ -397,7 +522,7 @@ function setupEventListeners() {
 
     // Shortcuts and Switching bindings
     document.getElementById('shortcuts-close')?.addEventListener('click', () => {
-        document.getElementById('shortcuts-modal').style.display = 'none';
+        closeModal('shortcuts-modal');
     });
 
     const isMac = navigator.platform.toUpperCase().includes('MAC');
@@ -425,7 +550,7 @@ function setupEventListeners() {
 
     document.getElementById('time-report-btn')?.addEventListener('click', openTimeReport);
     document.getElementById('time-report-close')?.addEventListener('click', () => {
-        document.getElementById('time-report-modal').style.display = 'none';
+        closeModal('time-report-modal');
     });
 
     // Chat form
@@ -514,12 +639,12 @@ function setupIntakeModal() {
              if (!contextId) {
                  resetIntakeForm();
              }
-             modal.style.display = 'flex';
+             openModal(modal);
         });
     }
 
-    if (closeBtn) closeBtn.addEventListener('click', () => modal.style.display = 'none');
-    if (cancelBtn) cancelBtn.addEventListener('click', () => modal.style.display = 'none');
+    if (closeBtn) closeBtn.addEventListener('click', () => closeModal(modal));
+    if (cancelBtn) cancelBtn.addEventListener('click', () => closeModal(modal));
 
     if (addDateBtn) {
         addDateBtn.addEventListener('click', () => {
@@ -607,7 +732,7 @@ function setupIntakeModal() {
                 currentStrength = data.strength || {};
                 
                 updateAnalysisPanel(data.analysis);
-                document.querySelector('[data-tab="analysis"]').click();
+                document.querySelector('[data-tab="record"]').click();
                 
                 if (data.messages && data.messages.length > 0) {
                      const lastMsg = data.messages[data.messages.length - 1];
@@ -624,7 +749,7 @@ function setupIntakeModal() {
                 }
                 await loadSessionHistory();
                 
-                modal.style.display = 'none';
+                closeModal(modal);
                 showToast('Case intake submitted and analyzed', 'success');
              } catch (err) {
                  alert('Error processing intake: ' + err.message);
@@ -675,7 +800,7 @@ function showChatSkeleton() {
 }
 
 function showAnalysisSkeleton() {
-    const panel = document.getElementById('analysis-content') || document.querySelector('#tab-analysis .panel-section');
+    const panel = document.getElementById('record-content') || document.querySelector('#tab-record .panel-section');
     if (panel) {
         panel.innerHTML = `
           <div class="skeleton-block">
@@ -691,7 +816,7 @@ function showAnalysisSkeleton() {
 }
 
 function showCasesSkeleton() {
-    const panel = document.getElementById('cases-content') || document.querySelector('#tab-cases .panel-section');
+    const panel = document.getElementById('cases-content') || document.querySelector('#tab-authority .panel-section');
     if (panel) {
         panel.innerHTML = `
           <div class="skeleton-block">
@@ -866,11 +991,12 @@ function applyContextToUI(nextContextId, context) {
     startSessionTimer(safeContext.total_seconds || 0);
     currentAnalysis = safeContext.analysis || {};
     currentTimeline = safeContext.timeline || [];
-    currentStatutes = safeContext.statutes || {};
+    currentStatutes = safeContext.statutes || [];
     currentStrength = safeContext.strength || {};
     currentCases = safeContext.cases || [];
 
     renderChatFromContext(safeContext);
+    updateMatterHeader(safeContext);
     updateAnalysisPanel(currentAnalysis);
     updateCasesPanel(currentCases);
     updateDraftPanel(safeContext.draft);
@@ -913,10 +1039,10 @@ function updateDraftPanel(draft) {
         displayDraft(String(draft));
         currentDraft = String(draft);
         if (draftDownloadBtn) {
-            draftDownloadBtn.style.display = 'inline-block';
+            draftDownloadBtn.hidden = false;
         }
         if (draftExportBtn) {
-            draftExportBtn.style.display = 'inline-block';
+            draftExportBtn.hidden = false;
         }
         return;
     }
@@ -924,10 +1050,10 @@ function updateDraftPanel(draft) {
     currentDraft = null;
     draftContent.innerHTML = '<p class="empty-state">Click "Generate Document" to create a legal memo or brief based on your case analysis.</p>';
     if (draftDownloadBtn) {
-        draftDownloadBtn.style.display = 'none';
+        draftDownloadBtn.hidden = true;
     }
     if (draftExportBtn) {
-        draftExportBtn.style.display = 'none';
+        draftExportBtn.hidden = true;
     }
 }
 
@@ -1104,14 +1230,14 @@ async function beginRenameSession(targetContextId) {
 function showDeleteModal(targetContextId) {
     pendingDeleteContextId = targetContextId;
     if (deleteModal) {
-        deleteModal.style.display = 'flex';
+        openModal(deleteModal);
     }
 }
 
 function hideDeleteModal() {
     pendingDeleteContextId = null;
     if (deleteModal) {
-        deleteModal.style.display = 'none';
+        closeModal(deleteModal);
     }
 }
 
@@ -1228,18 +1354,18 @@ async function handleFileUpload(event) {
 
 document.addEventListener('dragenter', (e) => {
     const dropZone = document.getElementById('drop-zone');
-    if (dropZone) dropZone.style.display = 'flex';
+    if (dropZone) dropZone.hidden = false;
 });
 
 document.getElementById('drop-zone')?.addEventListener('dragleave', (e) => {
     // Only hide if leaving the drop zone entirely (not entering a child element)
     if (e.target === document.getElementById('drop-zone')) {
-        document.getElementById('drop-zone').style.display = 'none';
+        document.getElementById('drop-zone').hidden = true;
     }
 });
 
 document.getElementById('drop-zone')?.addEventListener('drop', (e) => {
-    document.getElementById('drop-zone').style.display = 'none';
+    document.getElementById('drop-zone').hidden = true;
     const files = e.dataTransfer.files;
     if (files.length > 0) {
         const input = document.getElementById('file-upload-input');
@@ -1252,16 +1378,16 @@ document.getElementById('drop-zone')?.addEventListener('drop', (e) => {
 
 function openDocManager() {
     const modal = document.getElementById('doc-manager-modal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) openModal(modal);
     renderDocList();
 }
 
 document.getElementById('doc-manager-close')?.addEventListener('click', () => {
-    document.getElementById('doc-manager-modal').style.display = 'none';
+    closeModal('doc-manager-modal');
 });
 
 document.getElementById('doc-manager-done')?.addEventListener('click', () => {
-    document.getElementById('doc-manager-modal').style.display = 'none';
+    closeModal('doc-manager-modal');
 });
 
 document.getElementById('doc-manager-upload-more')?.addEventListener('click', () => {
@@ -1299,7 +1425,7 @@ function renderDocList() {
                     <span class="toggle-label">Include</span>
                 </label>
                 <button class="doc-delete-btn ${pendingDocDeleteIndex === i ? 'confirm' : ''}" onclick="promptDeleteDocument(event, ${i})" title="${pendingDocDeleteIndex === i ? 'Confirm Delete' : 'Delete Document'}">
-                    ${pendingDocDeleteIndex === i ? '<i class="fa fa-trash-o"></i><i class="fa fa-check" style="margin-left: 4px; font-size: 10px;"></i>' : '<i class="fa fa-trash"></i>'}
+                    ${pendingDocDeleteIndex === i ? '<svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"></use></svg><span class="doc-confirm-label">Confirm</span>' : '<svg class="icon icon-sm" aria-hidden="true"><use href="#i-trash"></use></svg>'}
                 </button>
             </div>
         </div>
@@ -1426,7 +1552,7 @@ async function handleAnalyze() {
             updateAnalysisPanel(data.analysis);
             appendMessage('bot', 'Analysis complete! Check the Analysis panel.');
             // Switch to analysis tab
-            document.querySelector('[data-tab="analysis"]').click();
+            document.querySelector('[data-tab="record"]').click();
         }
     } catch (err) {
         appendMessage('bot', 'Analysis failed.');
@@ -1651,8 +1777,8 @@ async function handleDraftGenerate() {
         if (data.document) {
             displayDraft(data.document);
             currentDraft = data.document;
-            document.getElementById('draft-download-btn').style.display = 'inline-block';
-            document.getElementById('draft-export-btn').style.display = 'inline-block';
+            document.getElementById('draft-download-btn').hidden = false;
+            document.getElementById('draft-export-btn').hidden = false;
             appendMessage('bot', `Generated ${docType}! Check the Draft panel.`);
         } else {
             draftContent.innerHTML = '<p class="empty-state">Draft generation failed.</p>';
@@ -1671,7 +1797,7 @@ function handleDraftExport() {
     
     const exportBtn = document.getElementById('draft-export-btn');
     const originalText = exportBtn.innerHTML;
-    exportBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Exporting...';
+    exportBtn.innerHTML = '<span class="loading-spinner" aria-hidden="true"></span> Exporting...';
     exportBtn.disabled = true;
     
     fetch('/draft/export', {
@@ -1711,19 +1837,92 @@ function handleDraftExport() {
 // =====================================================
 // PANEL UPDATES
 // =====================================================
+/**
+ * Fans the extracted analysis out across the four matter panels.
+ *
+ * This used to build one string containing strength + facts + parties +
+ * jurisdictions + issues + causes + penal codes + statutes + timeline and drop
+ * all nine into a single #analysis-content. The name and signature are kept so
+ * that all six call sites, and the currentStatutes / currentTimeline /
+ * currentStrength globals they set beforehand, keep working untouched.
+ */
 function updateAnalysisPanel(analysis) {
-    const content = document.getElementById('analysis-content');
+    renderMatterStrength(currentStrength);
+    renderChronologyPanel(currentTimeline);
+    renderStatutesPanel(currentStatutes);
+    renderRecordPanel(analysis);
+}
+
+function renderMatterStrength(strength) {
+    const chip = document.getElementById('matter-strength');
+    if (!chip) return;
+
+    const rating = strength && strength.rating;
+    if (!rating) { chip.hidden = true; return; }
+
+    const key = String(rating).toLowerCase().replace(/\s+/g, '-');
+    // Fractions, not percentages: the bar animates with transform: scaleX so
+    // it composites instead of relaying out the header on every frame.
+    const scales = { strong: 1, moderate: 0.6, weak: 0.25, 'insufficient-information': 0.08 };
+
+    chip.hidden = false;
+    chip.dataset.rating = key;
+    chip.title = strength.explanation || '';
+    document.getElementById('matter-strength-value').textContent = rating;
+    document.getElementById('matter-strength-fill').style.transform =
+        `scaleX(${scales[key] !== undefined ? scales[key] : 0.08})`;
+}
+
+function renderChronologyPanel(timeline) {
+    const el = document.getElementById('chronology-content');
+    if (!el) return;
+
+    const events = Array.isArray(timeline) ? timeline : [];
+    if (!events.length) {
+        el.innerHTML = `
+          <div class="empty-state">
+            <svg class="empty-state__icon" aria-hidden="true"><use href="#i-chronology"></use></svg>
+            <p class="empty-state__title">No chronology yet</p>
+            <p class="empty-state__body">Dates found in the record appear here in order. You can add events by hand at any time.</p>
+          </div>`;
+        return;
+    }
+    el.innerHTML = renderTimeline(events);
+}
+
+function renderStatutesPanel(statutes) {
+    const el = document.getElementById('statutes-content');
+    if (!el) return;
+
+    const list = Array.isArray(statutes) ? statutes : [];
+    if (!list.length) {
+        el.innerHTML = `
+          <div class="empty-state">
+            <svg class="empty-state__icon" aria-hidden="true"><use href="#i-statute"></use></svg>
+            <p class="empty-state__title">No statutes identified yet</p>
+            <p class="empty-state__body">Statutes referenced by the record appear here. Verify each against an official source.</p>
+          </div>`;
+        return;
+    }
+    el.innerHTML = renderStatutes(list);
+}
+
+function renderRecordPanel(analysis) {
+    const content = document.getElementById('record-content');
+    if (!content) return;
 
     if (!analysis || Object.keys(analysis).length === 0) {
-        content.innerHTML = '<p class="empty-state">No analysis available yet. Upload a PDF or describe your case to begin.</p>';
+        content.innerHTML = `
+          <div class="empty-state">
+            <svg class="empty-state__icon" aria-hidden="true"><use href="#i-record"></use></svg>
+            <p class="empty-state__title">No record yet</p>
+            <p class="empty-state__body">Upload a document or describe the matter. Facts, parties, jurisdictions, and legal issues will be extracted here for your review.</p>
+          </div>`;
         return;
     }
 
     let html = '';
-    
-    // Case Strength
-    html += renderStrengthMeter(currentStrength);
-    
+
     // Facts
     if (Array.isArray(analysis.facts) && analysis.facts.length > 0) {
         html += '<div class="analysis-section"><h4>Facts</h4><ul>';
@@ -1733,7 +1932,7 @@ function updateAnalysisPanel(analysis) {
         });
         html += '</ul>';
         if (analysis.facts.length > 4) {
-            html += '<button class="facts-toggle" onclick="toggleAnalysisList(this)">See more ▾</button>';
+            html += '<button class="facts-toggle" onclick="toggleAnalysisList(this)">See more</button>';
         }
         html += '</div>';
     }
@@ -1744,7 +1943,7 @@ function updateAnalysisPanel(analysis) {
         analysis.parties.forEach(party => {
             const name = party.name || party;
             const role = party.role || 'Unknown';
-            html += `<div class="party-item"><span>${escapeHtml(name)}</span><span style="color: #888;">${escapeHtml(role)}</span></div>`;
+            html += `<div class="party-item"><span>${escapeHtml(name)}</span><span class="party-role">${escapeHtml(role)}</span></div>`;
         });
         html += '</div>';
     }
@@ -1767,7 +1966,7 @@ function updateAnalysisPanel(analysis) {
         });
         html += '</ul>';
         if (analysis.legal_issues.length > 4) {
-            html += '<button class="facts-toggle" onclick="toggleAnalysisList(this)">See more ▾</button>';
+            html += '<button class="facts-toggle" onclick="toggleAnalysisList(this)">See more</button>';
         }
         html += '</div>';
     }
@@ -1781,16 +1980,13 @@ function updateAnalysisPanel(analysis) {
         });
         html += '</ul>';
         if (analysis.causes_of_action.length > 4) {
-            html += '<button class="facts-toggle" onclick="toggleAnalysisList(this)">See more ▾</button>';
+            html += '<button class="facts-toggle" onclick="toggleAnalysisList(this)">See more</button>';
         }
         html += '</div>';
     }
 
     if (!html) {
-        html = '<p class="empty-state">Analysis in progress...</p>';
-    } else {
-        html += renderStatutes(currentStatutes);
-        html += renderTimeline(currentTimeline);
+        html = '<p class="empty-state">Analysis in progress…</p>';
     }
 
     content.innerHTML = html;
@@ -1865,7 +2061,7 @@ function toggleAnalysisList(btn) {
         }
     });
 
-    btn.textContent = isExpanded ? 'See more ▾' : 'See less ▴';
+    btn.textContent = isExpanded ? 'See more' : 'See less';
 }
 
 function renderTimeline(events) {
@@ -1873,7 +2069,6 @@ function renderTimeline(events) {
 
     let html = `
         <div class="timeline-section">
-            <h4 class="analysis-section-title">Case Timeline</h4>
             <div class="timeline-container">
     `;
 
@@ -1948,12 +2143,8 @@ function submitManualTimelineEvent() {
 }
 
 function updateTimelineInPanel(timeline) {
-    const section = document.querySelector('.timeline-section');
-    if (section) {
-        const parent = section.parentElement;
-        section.remove();
-        parent.insertAdjacentHTML('beforeend', renderTimeline(timeline));
-    }
+    currentTimeline = Array.isArray(timeline) ? timeline : [];
+    renderChronologyPanel(currentTimeline);
 }
 
 function getRelevanceClass(score) {
@@ -2179,6 +2370,7 @@ function renderCaseDetailFollowUps(caseObj) {
 function showCaseList() {
     casesViewState = 'list';
     activeCaseIndex = null;
+    updateAuthorityCount(currentCases);
     renderCasesList(currentCases);
 }
 
@@ -2203,7 +2395,7 @@ function renderCaseDetailRelevanceSection(caseData) {
     if (caseData.treatment && caseData.treatment.checked) {
         treatmentHtml = getTreatmentBadgeHtml(caseData.treatment);
     } else {
-        treatmentHtml = '<span class="treatment-checking">●</span>';
+        treatmentHtml = '<span class="treatment-checking"><span class="loading-spinner" aria-hidden="true"></span>Checking treatment…</span>';
         setTimeout(() => {
             const detailPlaceholder = document.getElementById(`detail-treatment-badge-${activeCaseIndex}`);
             if (detailPlaceholder) {
@@ -2526,16 +2718,33 @@ async function submitCasesPanelAsk() {
 function getTreatmentBadgeHtml(treatment) {
     if (!treatment || !treatment.checked || treatment.status === 'unknown') return '';
 
+    // Status must never be carried by colour and icon alone: it is the single
+    // most consequential signal on the card, and a lawyer relying on it is
+    // deciding whether an authority is safe to cite.
     const config = {
-        'negative': { icon: '✗', class: 'treatment-negative', tooltip: `Automated citation check found this case may have been ${treatment.label || 'negatively treated'}. ${treatment.details || ''} Always verify with Westlaw or Lexis.` },
-        'warning': { icon: '⚠', class: 'treatment-warning', tooltip: `Automated citation check found this case may have been ${treatment.label || 'questioned'}. ${treatment.details || ''} Always verify with Westlaw or Lexis.` },
-        'good': { icon: '✓', class: 'treatment-good', tooltip: 'Automated citation check found no negative treatment for this case. Always verify with Westlaw or Lexis.' }
+        'negative': {
+            icon: 'i-status-negative', class: 'treatment-negative',
+            text: treatment.label || 'Negative treatment',
+            tooltip: `Automated citation check found this case may have been ${treatment.label || 'negatively treated'}. ${treatment.details || ''} Always verify with Westlaw or Lexis.`
+        },
+        'warning': {
+            icon: 'i-status-caution', class: 'treatment-warning',
+            text: treatment.label || 'Questioned',
+            tooltip: `Automated citation check found this case may have been ${treatment.label || 'questioned'}. ${treatment.details || ''} Always verify with Westlaw or Lexis.`
+        },
+        'good': {
+            icon: 'i-status-good', class: 'treatment-good',
+            text: treatment.label || 'No negative treatment',
+            tooltip: 'Automated citation check found no negative treatment for this case. Always verify with Westlaw or Lexis.'
+        }
     };
 
     const badge = config[treatment.status];
     if (!badge) return '';
 
-    return `<span class="treatment-icon ${badge.class}" title="${escapeHtml(badge.tooltip)}">${badge.icon}</span>`;
+    return `<span class="treatment-badge ${badge.class}" title="${escapeHtml(badge.tooltip)}">` +
+           `<svg class="icon icon-sm" aria-hidden="true"><use href="#${badge.icon}"></use></svg>` +
+           `<span>${escapeHtml(badge.text)}</span></span>`;
 }
 
 function loadCaseTreatment(caseIndex, badgePlaceholder) {
@@ -2591,7 +2800,7 @@ function renderCasesList(cases) {
     let html = `
       <div class="cases-filter">
         <button class="cases-filter-btn ${currentCasesFilter === 'all' ? 'active' : ''}" data-filter="all">All Cases</button>
-        <button class="cases-filter-btn ${currentCasesFilter === 'bookmarked' ? 'active' : ''}" data-filter="bookmarked">★ Bookmarked</button>
+        <button class="cases-filter-btn ${currentCasesFilter === 'bookmarked' ? 'active' : ''}" data-filter="bookmarked"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-bookmark"></use></svg>Bookmarked</button>
       </div>
     `;
 
@@ -2621,13 +2830,13 @@ function renderCasesList(cases) {
         if (c.treatment && c.treatment.checked) {
             treatmentHtml = getTreatmentBadgeHtml(c.treatment);
         } else {
-            treatmentHtml = '<span class="treatment-checking">●</span>';
+            treatmentHtml = '<span class="treatment-checking"><span class="loading-spinner" aria-hidden="true"></span>Checking treatment…</span>';
         }
 
         html += `
             <div class="case-item" data-case-index="${c.originalIndex}">
                 <button class="case-star ${c.bookmarked ? 'bookmarked' : ''}" data-case-index="${c.originalIndex}">
-                    ${c.bookmarked ? '★' : '☆'}
+                    <svg class="icon icon-sm" aria-hidden="true"><use href="${c.bookmarked ? '#i-bookmark-filled' : '#i-bookmark'}"></use></svg>
                 </button>
                 <span class="treatment-placeholder" id="treatment-badge-${c.originalIndex}">${treatmentHtml}</span>
                 <div class="case-title case-title--detail">
@@ -2639,7 +2848,7 @@ function renderCasesList(cases) {
                 </div>
                 ${c.relevance_reason ? `<div class="relevance-reason">${escapeHtml(c.relevance_reason)}</div>` : ''}
                 ${c.snippet ? `<div class="case-snippet">${escapeHtml(c.snippet.substring(0, 200))}...</div>` : ''}
-                ${c.pdf_link ? `<a href="${c.pdf_link}" target="_blank" class="case-link">View Case →</a>` : ''}
+                ${c.pdf_link ? `<a href="${c.pdf_link}" target="_blank" class="case-link">View case</a>` : ''}
             </div>
         `;
     });
@@ -2712,6 +2921,7 @@ function updateCasesPanel(cases) {
     }
     casesViewState = 'list';
     activeCaseIndex = null;
+    updateAuthorityCount(currentCases);
     renderCasesList(currentCases);
 }
 
@@ -2812,12 +3022,6 @@ function scrollChatToBottom(lastMessageEl) {
     }
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
 function autoResizeTextarea() {
     if (chatInput) {
         chatInput.style.height = 'auto';
@@ -2849,15 +3053,18 @@ let _gsActiveFilter = 'all';
 let _gsActiveIndex = -1;
 let _gsLastQuery = '';
 
-const _GS_RECENT_KEY = 'caseclosed_recent_searches';
 const _GS_MAX_RECENT = 5;
+let _gsRecent = [];
+
+async function _gsLoadRecent() {
+    try {
+        const response = await fetch('/api/account/recent-searches');
+        if (response.ok) _gsRecent = (await response.json()).recent_searches || [];
+    } catch (_) { _gsRecent = []; }
+}
 
 function _gsGetRecent() {
-    try {
-        return JSON.parse(localStorage.getItem(_GS_RECENT_KEY) || '[]').slice(0, _GS_MAX_RECENT);
-    } catch (_) {
-        return [];
-    }
+    return _gsRecent.slice(0, _GS_MAX_RECENT);
 }
 
 function _gsSaveRecent(query) {
@@ -2866,14 +3073,14 @@ function _gsSaveRecent(query) {
     let recent = _gsGetRecent().filter(r => r.toLowerCase() !== q.toLowerCase());
     recent.unshift(q);
     recent = recent.slice(0, _GS_MAX_RECENT);
-    try {
-        localStorage.setItem(_GS_RECENT_KEY, JSON.stringify(recent));
-    } catch (_) { /* ignore */ }
+    _gsRecent = recent;
+    fetch('/api/account/recent-searches', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({query: q})}).catch(() => {});
 }
 
 function openQuickSwitcher() {
     const modal = document.getElementById('quick-switcher-modal');
-    modal.style.display = 'flex';
+    openModal(modal);
     const input = document.getElementById('quick-switcher-input');
     input.value = '';
     _gsResults = [];
@@ -2888,7 +3095,7 @@ function openQuickSwitcher() {
 }
 
 function _closeGlobalSearch() {
-    document.getElementById('quick-switcher-modal').style.display = 'none';
+    closeModal('quick-switcher-modal');
 }
 
 function _gsRenderDefault() {
@@ -2899,9 +3106,9 @@ function _gsRenderDefault() {
     // Recent searches
     const recent = _gsGetRecent();
     if (recent.length) {
-        html += '<div class="gs-recent-header"><i class="fa fa-clock gs-recent-icon"></i> Recent Searches</div>';
+        html += '<div class="gs-recent-header"><svg class="icon icon-sm gs-recent-icon" aria-hidden="true"><use href="#i-clock"></use></svg> Recent Searches</div>';
         recent.forEach(q => {
-            html += `<div class="gs-recent-item" data-query="${escapeHtml(q)}"><span class="gs-recent-icon"><i class="fa fa-search"></i></span>${escapeHtml(q)}</div>`;
+            html += `<div class="gs-recent-item" data-query="${escapeHtml(q)}"><span class="gs-recent-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-search"></use></svg></span>${escapeHtml(q)}</div>`;
         });
     }
 
@@ -3129,11 +3336,11 @@ function _gsUpdateActive(items, itemClass) {
 }
 
 function openShortcutsHelp() {
-    document.getElementById('shortcuts-modal').style.display = 'flex';
+    openModal('shortcuts-modal');
 }
 
 function openTimeReport() {
-    document.getElementById('time-report-modal').style.display = 'flex';
+    openModal('time-report-modal');
     const list = document.getElementById('time-report-list');
     const grandTotal = document.getElementById('time-report-grand-total');
     
@@ -3174,13 +3381,10 @@ document.addEventListener('keydown', (e) => {
     // Esc — close modals/sidebar (always works)
     if (e.key === 'Escape') {
         // Close any visible modal
-        const modals = document.querySelectorAll('.modal-overlay');
+        const modals = document.querySelectorAll('.modal');
         let modalClosed = false;
         modals.forEach(m => {
-            if (m.style.display !== 'none' && m.offsetParent !== null) {
-                m.style.display = 'none';
-                modalClosed = true;
-            }
+            if (!m.hidden) { closeModal(m); modalClosed = true; }
         });
         if (modalClosed) return;
         
@@ -3188,7 +3392,7 @@ document.addEventListener('keydown', (e) => {
         if (!document.body.classList.contains('sidebar-collapsed')) {
             document.body.classList.add('sidebar-collapsed');
             const toggle = document.getElementById('sidebar-toggle');
-            if (toggle) toggle.innerHTML = '<i class="fa fa-bars"></i>';
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
         }
         return;
     }
@@ -3218,9 +3422,9 @@ document.addEventListener('keydown', (e) => {
     }
     
     // Cmd+1/2/3 — switch tabs
-    if (cmdKey && ['1', '2', '3'].includes(e.key)) {
+    if (cmdKey && ['1', '2', '3', '4'].includes(e.key)) {
         e.preventDefault();
-        const tabs = ['analysis', 'cases', 'draft'];
+        const tabs = ['record', 'chronology', 'authority', 'draft'];
         const tab = tabs[parseInt(e.key) - 1];
         document.querySelector(`.panel-tab[data-tab="${tab}"]`)?.click();
         return;

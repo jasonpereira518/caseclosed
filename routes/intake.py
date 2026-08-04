@@ -11,7 +11,7 @@ intake_bp = Blueprint("intake", __name__)
 @login_required
 def process_intake():
     payload = request.json or {}
-    context_id = payload.get("context_id")
+    context_id = payload.get("matter_id") or payload.get("context_id")
     if not context_id:
         return jsonify({"error": "No context_id provided"}), 400
 
@@ -58,10 +58,12 @@ Description:
         
     ctx["description"] = (ctx["description"] + "\n\n" + formatted).strip()
     
-    ctx["messages"].append({
+    messages = list(ctx.get("messages") or [])
+    messages.append({
         "role": "user",
         "content": formatted
     })
+    ctx["messages"] = messages
 
     try:
         analysis = extract_structured_analysis(ctx["description"])

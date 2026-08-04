@@ -51,7 +51,8 @@ def chat():
     clarify_attempts = int(payload.get("clarify_attempts", 0) or 0)
     adding_info = payload.get("adding_info", False)
 
-    context_id = get_context_id(session)
+    context_id = str(payload.get("matter_id") or payload.get("context_id") or get_context_id(session))
+    session["context_id"] = context_id
     context = get_or_create_context(context_id, str(current_user.get_id()))
     if context is None:
         return jsonify({"error": "forbidden", "title": "New Session"}), 403
@@ -256,7 +257,7 @@ def chat():
 @login_required
 def case_describe():
     payload = request.get_json(silent=True) or {}
-    request_context_id = str(payload.get("context_id", "")).strip()
+    request_context_id = str(payload.get("matter_id") or payload.get("context_id", "")).strip()
     session_context_id = str(session.get("context_id", "")).strip()
     context_id = request_context_id or session_context_id
     case_index = payload.get("case_index")
@@ -299,7 +300,7 @@ def case_describe():
 @login_required
 def case_ask():
     payload = request.get_json(silent=True) or {}
-    request_context_id = str(payload.get("context_id", "")).strip()
+    request_context_id = str(payload.get("matter_id") or payload.get("context_id", "")).strip()
     session_context_id = str(session.get("context_id", "")).strip()
     context_id = request_context_id or session_context_id
     case_index = payload.get("case_index")
@@ -353,7 +354,7 @@ def case_treatment():
     }
     try:
         payload = request.get_json(silent=True) or {}
-        request_context_id = str(payload.get("context_id", "")).strip()
+        request_context_id = str(payload.get("matter_id") or payload.get("context_id", "")).strip()
         session_context_id = str(session.get("context_id", "")).strip()
         context_id = request_context_id or session_context_id
         case_index = payload.get("case_index")
@@ -399,7 +400,7 @@ def case_treatment():
 def bookmark_case():
     print(f"[DEBUG BOOKMARK] Route hit, method: {request.method}")
     data = request.json or {}
-    context_id = data.get("context_id")
+    context_id = data.get("matter_id") or data.get("context_id")
     case_index = data.get("case_index")
     bookmarked = data.get("bookmarked", False)
 
@@ -410,7 +411,7 @@ def bookmark_case():
     if not context_belongs_to_user(context_id, user_id):
         return jsonify({"error": "Unauthorized"}), 403
 
-    ctx = get_context(context_id)
+    ctx = get_context(context_id, user_id)
     if not ctx:
         return jsonify({"error": "Context not found"}), 404
 

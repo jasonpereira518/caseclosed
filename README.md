@@ -1,8 +1,8 @@
 # Case Closed
 
-**Case Closed** is an AI-powered legal research assistant. It helps you describe a matter (or upload a PDF), surfaces relevant case law from CourtListener, explains relevance, and drafts memo- or brief-style documents—all in a single browser session.
+**Case Closed** is an AI-powered legal research assistant. It provides durable personal and team workspaces: matters, chats, documents, analysis, notes, and drafts are restored from the signed-in account on any device.
 
-The public landing page is available at `/`. The authenticated litigation workspace is available at `/app`; signed-out visitors are sent through Google OAuth before entering it.
+The public landing page is available at `/`. The authenticated litigation workspace is at `/app`, and the profile/team/data center is at `/account`. Firebase Authentication supports Google, verified email/password, and email magic links.
 
 ---
 
@@ -27,6 +27,9 @@ From a user’s perspective, the app provides:
 | LLM | Google Gemini via [Vertex AI](https://cloud.google.com/vertex-ai) (`google-genai`) |
 | Case search | [CourtListener](https://www.courtlistener.com/) REST API |
 | PDF | [pdfminer.six](https://github.com/pdfminer/pdfminer.six) |
+| Identity | Firebase Authentication |
+| Database | Cloud Firestore |
+| Private files | Firebase / Google Cloud Storage |
 | Container | Docker (`python:3.11-slim`) |
 
 ---
@@ -49,9 +52,12 @@ caseclosed/
 ├── services/
 │   ├── llm.py          # Gemini / Vertex AI calls
 │   ├── courtlistener.py
-│   └── pdf.py          # PDF save, extract, temp cleanup
+│   ├── pdf.py          # PDF save, extract, temp cleanup
+│   ├── matters.py      # Normalized Firestore matter persistence
+│   ├── tenancy.py      # Profiles, workspaces, roles, invites, authorization
+│   └── storage.py      # Private files and signed downloads
 ├── models/
-│   └── context.py      # In-memory session context + eviction helpers
+│   └── context.py      # Compatibility aggregate over normalized matter records
 ├── utils/
 │   └── helpers.py      # Shared helpers (e.g. JSON extraction)
 ├── static/             # application and landing-page scripts, styles, and assets
@@ -68,6 +74,8 @@ caseclosed/
 2. **Credentials and environment**
    - Create a `.env` file in the project root (see [Environment variables](#environment-variables) below). Do not commit real secrets.
    - Add a Google Cloud **service account** JSON key as `key.json` in the project root (or set `GOOGLE_APPLICATION_CREDENTIALS` to another path). See [Google Cloud: service account keys](https://cloud.google.com/iam/docs/keys-create-delete).
+   - In Firebase Authentication, enable Google, Email/Password, and Email Link providers and add the local/production hosts to Authorized domains.
+   - Create a private Firebase Storage bucket, deploy the included Firestore/Storage rules, and place the Firebase web app configuration in `FIREBASE_WEB_CONFIG`.
 
 3. **Install dependencies**
 
@@ -120,12 +128,32 @@ All values are read from the environment (and optionally `.env` via `python-dote
 | `COURTLISTENER_TOKEN` | Optional CourtListener API token for authenticated search requests. |
 | `COURTLISTENER_BASE_URL` | CourtListener search API base URL (override only if needed). |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to the GCP service account JSON file (default `key.json` in the working directory). |
+| `FIREBASE_CREDENTIALS` | Optional Firebase service-account path; otherwise Application Default Credentials are used. |
+| `FIREBASE_WEB_CONFIG` | Public Firebase web configuration as one JSON object. |
+| `FIREBASE_STORAGE_BUCKET` | Private bucket name used for documents, avatars, and exports. |
+| `AUTH_COOKIE_SECURE` | Set `true` for HTTPS deployments; defaults from `APP_BASE_URL`. |
+| `APP_BASE_URL` | Public application URL used in workspace invitations. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | SMTP delivery for team invitations. |
+| `CLOUD_TASKS_QUEUE`, `CLOUD_TASKS_LOCATION`, `JOB_WORKER_SECRET` | Optional durable background processing for large account exports. Without a queue, local development processes exports inline. |
 | `CLARIFIER_MODEL` | Gemini model id for clarification / Q&A-style steps. |
 | `SUMMARIZER_MODEL` | Gemini model id for case summarization. |
 | `SCORER_MODEL` | Gemini model id for relevance scoring. |
 | `ANALYZER_MODEL` | Gemini model id for structured legal analysis extraction. |
 | `DRAFT_MODEL` | Gemini model id for memo/brief drafting. |
 | `QUERY_MODEL` | Gemini model id for CourtListener query string generation. |
+
+### Database migration
+
+Back up Firestore, then inspect a dry-run report before applying the legacy migration:
+
+```bash
+python scripts/migrate_firestore_v2.py --report migration-report.json
+python scripts/migrate_firestore_v2.py --apply --report migration-report-applied.json
+```
+
+The migration matches legacy users to Firebase identities through email, creates personal workspaces, normalizes owned contexts, and quarantines ownerless records instead of assigning them implicitly.
+
+Deploy `firestore.rules` and `storage.rules` to keep browsers out of the data plane; the Flask backend is the only authorized gateway.
 
 ---
 

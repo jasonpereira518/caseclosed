@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // The Flask backend is the sole data gateway and authenticates through
+    // Firebase Admin session cookies. Browser SDK access is intentionally off.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -37,35 +37,36 @@
         });
     }
 
-    const workspaceDemo = document.querySelector("[data-workspace-demo]");
-    const heroTabs = Array.from(document.querySelectorAll("[data-hero-tab]"));
-    const heroPanels = Array.from(document.querySelectorAll("[data-hero-panel]"));
+    /* ---------------------------------------------------------------------
+       Hero product frame.
 
-    if (workspaceDemo && !reduceMotion && "IntersectionObserver" in window) {
-        workspaceDemo.classList.add("demo-motion-ready");
+       The hero used to contain a hand-built replica of the dashboard, driven
+       by its own tab controller here. It now frames the real workspace at
+       /demo, rendered at a desktop viewport and scaled to fit — so the only
+       thing left to do is compute the scale factor, which CSS cannot derive
+       from the container's measured width.
+       ------------------------------------------------------------------- */
+    const productFrame = document.querySelector("[data-product-frame]");
+
+    if (productFrame) {
+        const AUTHORED_WIDTH = 1440;
+        const viewport = productFrame.querySelector(".hero-product-viewport");
+
+        const fitProduct = function () {
+            if (!viewport) return;
+            const width = viewport.clientWidth;
+            if (!width) return;
+            viewport.style.setProperty("--product-scale", String(width / AUTHORED_WIDTH));
+        };
+
+        fitProduct();
+
+        if ("ResizeObserver" in window) {
+            new ResizeObserver(fitProduct).observe(viewport);
+        } else {
+            window.addEventListener("resize", fitProduct, { passive: true });
+        }
     }
-
-    function selectHeroPanel(panelName) {
-        heroTabs.forEach(function (tab) {
-            const isActive = tab.dataset.heroTab === panelName;
-            tab.classList.toggle("active", isActive);
-            tab.setAttribute("aria-selected", String(isActive));
-            tab.setAttribute("tabindex", isActive ? "0" : "-1");
-        });
-
-        heroPanels.forEach(function (panel) {
-            const isActive = panel.dataset.heroPanel === panelName;
-            panel.classList.toggle("active", isActive);
-            panel.setAttribute("aria-hidden", String(!isActive));
-        });
-
-    }
-
-    heroTabs.forEach(function (tab) {
-        tab.addEventListener("click", function () {
-            selectHeroPanel(tab.dataset.heroTab);
-        });
-    });
 
     const revealItems = document.querySelectorAll(".reveal");
     const fragmentedDemo = document.querySelector(".fragmented-demo");
@@ -77,7 +78,6 @@
         });
         if (fragmentedDemo) fragmentedDemo.classList.add("in-view");
         if (workflowSteps) workflowSteps.classList.add("in-view");
-        if (workspaceDemo) workspaceDemo.classList.add("demo-running");
     } else {
         const revealObserver = new IntersectionObserver(function (entries, observer) {
             entries.forEach(function (entry) {
@@ -107,15 +107,6 @@
                 observer.unobserve(workflowSteps);
             }, { threshold: 0.35 });
             workflowObserver.observe(workflowSteps);
-        }
-
-        if (workspaceDemo) {
-            const workspaceObserver = new IntersectionObserver(function (entries, observer) {
-                if (!entries[0].isIntersecting) return;
-                workspaceDemo.classList.add("demo-running");
-                observer.unobserve(workspaceDemo);
-            }, { threshold: 0.22 });
-            workspaceObserver.observe(workspaceDemo);
         }
     }
 
