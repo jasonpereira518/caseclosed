@@ -6,13 +6,13 @@ import config
 from utils.helpers import extract_json_object
 
 
-# Setup Vertex AI Client and Model Endpoints
-# Note: Using Gemini 2.5 for optimal performance/cost balance
-# Configuration managed via environment variables for security
+# The model endpoint is independent from the regional infrastructure used by
+# Cloud Tasks, Document AI, and Vector Search. Current Gemini models are served
+# from global or jurisdictional multi-region endpoints.
 client = genai.Client(
     vertexai=True,
     project=config.PROJECT_ID,
-    location=config.GOOGLE_CLOUD_LOCATION,
+    location=config.GEMINI_LOCATION,
 )
 
 # Agents will be instantiated statelessly per call.

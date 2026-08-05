@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import config
 from services.llm import client
@@ -31,7 +32,11 @@ def answer_from_sources(question: str, sources: list[dict]) -> dict:
     response = client.chats.create(model=config.CHAT_FAST_MODEL).send_message(prompt)
     parsed = extract_json_object(response.text.strip()) or {}
     answer = str(parsed.get("answer") or "").strip()
-    citations = validate_citations(parsed.get("citations") or [], sources)
+    proposed = parsed.get("citations") or []
+    citations = validate_citations(proposed, sources)
+    if len(citations) != len(proposed):
+        logging.warning("grounding_rejected_citations proposed=%s accepted=%s",
+                        len(proposed), len(citations))
     if not answer or not citations:
         return {
             "answer": "I couldn't produce a sufficiently supported answer from the retrieved sources.",

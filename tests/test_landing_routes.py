@@ -67,6 +67,19 @@ class LandingRouteTests(unittest.TestCase):
             self.assertIn(panel, response.data)
         self.assertNotIn(b"data-demo", response.data)
 
+    @patch("models.user.load_user")
+    def test_account_center_renders_for_signed_in_user(self, load_user):
+        load_user.return_value = self.user
+        self._sign_in()
+        response = self.client.get("/account")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Account center", response.data)
+        self.assertIn(b"Create portable ZIP", response.data)
+
+    def test_internal_job_worker_rejects_requests_without_secret(self):
+        response = self.client.post("/internal/account-jobs/not-a-job")
+        self.assertEqual(response.status_code, 403)
+
     @patch("routes.auth.ensure_user")
     @patch("routes.auth.get_firestore_client")
     @patch("routes.auth.firebase_auth.create_session_cookie")

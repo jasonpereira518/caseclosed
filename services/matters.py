@@ -236,7 +236,8 @@ def list_matters(workspace_id: str, uid: str) -> list[dict]:
 
 def delete_matter(matter_id: str, uid: str) -> bool:
     workspace_id, ref, _ = require_matter(matter_id, uid)
-    for collection_name in [*LIST_COLLECTIONS.values(), "state", "drafts", "time_entries"]:
+    for collection_name in [*LIST_COLLECTIONS.values(), "state", "drafts", "time_entries",
+                            "jobs", "knowledge_chunks"]:
         for snap in ref.collection(collection_name).stream():
             if collection_name == "documents":
                 for chunk in snap.reference.collection("text_chunks").stream():
@@ -244,6 +245,7 @@ def delete_matter(matter_id: str, uid: str) -> bool:
             snap.reference.delete()
     from services.storage import delete_prefix
     delete_prefix(f"workspaces/{workspace_id}/matters/{matter_id}/")
+    delete_prefix(f"staging/{workspace_id}/{matter_id}/")
     ref.delete()
     get_firestore_client().collection(config.FIRESTORE_MATTER_INDEX_COLLECTION).document(matter_id).delete()
     audit(workspace_id, uid, "matter.deleted", {}, matter_id)
@@ -261,22 +263,26 @@ def append_time_entry(matter_id: str, uid: str, seconds: int):
 
 
 def append_message(matter_id: str, uid: str, role: str, content: str,
-                   *, metadata: dict | None = None) -> dict:
+                   *, metadata: dict | None = None, message_id: str | None = None) -> dict:
     """Append one message without rewriting the complete matter aggregate."""
     _, ref, _ = require_matter(str(matter_id), str(uid))
     text = str(content or "").strip()
     if role not in {"user", "assistant", "system"} or not text:
         raise ValueError("a valid role and non-empty content are required")
-    message_id = str(uuid.uuid4())
+    message_id = str(message_id or uuid.uuid4())
+    message_ref = ref.collection("messages").document(message_id)
+    existing = message_ref.get()
+    existing_data = (existing.to_dict() or {}) if existing.exists else {}
+    timestamp = existing_data.get("created_at") or now()
     payload = {
         "role": role,
         "content": text,
-        "created_at": now(),
-        "position": int(now().timestamp() * 1_000_000),
+        "created_at": timestamp,
+        "position": existing_data.get("position") or int(now().timestamp() * 1_000_000),
     }
     if metadata:
         payload["metadata"] = dict(metadata)
-    ref.collection("messages").document(message_id).set(payload)
+    message_ref.set(payload)
     ref.set({"updated_at": now()}, merge=True)
     payload["record_id"] = message_id
     return payload
@@ -303,3 +309,41 @@ def replace_matter_records(matter_id: str, uid: str, collection_name: str,
     if collection_name not in set(LIST_COLLECTIONS.values()):
         raise ValueError("unsupported matter collection")
     _replace_collection(ref, collection_name, values)
+
+
+def upsert_document(matter_id: str, uid: str, document_id: str, metadata: dict, text: str):
+    """Store extracted text only; no original-file location is accepted."""
+    _, ref, _ = require_matter(str(matter_id), str(uid))
+    doc_ref = ref.collection("documents").document(str(document_id))
+    payload = {key: value for key, value in dict(metadata or {}).items()
+               if key not in {"storage_path", "original_path", "text"}}
+    payload.update({"text_chunked": bool(text), "updated_at": now()})
+    doc_ref.set(payload, merge=True)
+    existing = {snap.id: snap for snap in doc_ref.collection("text_chunks").stream()}
+    keep = set()
+    for position, start in enumerate(range(0, len(text or ""), TEXT_CHUNK_SIZE)):
+        chunk_id = f"{position:06d}"
+        keep.add(chunk_id)
+        doc_ref.collection("text_chunks").document(chunk_id).set({
+            "position": position, "text": text[start:start + TEXT_CHUNK_SIZE],
+        })
+    for chunk_id, snap in existing.items():
+        if chunk_id not in keep:
+            snap.reference.delete()
+    ref.set({"updated_at": now()}, merge=True)
+
+
+def delete_document(matter_id: str, uid: str, document_id: str):
+    _, ref, _ = require_matter(str(matter_id), str(uid))
+    doc_ref = ref.collection("documents").document(str(document_id))
+    for snap in doc_ref.collection("text_chunks").stream():
+        snap.reference.delete()
+    doc_ref.delete()
+
+
+def patch_document(matter_id: str, uid: str, document_id: str, metadata: dict):
+    _, ref, _ = require_matter(str(matter_id), str(uid))
+    values = {key: value for key, value in dict(metadata or {}).items()
+              if key not in {"storage_path", "original_path", "text"}}
+    values["updated_at"] = now()
+    ref.collection("documents").document(str(document_id)).set(values, merge=True)

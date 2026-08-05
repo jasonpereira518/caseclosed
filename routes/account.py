@@ -1,7 +1,6 @@
 """Account center, workspace administration, export, and deletion APIs."""
 from __future__ import annotations
 
-import io
 import html
 import hmac
 import json
@@ -21,7 +20,7 @@ from services.firestore import get_firestore_client
 from services.mailer import send_workspace_invitation
 from services.jobs import enqueue_account_job
 from services.matters import create_matter, delete_matter, list_matters, load_matter, require_matter, save_matter
-from services.storage import delete_prefix, download_bytes, signed_download_url, upload_avatar, upload_bytes
+from services.storage import delete_prefix, download_to_file, signed_download_url, upload_avatar, upload_file_object
 from services.tenancy import (
     AuthorizationError, ValidationError, accept_invitation, active_matter, active_workspace,
     audit, create_invitation, create_team, get_profile, list_members,
@@ -289,11 +288,18 @@ def create_export():
 
 def _run_export(uid, job_ref):
     job_ref.set({"status": "running", "started_at": now()}, merge=True)
-    archive = io.BytesIO()
+    archive = tempfile.SpooledTemporaryFile(max_size=16 * 1024 * 1024)
     try:
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
             account_data = {"profile": get_profile(uid), "workspaces": list_workspaces(uid)}
+            user_snapshot = get_firestore_client().collection(config.FIRESTORE_USERS_COLLECTION).document(uid).get()
+            user_record = user_snapshot.to_dict() or {}
+            if user_record.get("avatar_storage_path"):
+                account_data["profile"]["avatar_url"] = None
             bundle.writestr("account.json", json.dumps(account_data, default=_json_safe, indent=2))
+            if user_record.get("avatar_storage_path"):
+                with bundle.open("profile/avatar", "w") as destination:
+                    download_to_file(user_record["avatar_storage_path"], destination)
             for workspace in account_data["workspaces"]:
                 wid = workspace["workspace_id"]
                 for summary in list_matters(wid, uid):
@@ -307,14 +313,17 @@ def _run_export(uid, job_ref):
                     for document in matter.get("uploaded_documents") or []:
                         if document.get("storage_path"):
                             filename = secure_filename(document.get("filename") or document.get("record_id") or "document")
-                            bundle.writestr(f"{prefix}/files/{filename}", download_bytes(document["storage_path"]))
+                            with bundle.open(f"{prefix}/files/{filename}", "w") as destination:
+                                download_to_file(document["storage_path"], destination)
         storage_path = f"users/{uid}/exports/{job_ref.id}.zip"
-        upload_bytes(archive.getvalue(), storage_path, "application/zip")
+        upload_file_object(archive, storage_path, "application/zip")
         job_ref.set({"status": "ready", "storage_path": storage_path, "completed_at": now()}, merge=True)
         return True
     except Exception as exc:
         job_ref.set({"status": "failed", "error": str(exc)[:500], "completed_at": now()}, merge=True)
         return False
+    finally:
+        archive.close()
 
 
 @internal_bp.route("/account-jobs/<job_id>", methods=["POST"])

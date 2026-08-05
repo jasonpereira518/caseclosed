@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
-from dataclasses import dataclass
-
 import config
 from services.firestore import get_firestore_client
 from services.matters import require_matter
+from services.jurisdictions import normalize_jurisdiction
 from services.tenancy import now
 
 
@@ -36,7 +36,8 @@ def chunk_text(text: str, *, max_chars: int = CHUNK_CHARS,
 
 
 def index_matter_document(matter_id: str, uid: str, document_id: str,
-                          title: str, text: str, *, source_type="uploaded_document") -> int:
+                          title: str, text: str, *, source_type="uploaded_document",
+                          included: bool = False) -> int:
     workspace_id, matter_ref, _ = require_matter(str(matter_id), str(uid))
     collection = matter_ref.collection("knowledge_chunks")
     prefix = f"{document_id}-"
@@ -47,14 +48,35 @@ def index_matter_document(matter_id: str, uid: str, document_id: str,
     for position, content in enumerate(chunks):
         chunk_id = f"{document_id}-{position:05d}"
         data = {
-            "source_id": str(document_id), "source_type": source_type,
+            "source_id": chunk_id, "document_id": str(document_id), "source_type": source_type,
             "title": str(title or "Untitled document"), "text": content,
             "locator": f"chunk {position + 1}", "position": position,
             "workspace_id": workspace_id, "matter_id": str(matter_id),
-            "owner_id": str(uid), "updated_at": now(),
+            "owner_id": str(uid), "included": bool(included), "updated_at": now(),
         }
         collection.document(chunk_id).set(data)
         _vector_upsert(config.VECTOR_PRIVATE_COLLECTION, chunk_id, data)
+    return len(chunks)
+
+
+def index_legal_source(source_id: str, title: str, text: str, *, jurisdiction: str,
+                       canonical_url: str, source_type: str = "statute") -> int:
+    """Upsert a shared legal source after an official-source adapter validates it."""
+    collection = get_firestore_client().collection(config.FIRESTORE_LEGAL_SOURCES_COLLECTION)
+    prefix = "law-" + hashlib.sha256(source_id.encode("utf-8")).hexdigest()[:20] + "-"
+    for snap in collection.stream():
+        if snap.id.startswith(prefix):
+            snap.reference.delete()
+    chunks = chunk_text(text)
+    for position, content in enumerate(chunks):
+        chunk_id = f"{prefix}{position:05d}"
+        data = {"source_id": chunk_id, "legal_source_id": source_id,
+                "source_type": source_type, "title": title, "text": content,
+                "locator": f"chunk {position + 1}", "position": position,
+                "jurisdiction": jurisdiction, "canonical_url": canonical_url,
+                "updated_at": now()}
+        collection.document(chunk_id).set(data)
+        _vector_upsert(config.VECTOR_LEGAL_COLLECTION, chunk_id, data)
     return len(chunks)
 
 
@@ -67,24 +89,39 @@ def delete_matter_document_index(matter_id: str, uid: str, document_id: str):
             _vector_delete(config.VECTOR_PRIVATE_COLLECTION, snap.id)
 
 
+def set_matter_document_included(matter_id: str, uid: str, document_id: str, included: bool):
+    _, matter_ref, _ = require_matter(str(matter_id), str(uid))
+    prefix = f"{document_id}-"
+    for snap in matter_ref.collection("knowledge_chunks").stream():
+        if not snap.id.startswith(prefix):
+            continue
+        data = snap.to_dict() or {}
+        data.update({"included": bool(included), "updated_at": now()})
+        snap.reference.set({"included": bool(included), "updated_at": now()}, merge=True)
+        _vector_upsert(config.VECTOR_PRIVATE_COLLECTION, snap.id, data)
+
+
 def retrieve(matter_id: str, uid: str, query: str, *, jurisdiction: str | None = None,
              top_k: int | None = None) -> list[dict]:
     """Retrieve private matter evidence plus shared law with hard tenant filters."""
     workspace_id, matter_ref, _ = require_matter(str(matter_id), str(uid))
     limit = max(1, min(int(top_k or config.RETRIEVAL_TOP_K), 20))
+    jurisdiction = normalize_jurisdiction(jurisdiction)
     if config.VECTOR_SEARCH_ENABLED:
         try:
             private = _vector_search(config.VECTOR_PRIVATE_COLLECTION, query, limit, {
-                "workspace_id": workspace_id, "matter_id": str(matter_id),
+                "workspace_id": workspace_id, "matter_id": str(matter_id), "included": True,
             })
             legal = _vector_search(config.VECTOR_LEGAL_COLLECTION, query, limit, {
                 "jurisdiction": jurisdiction,
             } if jurisdiction else {})
             return _dedupe_rank([*private, *legal], query, limit)
-        except Exception:
+        except Exception as exc:
             # Local/emergency fallback is intentionally tenant-filtered below.
-            pass
-    candidates = [snap.to_dict() or {} for snap in matter_ref.collection("knowledge_chunks").stream()]
+            logging.warning("Vector retrieval failed; using Firestore fallback: %s", exc)
+    candidates = [item for item in (snap.to_dict() or {}
+                  for snap in matter_ref.collection("knowledge_chunks").stream())
+                  if item.get("included") is not False]
     for snap in get_firestore_client().collection(config.FIRESTORE_LEGAL_SOURCES_COLLECTION).stream():
         item = snap.to_dict() or {}
         if jurisdiction and item.get("jurisdiction") not in {jurisdiction, "federal"}:
@@ -164,28 +201,44 @@ def _vector_upsert(collection_id: str, object_id: str, data: dict):
     if not config.VECTOR_SEARCH_ENABLED:
         return
     from google.cloud import vectorsearch_v1
+    from google.api_core.exceptions import AlreadyExists
+    from google.protobuf.field_mask_pb2 import FieldMask
     client = vectorsearch_v1.DataObjectServiceClient()
-    client.create_data_object(parent=_parent(collection_id),
-                              data_object=vectorsearch_v1.DataObject(data=data),
-                              data_object_id=_vector_id(object_id))
+    vector_id = _vector_id(object_id)
+    try:
+        client.create_data_object(parent=_parent(collection_id),
+                                  data_object=vectorsearch_v1.DataObject(data=data),
+                                  data_object_id=vector_id)
+    except AlreadyExists:
+        client.update_data_object(
+            data_object=vectorsearch_v1.DataObject(
+                name=f"{_parent(collection_id)}/dataObjects/{vector_id}", data=data),
+            update_mask=FieldMask(paths=["data"]),
+        )
 
 
 def _vector_delete(collection_id: str, object_id: str):
     if not config.VECTOR_SEARCH_ENABLED:
         return
     from google.cloud import vectorsearch_v1
+    from google.api_core.exceptions import NotFound
     client = vectorsearch_v1.DataObjectServiceClient()
-    client.delete_data_object(name=f"{_parent(collection_id)}/dataObjects/{_vector_id(object_id)}")
+    try:
+        client.delete_data_object(name=f"{_parent(collection_id)}/dataObjects/{_vector_id(object_id)}")
+    except NotFound:
+        pass
 
 
 def _vector_search(collection_id: str, query: str, top_k: int, filters: dict) -> list[dict]:
     from google.cloud import vectorsearch_v1
     client = vectorsearch_v1.DataObjectSearchServiceClient()
     semantic = vectorsearch_v1.SemanticSearch(
-        search_text=query, search_field="text", task_type="QUESTION_ANSWERING",
-        filter={key: value for key, value in filters.items() if value}, top_k=top_k,
+        search_text=query, search_field=config.VECTOR_SEARCH_FIELD, task_type="RETRIEVAL_QUERY",
+        filter={key: {"$eq": value} for key, value in filters.items() if value is not None},
+        top_k=top_k,
         output_fields=["source_id", "source_type", "title", "text", "locator",
-                       "canonical_url", "jurisdiction", "workspace_id", "matter_id"],
+                       "canonical_url", "jurisdiction", "workspace_id", "matter_id",
+                       "document_id", "legal_source_id"],
     )
     response = client.search_data_objects(request=vectorsearch_v1.SearchDataObjectsRequest(
         parent=_parent(collection_id), semantic_search=semantic))

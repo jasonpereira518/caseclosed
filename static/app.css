@@ -588,6 +588,48 @@ textarea.input { resize: vertical; line-height: var(--leading-normal); }
 }
 .message-timestamp { font-size: var(--text-2xs); color: var(--text-muted); }
 
+/* Citations on a grounded chat answer (renderGroundedMessage in script.js).
+   Source-conscious is a product principle, not a footnote — every grounded
+   reply names what it drew from, inside the same bubble as the answer. */
+.chat-citations {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+.chat-citations strong {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-muted);
+}
+.chat-citations ol {
+  list-style: none;
+  counter-reset: citation;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.chat-citations li {
+  counter-increment: citation;
+  padding-left: var(--space-5);
+  position: relative;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--text-secondary);
+}
+.chat-citations li::before {
+  content: counter(citation) '.';
+  position: absolute;
+  left: 0;
+  width: var(--space-4);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.chat-citations a { color: var(--text-link); }
+
 .composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1414,24 +1456,24 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 .auth-divider { display: flex; align-items: center; gap: 12px; color: var(--color-text-muted, #6d625b); }
 .auth-divider::before, .auth-divider::after { content: ''; flex: 1; border-top: 1px solid var(--color-border, #d7cec5); }
 .auth-status { min-height: 1.5em; margin: 0; }
-.auth-error, .error { color: #8d2926; }
-.account-body { background: var(--color-bg, #f7f3ed); }
-.account-center { width: min(960px, calc(100% - 32px)); margin: 0 auto; padding: 40px 0 80px; }
+.auth-error { color: #8d2926; }
+#account-status.error { color: var(--negative); }
+.account-center { width: min(var(--page-max), calc(100% - 32px)); margin: 0 auto; padding: 40px 0 80px; }
 .account-center__header, .workspace-row, .account-inline { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.account-panel { background: var(--color-surface, #fff); border: 1px solid var(--color-border, #d7cec5); padding: 24px; margin-top: 20px; border-radius: 8px; }
+.account-panel { background: var(--surface); border: 1px solid var(--border); padding: 24px; margin-top: 20px; border-radius: 8px; }
 .account-form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .account-form label, .account-panel label { display: grid; gap: 6px; font-weight: 600; }
-.account-form input, .account-form textarea, .account-inline input { width: 100%; padding: 10px; border: 1px solid var(--color-border, #b8aca2); border-radius: 4px; }
+.account-form input, .account-form textarea, .account-inline input { width: 100%; padding: 10px; border: 1px solid var(--border-control); border-radius: 4px; }
 .account-form__wide { grid-column: 1 / -1; }
-.workspace-row { padding: 12px 0; border-bottom: 1px solid var(--color-border, #ddd); }
-.workspace-entry { border-bottom: 1px solid var(--color-border, #ddd); }
+.workspace-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.workspace-entry { border-bottom: 1px solid var(--border); }
 .workspace-entry .workspace-row { border-bottom: 0; }
-.workspace-row span { display: block; color: var(--color-text-muted, #6d625b); font-size: .875rem; }
+.workspace-row span { display: block; color: var(--text-muted); font-size: .875rem; }
 .team-manager { padding: 0 0 18px 18px; display: grid; gap: 10px; }
 .member-row { display: flex; align-items: center; gap: 8px; }
 .member-row span { margin-right: auto; }
-.matter-assignment { padding: 12px; border: 1px solid var(--color-border, #ddd); border-radius: 4px; }
+.matter-assignment { padding: 12px; border: 1px solid var(--border); border-radius: 4px; }
 .matter-assignment > div { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 8px 0; }
 .matter-assignment label { display: flex; grid-auto-flow: column; align-items: center; gap: 6px; font-weight: 400; }
-.account-panel--danger { border-color: #a94442; }
+.account-panel--danger { border-color: var(--negative-border); }
 @media (max-width: 640px) { .account-form { grid-template-columns: 1fr; } .account-form__wide { grid-column: auto; } }

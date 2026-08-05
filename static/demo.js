@@ -46,6 +46,50 @@
     catch { return url; }
   }
 
+  /* --------------------------------------------------------- fake job queue
+     The real POST /chat is now asynchronous: it returns 202 + status_url
+     immediately, and the caller polls GET /api/matters/{matter}/jobs/{job}
+     until status is succeeded/failed/cancelled (services/jobs.py,
+     services/chat_orchestrator.py). The demo simulates that same shape —
+     stage names below are copied verbatim from chat_orchestrator._answer —
+     so pollChatJob() in script.js drives the demo exactly as it drives the
+     real backend, and a visitor sees the same staged progress messaging. */
+
+  const demoJobs = new Map();
+  const CHAT_TOTAL_MS = 1500;
+  const CHAT_STEPS = [
+    { ms: 0,   stage: 'queued',             progress: 0 },
+    { ms: 300, stage: 'retrieving_sources', progress: 35 },
+    { ms: 950, stage: 'drafting_answer',    progress: 70 },
+  ];
+
+  function stageFor(elapsedMs) {
+    let step = CHAT_STEPS[0];
+    for (const candidate of CHAT_STEPS) {
+      if (candidate.ms <= elapsedMs) step = candidate;
+    }
+    return step;
+  }
+
+  function createChatJob(result) {
+    const jobId = `demo-job-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
+    demoJobs.set(jobId, { createdAt: Date.now(), result });
+    return jobId;
+  }
+
+  function readChatJob(jobId) {
+    const job = demoJobs.get(jobId);
+    if (!job) return null;
+    const elapsed = Date.now() - job.createdAt;
+    if (elapsed >= CHAT_TOTAL_MS) {
+      return { job_id: jobId, matter_id: FIXTURE.context_id, status: 'succeeded',
+               progress: 100, stage: 'complete', result: job.result, error: null };
+    }
+    const step = stageFor(elapsed);
+    return { job_id: jobId, matter_id: FIXTURE.context_id, status: 'running',
+             progress: step.progress, stage: step.stage, result: null, error: null };
+  }
+
   /* ------------------------------------------------------------- handlers */
 
   const ROUTES = {
@@ -101,17 +145,29 @@
       });
     },
 
-    '/chat': async () => {
-      await think(1400);
-      return ok({
-        response: DEMO_REPLY,
-        analysis: clone(FIXTURE.analysis),
-        cases: clone(FIXTURE.cases),
-        timeline: clone(FIXTURE.timeline),
-        statutes: clone(FIXTURE.statutes),
-        strength: clone(FIXTURE.strength),
-        title: FIXTURE.title,
+    '/chat': (body) => {
+      // Matches the real POST /chat contract: acknowledge immediately with a
+      // job_id + status_url, never the answer itself. script.js always polls
+      // status_url now (routes/chat.py, services/task_queue.py).
+      const jobId = createChatJob({
+        status: 'answer',
+        intent: 'legal_research',
+        message: DEMO_REPLY,
+        grounded: true,
+        citations: DEMO_CITATIONS,
         context_id: FIXTURE.context_id,
+        matter_id: FIXTURE.context_id,
+        title: FIXTURE.title,
+      });
+      return ok({
+        job_id: jobId,
+        matter_id: FIXTURE.context_id,
+        context_id: FIXTURE.context_id,
+        status: 'queued',
+        progress: 0,
+        stage: 'queued',
+        status_url: `/demo/jobs/${jobId}`,
+        deduplicated: false,
       });
     },
 
@@ -191,6 +247,28 @@
     'timing of entry, which is the same posture as this matter. It does not reach the question ' +
     'of a malfunctioning signal.';
 
+  // Real citation shape (BACKEND_ARCHITECTURE.md "Chat contract"): source_id,
+  // source_type, title, locator, url, quote. url is empty for these — like
+  // the rest of the fixture, every source here is fictional, not a live link.
+  const DEMO_CITATIONS = [
+    {
+      source_id: 'statute-rc-2315-33', source_type: 'statute',
+      title: 'R.C. 2315.33 — Comparative negligence', locator: 'Ohio Rev. Code', url: '',
+      quote: 'Bars recovery where the claimant’s contributory fault exceeds the combined fault of all other parties; otherwise damages are reduced in proportion.',
+    },
+    {
+      source_id: 'statute-rc-4511-46', source_type: 'statute',
+      title: 'R.C. 4511.46 — Right of way of pedestrian in crosswalk', locator: 'Ohio Rev. Code', url: '',
+      quote: 'Requires a driver to yield to a pedestrian lawfully within a marked crosswalk on the driver’s half of the roadway.',
+    },
+    {
+      source_id: 'case-okonkwo-bayline', source_type: 'case_law',
+      title: 'Okonkwo v. Bayline Municipal Transit Authority',
+      locator: '171 Ohio App. 3d 690 (Fict. 2016)', url: '',
+      quote: 'Pedestrian who entered a marked crossing on a changing signal was assigned twenty percent comparative fault; recovery reduced accordingly rather than barred.',
+    },
+  ];
+
   /** Cross-matter search, run against the single fixture matter. */
   function localSearch(query) {
     const q = query.trim().toLowerCase();
@@ -240,6 +318,17 @@
     // script.js reads the context immediately on load, which can beat the
     // fixture request. Every handler needs FIXTURE, so gate them all on it.
     await ready;
+
+    // pollChatJob() polls this exact status_url on an interval; the job id is
+    // generated per-chat, so this can't be a static ROUTES entry.
+    const jobMatch = path.match(/^\/demo\/jobs\/(.+)$/);
+    if (jobMatch) {
+      const job = readChatJob(jobMatch[1]);
+      return job
+        ? ok(job)
+        : new Response(JSON.stringify({ error: 'job not found' }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } });
+    }
 
     const handler = ROUTES[path];
     if (handler) return handler(parseBody(opts), opts);

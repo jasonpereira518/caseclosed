@@ -11,6 +11,8 @@ from services.matters import (
     save_matter,
 )
 from services.tenancy import active_workspace, personal_workspace_id
+import config
+from services.firestore import get_firestore_client, load_context as load_legacy_context
 
 
 class FirestoreBackedDict(dict):
@@ -79,14 +81,16 @@ def get_context_id(session_obj):
 def get_context(context_id, user_id=None):
     if not context_id or not user_id:
         return {}
-    loaded = load_matter(str(context_id), str(user_id))
+    loaded = load_matter(str(context_id), str(user_id)) or _migrate_legacy_context(
+        str(context_id), str(user_id))
     return FirestoreBackedDict(context_id, _ensure_metadata(loaded)) if loaded else {}
 
 
 def get_context_or_default(context_id, user_id=None):
     if not user_id:
         return default_context()
-    loaded = load_matter(str(context_id), str(user_id))
+    loaded = load_matter(str(context_id), str(user_id)) or _migrate_legacy_context(
+        str(context_id), str(user_id))
     if loaded:
         return FirestoreBackedDict(context_id, _ensure_metadata(loaded))
     _, ctx = create_new_context(str(user_id), context_id=str(context_id))
@@ -96,7 +100,8 @@ def get_context_or_default(context_id, user_id=None):
 def get_or_create_context(context_id, user_id=None):
     if not user_id:
         return None
-    loaded = load_matter(str(context_id), str(user_id))
+    loaded = load_matter(str(context_id), str(user_id)) or _migrate_legacy_context(
+        str(context_id), str(user_id))
     if loaded:
         return FirestoreBackedDict(context_id, _ensure_metadata(loaded))
     # A missing indexed matter is new. A matter that exists but is inaccessible
@@ -124,11 +129,39 @@ def list_user_contexts(user_id, workspace_id=None):
     if not user_id:
         return []
     wid = workspace_id or active_workspace(str(user_id))
+    _migrate_legacy_for_user(str(user_id), wid)
     return list_matters(wid, str(user_id))
 
 
+def _migrate_legacy_context(context_id: str, user_id: str, workspace_id=None):
+    """Lazily adopt only legacy records with an exact owner identity match."""
+    existing_workspace, _ = locate_matter(context_id)
+    if existing_workspace:
+        return load_matter(context_id, user_id)
+    legacy = load_legacy_context(context_id)
+    if not legacy or str(legacy.get("user_id") or "") != str(user_id):
+        return None
+    wid = workspace_id or active_workspace(user_id) or personal_workspace_id(user_id)
+    _, loaded = create_matter(wid, user_id, matter_id=context_id, initial=legacy)
+    get_firestore_client().collection(config.FIRESTORE_COLLECTION).document(context_id).set({
+        "migration_status": "migrated", "migrated_uid": user_id,
+    }, merge=True)
+    return loaded
+
+
+def _migrate_legacy_for_user(user_id: str, workspace_id: str):
+    if not workspace_id:
+        return
+    collection = get_firestore_client().collection(config.FIRESTORE_COLLECTION)
+    for snap in collection.where("user_id", "==", user_id).stream():
+        data = snap.to_dict() or {}
+        if data.get("migration_status") == "migrated" or locate_matter(snap.id)[0]:
+            continue
+        _migrate_legacy_context(snap.id, user_id, workspace_id)
+
+
 def context_belongs_to_user(context_id, user_id):
-    return bool(user_id and load_matter(str(context_id), str(user_id)))
+    return bool(user_id and get_context(str(context_id), str(user_id)))
 
 
 def rename_context(context_id, user_id, title):

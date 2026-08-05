@@ -1322,16 +1322,15 @@ async function handleFileUpload(event) {
         });
         const data = await res.json();
         
-        if (data.status === 'success') {
-            showToast(`${data.documents.length} file(s) uploaded`, 'success');
-            
-            // Reload global tracking context
+        if (data.status === 'queued') {
+            showToast(`${data.jobs.length} file(s) queued for extraction`, 'info');
+            const completed = await Promise.all(data.jobs.map(job => pollDocumentJob(job.status_url)));
+            const succeeded = completed.filter(job => job.status === 'succeeded').length;
+            const failed = completed.length - succeeded;
+            await loadContext();
             await loadSessionHistory();
-            
-            // Re-sync UI state mappings
-            if (data.documents && data.documents.length) {
-                currentUploadedDocs = currentUploadedDocs.concat(data.documents);
-            }
+            showToast(failed ? `${succeeded} processed; ${failed} failed` : `${succeeded} file(s) processed`,
+                      failed ? 'error' : 'success');
             openDocManager();
         } else if (data.error) {
             showToast(`Upload failed: ${data.error}`, 'error');
@@ -1342,6 +1341,18 @@ async function handleFileUpload(event) {
     }
     
     event.target.value = ''; // reset input
+}
+
+async function pollDocumentJob(statusUrl) {
+    const deadline = Date.now() + 120000;
+    while (Date.now() < deadline) {
+        const response = await fetch(statusUrl, { headers: { 'Accept': 'application/json' } });
+        const job = await response.json();
+        if (!response.ok) throw new Error(job.error || 'Unable to read document status');
+        if (['succeeded', 'failed', 'cancelled'].includes(job.status)) return job;
+        await new Promise(resolve => setTimeout(resolve, 900));
+    }
+    return { status: 'running' };
 }
 
 // Prevent browser from opening dropped files
@@ -1573,14 +1584,13 @@ async function handleChatSubmit(e) {
     chatInput.value = '';
     autoResizeTextarea();
 
-    const thinking = appendLoadingMessage('Analyzing your case...');
+    const thinking = appendLoadingMessage('Queued…');
 
     try {
-        // Always send the message - backend will extract answers if in clarification mode
         const body = {
             message,
-            clarify_attempts: clarifyAttempts,
-            context_id: contextId
+            context_id: contextId,
+            client_message_id: (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
         };
 
         const res = await fetch('/chat', {
@@ -1589,8 +1599,25 @@ async function handleChatSubmit(e) {
             body: JSON.stringify(body)
         });
 
-        const data = await res.json();
+        let data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Unable to queue chat');
+        contextId = data.context_id || data.matter_id || contextId;
+        data = await pollChatJob(data.status_url, thinking);
         removeMessage(thinking);
+        if (data.status !== 'succeeded') {
+            const detail = data.error?.message || (data.status === 'cancelled' ? 'Request cancelled.' : 'Chat request failed.');
+            appendMessage('bot', escapeHtml(detail));
+            return;
+        }
+        data = data.result || {};
+        const completedId = data.context_id || contextId;
+        const completedHistory = sessionHistory.find((item) => item.context_id === completedId);
+        if (completedHistory && data.title) {
+            const wasNew = completedHistory.title === 'New Session' || !completedHistory.title;
+            completedHistory.title = data.title;
+            if (wasNew && data.title !== 'New Session') completedHistory._animateTitleNext = true;
+            renderSessionList();
+        }
 
         // Handle clarifying
         if (data.status === 'clarifying') {
@@ -1600,12 +1627,7 @@ async function handleChatSubmit(e) {
             // Role selector will be updated if needed
             clarificationAnswers = [];
 
-            let questionsText = '<b>I need a bit more information:</b><br><br>';
-            data.questions.forEach((q, idx) => {
-                questionsText += `${idx + 1}. ${q}<br>`;
-            });
-            questionsText += '<br>Please provide answers to these questions in your next message.';
-            appendMessage('bot', questionsText);
+            appendMessage('bot', escapeHtml(data.message || '').replace(/\n/g, '<br>'));
 
             if (data.analysis) {
                 showAnalysisSkeleton();
@@ -1649,26 +1671,61 @@ async function handleChatSubmit(e) {
                 showCasesSkeleton();
                 currentCases = data.cases;
                 updateCasesPanel(data.cases);
-                appendMessage('bot', `Found ${data.cases.length} relevant cases. Check the Cases panel.`);
+                appendMessage('bot', renderGroundedMessage(data));
                 // Switch to cases tab
-                document.querySelector('[data-tab="cases"]').click();
+                document.querySelector('[data-tab="authority"]')?.click();
             } else {
-                appendMessage('bot', 'No relevant cases found.');
+                appendMessage('bot', renderGroundedMessage(data));
             }
-
-            appendMessage('bot', 'You can add more information to refine the search or generate a document.');
             renderSessionList();
             return;
         }
 
-        if (data.status === 'error') {
-            appendMessage('bot', `${data.message}`);
+        if (data.status === 'answer') {
+            appendMessage('bot', renderGroundedMessage(data));
+            return;
         }
     } catch (err) {
         removeMessage(thinking);
-        appendMessage('bot', 'Server error.');
+        appendMessage('bot', escapeHtml(err.message || 'Server error.'));
         console.error(err);
     }
+}
+
+async function pollChatJob(statusUrl, loadingElement) {
+    if (!statusUrl) throw new Error('The server did not return a job status URL.');
+    const deadline = Date.now() + 95000;
+    while (Date.now() < deadline) {
+        const res = await fetch(statusUrl, { headers: { 'Accept': 'application/json' } });
+        const job = await res.json();
+        if (!res.ok) throw new Error(job.error || 'Unable to read job status');
+        const bubble = loadingElement?.querySelector('.message-bubble');
+        if (bubble) {
+            const stage = String(job.stage || 'working').replace(/_/g, ' ');
+            bubble.innerHTML = `<span class="loading-spinner" aria-hidden="true"></span>${escapeHtml(stage)} · ${Number(job.progress || 0)}%`;
+        }
+        if (['succeeded', 'failed', 'cancelled'].includes(job.status)) return job;
+        await new Promise(resolve => setTimeout(resolve, 900));
+    }
+    throw new Error('This request is still running. Refresh the matter to see its result.');
+}
+
+function renderGroundedMessage(data) {
+    let html = escapeHtml(data.message || data.answer || '').replace(/\n/g, '<br>');
+    const citations = Array.isArray(data.citations) ? data.citations : [];
+    if (citations.length) {
+        html += '<div class="chat-citations"><strong>Sources</strong><ol>';
+        citations.forEach(citation => {
+            const label = [citation.title, citation.locator].filter(Boolean).join(' — ');
+            const url = String(citation.url || '');
+            const safeLabel = escapeHtml(label || 'Source');
+            html += /^https:\/\//i.test(url)
+                ? `<li><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${safeLabel}</a></li>`
+                : `<li>${safeLabel}</li>`;
+        });
+        html += '</ol></div>';
+    }
+    return html;
 }
 
 // =====================================================
@@ -2303,7 +2360,7 @@ function scrollCasesDetailScrollAreaToBottom(smooth) {
 }
 
 function setCasesTabDetailLayout(isDetail) {
-    const tab = document.getElementById('tab-cases');
+    const tab = document.getElementById('tab-authority');
     if (!tab) return;
     tab.classList.toggle('tab-cases-detail-open', !!isDetail);
 }
@@ -2983,7 +3040,7 @@ function appendMessage(sender, text) {
     wrapper.appendChild(bubble);
     wrapper.appendChild(timestamp);
     chatBox.appendChild(wrapper);
-    scrollChatToBottom(wrapper);
+    scrollChatToBottom();
     return wrapper;
 }
 
@@ -3002,7 +3059,7 @@ function appendLoadingMessage(text) {
     wrapper.appendChild(bubble);
     wrapper.appendChild(timestamp);
     chatBox.appendChild(wrapper);
-    scrollChatToBottom(wrapper);
+    scrollChatToBottom();
     return wrapper;
 }
 
@@ -3016,9 +3073,9 @@ function getCurrentTimestamp() {
     return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function scrollChatToBottom(lastMessageEl) {
-    if (lastMessageEl && typeof lastMessageEl.scrollIntoView === 'function') {
-        lastMessageEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+function scrollChatToBottom() {
+    if (chatBox) {
+        chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
     }
 }
 
@@ -3257,7 +3314,7 @@ async function _gsOpenResult(result) {
     // Navigate to the right tab/view
     if (result.type === 'case' || result.type === 'note') {
         // Switch to Cases tab
-        document.querySelector('.panel-tab[data-tab="cases"]')?.click();
+        document.querySelector('.panel-tab[data-tab="authority"]')?.click();
         // Open case detail if we have an index
         if (result.case_index != null && currentCases[result.case_index]) {
             setTimeout(() => {

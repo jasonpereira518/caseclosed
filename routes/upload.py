@@ -1,11 +1,15 @@
-from datetime import datetime
 import uuid
 from flask import Blueprint, current_app, jsonify, request, session
 from flask_login import current_user, login_required
 
 from models.context import get_context_id, get_or_create_context
-from services.pdf import process_upload
-from services.storage import delete_path, signed_download_url
+import config
+from services.jobs import create_job, update_job
+from services.matters import upsert_document
+from services.pdf import allowed_file, secure_save_document
+from services.retrieval import delete_matter_document_index, set_matter_document_included
+from services.storage import delete_path, upload_staging_file
+from services.task_queue import enqueue_job
 
 
 upload_bp = Blueprint("upload", __name__)
@@ -18,43 +22,52 @@ def upload():
     if not files:
         files = [request.files.get("file")]  # fallback to single file
     
-    uploaded_docs = []
+    jobs = []
     context_id = request.form.get("matter_id") or request.form.get("context_id") or get_context_id(session)
     context = get_or_create_context(context_id, str(current_user.get_id()))
     if context is None:
         return jsonify({"error": "forbidden"}), 403
 
     for file in files:
-        if file:
-            try:
-                document_id = str(uuid.uuid4())
-                doc_payload = process_upload(
-                    file, current_app.config["UPLOAD_FOLDER"],
-                    workspace_id=context.get("workspace_id"), matter_id=context_id,
-                    document_id=document_id,
-                )
-                doc_payload["record_id"] = document_id
-                doc_payload["uploaded_by"] = current_user.name or current_user.email or "Unknown User"
-                doc_payload["uploaded_at"] = datetime.now().strftime("%b %d, %Y")
-                uploaded_docs.append(doc_payload)
-            except ValueError:
-                continue
-    
-    if uploaded_docs:
-        existing_docs = context.get("uploaded_documents", [])
-        existing_docs.extend(uploaded_docs)
+        if not file or not allowed_file(file.filename or ""):
+            continue
+        job = None
+        document_id = uuid.uuid4().hex
+        staging_path = local_path = ""
         try:
-            context["uploaded_documents"] = existing_docs
-        except Exception:
-            for document in uploaded_docs:
-                delete_path(document.get("storage_path"))
-            raise
-    
-    return jsonify({
-        "status": "success",
-        "documents": uploaded_docs,
-        "total_documents": len(context.get("uploaded_documents", []))
-    })
+            if config.TASKS_MODE == "cloud":
+                staging_path = upload_staging_file(
+                    file, context.get("workspace_id"), context_id, document_id, file.mimetype)
+                filename = file.filename
+            else:
+                filename, local_path = secure_save_document(file, current_app.config["UPLOAD_FOLDER"])
+            payload = {
+                "document_id": document_id, "filename": filename,
+                "content_type": file.mimetype, "staging_path": staging_path,
+                "local_path": local_path,
+                "uploaded_by": current_user.name or current_user.email or "Unknown User",
+            }
+            upsert_document(context_id, str(current_user.get_id()), document_id, {
+                "filename": filename, "included": False, "status": "processing",
+                "uploaded_by": payload["uploaded_by"],
+            }, "")
+            job, created = create_job(context_id, str(current_user.get_id()),
+                                      "document_ingest", payload, document_id)
+            if created:
+                enqueue_job(context_id, job["job_id"])
+            job["status_url"] = f"/api/matters/{context_id}/jobs/{job['job_id']}"
+            jobs.append(job)
+        except Exception as exc:
+            if job:
+                update_job(context_id, job["job_id"], status="failed", stage="enqueue_failed",
+                           error={"code": "upload_failed", "message": str(exc)[:300]})
+            delete_path(staging_path)
+            if local_path:
+                from services.pdf import cleanup_temp_file
+                cleanup_temp_file(local_path)
+    if not jobs:
+        return jsonify({"error": "no supported documents could be queued"}), 400
+    return jsonify({"status": "queued", "context_id": context_id, "jobs": jobs}), 202
 
 @upload_bp.route("/documents/toggle", methods=["POST"])
 @login_required
@@ -82,6 +95,8 @@ def toggle_document():
                 context["description"] = desc + text_block
         else:
             context["description"] = desc.replace(text_block, "")
+        set_matter_document_included(context_id, str(current_user.get_id()),
+                                     str(doc.get("record_id") or ""), bool(included))
 
     return jsonify({"status": "ok", "included": included})
 
@@ -108,21 +123,7 @@ def delete_document():
             
         docs.pop(doc_index)
         context["uploaded_documents"] = docs
+        delete_matter_document_index(context_id, str(current_user.get_id()), doc.get("record_id", ""))
         delete_path(doc.get("storage_path"))
 
     return jsonify({"status": "ok"})
-
-
-@upload_bp.route("/documents/download", methods=["POST"])
-@login_required
-def download_document():
-    data = request.get_json(silent=True) or {}
-    context_id = str(data.get("matter_id") or data.get("context_id") or "").strip()
-    record_id = str(data.get("document_id") or "").strip()
-    context = get_or_create_context(context_id, str(current_user.get_id()))
-    if context is None:
-        return jsonify({"error": "forbidden"}), 403
-    for document in context.get("uploaded_documents") or []:
-        if str(document.get("record_id")) == record_id and document.get("storage_path"):
-            return jsonify({"url": signed_download_url(document["storage_path"])})
-    return jsonify({"error": "document not found"}), 404
