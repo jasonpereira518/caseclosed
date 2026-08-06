@@ -101,7 +101,7 @@ class LandingRouteTests(unittest.TestCase):
         self.assertIn(b"Create portable ZIP", response.data)
 
     def test_internal_job_worker_rejects_requests_without_secret(self):
-        response = self.client.post("/internal/account-jobs/not-a-job")
+        response = self.client.post("/internal/jobs/run", json={"job_id": "not-a-job"})
         self.assertEqual(response.status_code, 403)
 
     @patch("routes.auth.ensure_user")

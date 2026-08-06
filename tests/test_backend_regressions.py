@@ -1,3 +1,4 @@
+import json
 import unittest
 import sys
 from types import SimpleNamespace
@@ -8,7 +9,7 @@ import google.cloud
 from models.context import FirestoreBackedDict
 from models.user import User
 from services.pdf import allowed_file
-from services.jobs import enqueue_account_job
+from services.task_queue import enqueue_account_job
 from services.retrieval import _vector_search, delete_matter_index, index_matter_document
 from services.worker import process_job
 
@@ -176,16 +177,16 @@ class DocumentRetryRegressionTests(unittest.TestCase):
 
 
 class AccountJobRegressionTests(unittest.TestCase):
-    @patch("services.jobs.config")
-    def test_account_export_uses_shared_oidc_queue(self, job_config):
-        job_config.TASKS_MODE = "cloud"
-        job_config.TASKS_PROJECT_ID = "project"
-        job_config.TASKS_LOCATION = "us-central1"
-        job_config.TASKS_QUEUE = "caseclosed-jobs"
-        job_config.APP_BASE_URL = "https://caseclosed.example"
-        job_config.TASKS_SERVICE_ACCOUNT = "tasks@example.iam.gserviceaccount.com"
-        job_config.TASKS_WORKER_AUDIENCE = "https://caseclosed.example"
-        job_config.INTERNAL_WORKER_TOKEN = ""
+    @patch("services.task_queue.config")
+    def test_account_export_uses_shared_worker_entrypoint(self, task_queue_config):
+        task_queue_config.TASKS_MODE = "cloud"
+        task_queue_config.TASKS_PROJECT_ID = "project"
+        task_queue_config.TASKS_LOCATION = "us-central1"
+        task_queue_config.TASKS_QUEUE = "caseclosed-jobs"
+        task_queue_config.TASKS_WORKER_URL = "https://caseclosed.example/internal/jobs/run"
+        task_queue_config.TASKS_SERVICE_ACCOUNT = "tasks@example.iam.gserviceaccount.com"
+        task_queue_config.TASKS_WORKER_AUDIENCE = "https://caseclosed.example"
+        task_queue_config.INTERNAL_WORKER_TOKEN = ""
         client = Mock()
         client.queue_path.return_value = "queue-path"
         client.task_path.return_value = "task-path"
@@ -196,14 +197,16 @@ class AccountJobRegressionTests(unittest.TestCase):
 
         with patch.dict(sys.modules, {"google.cloud.tasks_v2": tasks_module}), \
                 patch.object(google.cloud, "tasks_v2", tasks_module, create=True):
-            self.assertTrue(enqueue_account_job("export-1"))
+            result = enqueue_account_job("user-1", "export-1")
 
+        self.assertEqual(result["transport"], "cloud")
         task = client.create_task.call_args.kwargs["task"]
-        self.assertEqual(task["http_request"]["url"],
-                         "https://caseclosed.example/internal/account-jobs/export-1")
+        self.assertEqual(task["http_request"]["url"], "https://caseclosed.example/internal/jobs/run")
         self.assertEqual(task["http_request"]["oidc_token"]["service_account_email"],
                          "tasks@example.iam.gserviceaccount.com")
-        self.assertNotIn("headers", task["http_request"])
+        body = json.loads(task["http_request"]["body"])
+        self.assertEqual(body, {"uid": "user-1", "job_id": "export-1", "scope": "account"})
+        self.assertNotIn("X-Worker-Token", task["http_request"]["headers"])
 
 
 if __name__ == "__main__":

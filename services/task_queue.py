@@ -1,4 +1,10 @@
-"""Cloud Tasks transport with an inline development fallback."""
+"""Cloud Tasks transport with an inline development fallback.
+
+Both matter-scoped jobs (chat, document_ingest) and account-scoped jobs
+(account_export) share this transport and land on the single
+/internal/jobs/run worker entrypoint; the request body's "scope" field
+tells the worker which job kernel (matter or account) to dispatch through.
+"""
 import json
 import threading
 
@@ -6,15 +12,31 @@ import config
 
 
 def enqueue_job(matter_id: str, job_id: str, task_suffix: str = ""):
+    return _enqueue({"matter_id": matter_id, "job_id": job_id}, job_id, task_suffix)
+
+
+def enqueue_account_job(uid: str, job_id: str, task_suffix: str = ""):
+    return _enqueue({"uid": uid, "job_id": job_id, "scope": "account"},
+                    f"account-{job_id}", task_suffix)
+
+
+def _run_inline(body: dict):
+    if body.get("scope") == "account":
+        from services.worker import process_account_job
+        return process_account_job(body["uid"], body["job_id"])
+    from services.worker import process_job
+    return process_job(body["matter_id"], body["job_id"])
+
+
+def _enqueue(body: dict, task_name: str, task_suffix: str):
     if config.TASKS_MODE == "inline":
-        from services.worker import process_job
         def run_inline():
             for _ in range(config.JOB_MAX_ATTEMPTS):
-                result = process_job(matter_id, job_id)
+                result = _run_inline(body)
                 if not result or result.get("status") != "queued":
                     break
         thread = threading.Thread(target=run_inline, daemon=True,
-                                  name=f"caseclosed-{job_id[:18]}")
+                                  name=f"caseclosed-{body['job_id'][:18]}")
         thread.start()
         return {"transport": "inline"}
     if config.TASKS_MODE != "cloud":
@@ -25,13 +47,13 @@ def enqueue_job(matter_id: str, job_id: str, task_suffix: str = ""):
     from google.cloud import tasks_v2
     client = tasks_v2.CloudTasksClient()
     parent = client.queue_path(config.TASKS_PROJECT_ID, config.TASKS_LOCATION, config.TASKS_QUEUE)
-    body = json.dumps({"matter_id": matter_id, "job_id": job_id}).encode()
-    task_name = job_id + (f"-{task_suffix}" if task_suffix else "")
+    request_body = json.dumps(body).encode()
+    full_task_name = task_name + (f"-{task_suffix}" if task_suffix else "")
     task = {"name": client.task_path(config.TASKS_PROJECT_ID, config.TASKS_LOCATION,
-                                     config.TASKS_QUEUE, task_name),
+                                     config.TASKS_QUEUE, full_task_name),
             "http_request": {"http_method": tasks_v2.HttpMethod.POST,
                 "url": config.TASKS_WORKER_URL, "headers": {"Content-Type": "application/json"},
-                "body": body, "oidc_token": {"service_account_email": config.TASKS_SERVICE_ACCOUNT,
+                "body": request_body, "oidc_token": {"service_account_email": config.TASKS_SERVICE_ACCOUNT,
                                                "audience": config.TASKS_WORKER_AUDIENCE}}}
     if config.INTERNAL_WORKER_TOKEN:
         task["http_request"]["headers"]["X-Worker-Token"] = config.INTERNAL_WORKER_TOKEN

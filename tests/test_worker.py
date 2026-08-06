@@ -45,18 +45,26 @@ class InternalOidcRouteTests(unittest.TestCase):
         self.client = app.test_client()
 
     @patch("routes.jobs.process_job", return_value={"status": "succeeded"})
-    @patch("routes.jobs.verify_service_account_request", return_value={"email": "tasks@example.com"})
+    @patch("routes.jobs.verify_worker_request", return_value=True)
     @patch("routes.jobs.config")
     def test_worker_accepts_verified_service_account_oidc(self, job_config, verify, process):
         job_config.TASKS_MODE = "cloud"
-        job_config.INTERNAL_WORKER_TOKEN = ""
-        job_config.TASKS_SERVICE_ACCOUNT = "tasks@example.com"
-        job_config.TASKS_WORKER_AUDIENCE = "https://service/internal/jobs/run"
         response = self.client.post("/internal/jobs/run", json={
             "matter_id": "matter", "job_id": "job"},
             headers={"Authorization": "Bearer signed-token"})
         self.assertEqual(response.status_code, 200)
         process.assert_called_once_with("matter", "job")
+
+    @patch("routes.jobs.process_account_job", return_value={"status": "succeeded"})
+    @patch("routes.jobs.verify_worker_request", return_value=True)
+    @patch("routes.jobs.config")
+    def test_worker_dispatches_account_scope_by_uid(self, job_config, verify, process_account):
+        job_config.TASKS_MODE = "cloud"
+        response = self.client.post("/internal/jobs/run", json={
+            "uid": "user-1", "job_id": "job", "scope": "account"},
+            headers={"Authorization": "Bearer signed-token"})
+        self.assertEqual(response.status_code, 200)
+        process_account.assert_called_once_with("user-1", "job")
 
     @patch("routes.jobs.config")
     def test_worker_rejects_unverified_request(self, job_config):

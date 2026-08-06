@@ -1,12 +1,8 @@
 """Account center, workspace administration, export, and deletion APIs."""
 from __future__ import annotations
 
-import html
-import hmac
-import json
 import os
 import tempfile
-import zipfile
 
 from flask import Blueprint, jsonify, request, session
 from flask_login import current_user, login_required
@@ -17,10 +13,10 @@ import config
 from models.context import default_context
 from services.firestore import get_firestore_client
 from services.mailer import send_workspace_invitation
-from services.jobs import enqueue_account_job
-from services.matters import create_matter, delete_matter, list_matters, load_matter, patch_matter, require_matter
-from services.oidc import verify_service_account_request
-from services.storage import delete_prefix, download_to_file, signed_download_url, upload_avatar, upload_file_object
+from services.jobs import create_account_job, get_account_job, update_account_job
+from services.matters import create_matter, delete_matter, list_matters, patch_matter, require_matter
+from services.storage import delete_prefix, signed_download_url, upload_avatar
+from services.task_queue import enqueue_account_job
 from services.tenancy import (
     AuthorizationError, ValidationError, accept_invitation, active_matter, active_workspace,
     audit, create_invitation, create_team, get_profile, list_members,
@@ -29,7 +25,6 @@ from services.tenancy import (
 )
 
 account_bp = Blueprint("account", __name__, url_prefix="/api")
-internal_bp = Blueprint("internal", __name__, url_prefix="/internal")
 
 
 def _uid():
@@ -259,116 +254,34 @@ def matter_assignments(matter_id):
         return _error(exc)
 
 
-def _json_safe(value):
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    raise TypeError(f"unsupported value: {type(value)!r}")
-
-
 @account_bp.route("/account/export", methods=["POST"])
 @login_required
 def create_export():
     uid = _uid()
-    db = get_firestore_client()
-    job_ref = db.collection(config.FIRESTORE_JOBS_COLLECTION).document()
-    job_ref.set({"uid": uid, "type": "export", "status": "queued", "created_at": now()})
+    job = None
     try:
-        if enqueue_account_job(job_ref.id):
-            return jsonify({"job_id": job_ref.id, "status": "queued"}), 202
+        job, created = create_account_job(uid, "account_export", {})
+        if created:
+            enqueue_account_job(uid, job["job_id"])
     except Exception as exc:
-        job_ref.set({"status": "failed", "error": str(exc)[:500], "completed_at": now()}, merge=True)
-        return jsonify({"error": "could not schedule export", "job_id": job_ref.id}), 500
-    # Local development does not require Cloud Tasks; execute immediately while
-    # retaining the same persistent job state and polling contract.
-    if _run_export(uid, job_ref):
-        return jsonify({"job_id": job_ref.id, "status": "ready"}), 202
-    return jsonify({"error": "export failed", "job_id": job_ref.id}), 500
-
-
-def _run_export(uid, job_ref):
-    transaction = get_firestore_client().transaction()
-
-    @gc_firestore.transactional
-    def claim(txn):
-        snap = job_ref.get(transaction=txn)
-        data = snap.to_dict() or {}
-        if (not snap.exists or data.get("uid") != uid or data.get("type") != "export"
-                or data.get("status") != "queued"):
-            return False
-        txn.set(job_ref, {"status": "running", "started_at": now()}, merge=True)
-        return True
-
-    if not claim(transaction):
-        return False
-    archive = tempfile.SpooledTemporaryFile(max_size=16 * 1024 * 1024)
-    try:
-        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
-            account_data = {"profile": get_profile(uid), "workspaces": list_workspaces(uid)}
-            user_snapshot = get_firestore_client().collection(config.FIRESTORE_USERS_COLLECTION).document(uid).get()
-            user_record = user_snapshot.to_dict() or {}
-            if user_record.get("avatar_storage_path"):
-                account_data["profile"]["avatar_url"] = None
-            bundle.writestr("account.json", json.dumps(account_data, default=_json_safe, indent=2))
-            if user_record.get("avatar_storage_path"):
-                with bundle.open("profile/avatar", "w") as destination:
-                    download_to_file(user_record["avatar_storage_path"], destination)
-            for workspace in account_data["workspaces"]:
-                wid = workspace["workspace_id"]
-                for summary in list_matters(wid, uid):
-                    matter = load_matter(summary["matter_id"], uid) or {}
-                    prefix = f"workspaces/{wid}/matters/{summary['matter_id']}"
-                    bundle.writestr(f"{prefix}/matter.json", json.dumps(matter, default=_json_safe, indent=2))
-                    html_document = f"<html><body><h1>{html.escape(str(matter.get('title', 'Matter')))}</h1><pre>{html.escape(json.dumps(matter, default=_json_safe, indent=2))}</pre></body></html>"
-                    bundle.writestr(f"{prefix}/matter.html", html_document)
-                    if matter.get("draft"):
-                        bundle.writestr(f"{prefix}/draft.txt", str(matter["draft"]))
-                    for document in matter.get("uploaded_documents") or []:
-                        if document.get("storage_path"):
-                            filename = secure_filename(document.get("filename") or document.get("record_id") or "document")
-                            with bundle.open(f"{prefix}/files/{filename}", "w") as destination:
-                                download_to_file(document["storage_path"], destination)
-        storage_path = f"users/{uid}/exports/{job_ref.id}.zip"
-        upload_file_object(archive, storage_path, "application/zip")
-        job_ref.set({"status": "ready", "storage_path": storage_path, "completed_at": now()}, merge=True)
-        return True
-    except Exception as exc:
-        job_ref.set({"status": "failed", "error": str(exc)[:500], "completed_at": now()}, merge=True)
-        return False
-    finally:
-        archive.close()
-
-
-@internal_bp.route("/account-jobs/<job_id>", methods=["POST"])
-def run_account_job(job_id):
-    supplied = request.headers.get("X-Worker-Token", "")
-    token_ok = bool(config.INTERNAL_WORKER_TOKEN and hmac.compare_digest(
-        supplied, config.INTERNAL_WORKER_TOKEN))
-    oidc_ok = bool(verify_service_account_request(
-        request, expected_email=config.TASKS_SERVICE_ACCOUNT,
-        audience=config.TASKS_WORKER_AUDIENCE))
-    if config.TASKS_MODE != "cloud" or not (token_ok or oidc_ok):
-        return jsonify({"error": "forbidden"}), 403
-    job_ref = get_firestore_client().collection(config.FIRESTORE_JOBS_COLLECTION).document(job_id)
-    snap = job_ref.get()
-    data = snap.to_dict() if snap.exists else None
-    if not data or data.get("type") != "export":
-        return jsonify({"error": "job not found"}), 404
-    if data.get("status") == "ready":
-        return jsonify({"status": "ready"})
-    return (jsonify({"status": "ready"}), 200) if _run_export(data["uid"], job_ref) else (jsonify({"error": "failed"}), 500)
+        if job:
+            update_account_job(uid, job["job_id"], status="failed", stage="enqueue_failed",
+                               error={"code": "enqueue_failed", "message": str(exc)[:300]})
+        return jsonify({"error": "could not schedule export"}), 500
+    job["status_url"] = f"/api/account/jobs/{job['job_id']}"
+    return jsonify(job), 202
 
 
 @account_bp.route("/account/jobs/<job_id>")
 @login_required
 def account_job(job_id):
-    snap = get_firestore_client().collection(config.FIRESTORE_JOBS_COLLECTION).document(job_id).get()
-    data = snap.to_dict() if snap.exists else None
-    if not data or data.get("uid") != _uid():
+    job = get_account_job(_uid(), job_id)
+    if not job:
         return jsonify({"error": "job not found"}), 404
-    response = {"job_id": job_id, "status": data.get("status")}
-    if data.get("status") == "ready":
-        response["download_url"] = signed_download_url(data["storage_path"])
-    return jsonify(response)
+    result = job.get("result") or {}
+    if job.get("status") == "succeeded" and result.get("storage_path"):
+        job["download_url"] = signed_download_url(result["storage_path"])
+    return jsonify(job)
 
 
 @account_bp.route("/account", methods=["DELETE"])
@@ -403,7 +316,7 @@ def delete_account():
                 matter_doc.reference.set({"assigned_user_ids": gc_firestore.ArrayRemove([uid]),
                                           "updated_at": now()}, merge=True)
     delete_prefix(f"users/{uid}/")
-    for job in db.collection(config.FIRESTORE_JOBS_COLLECTION).where("uid", "==", uid).stream():
+    for job in user_ref.collection("jobs").stream():
         job.reference.delete()
     if current_user.email:
         for invite in db.collection(config.FIRESTORE_INVITATIONS_COLLECTION).where("email", "==", current_user.email.lower()).stream():

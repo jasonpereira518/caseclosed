@@ -9,9 +9,9 @@ import config
 from services.jobs import cancel_job, get_job, retry_job
 from services.task_queue import enqueue_job
 from services.tenancy import AuthorizationError
-from services.worker import process_job
+from services.worker import process_account_job, process_job
 from services.legal_corpus import sync_configured_sources
-from services.oidc import verify_service_account_request
+from services.oidc import verify_service_account_request, verify_worker_request
 
 
 jobs_bp = Blueprint("jobs", __name__)
@@ -52,19 +52,22 @@ def job_retry(matter_id, job_id):
 
 @jobs_bp.route("/internal/jobs/run", methods=["POST"])
 def run_job():
-    token = request.headers.get("X-Worker-Token", "")
-    token_ok = bool(config.INTERNAL_WORKER_TOKEN and hmac.compare_digest(
-        token, config.INTERNAL_WORKER_TOKEN))
-    oidc_ok = bool(verify_service_account_request(
-        request, expected_email=config.TASKS_SERVICE_ACCOUNT,
-        audience=config.TASKS_WORKER_AUDIENCE))
-    if config.TASKS_MODE != "cloud" or not (token_ok or oidc_ok):
+    if config.TASKS_MODE != "cloud" or not verify_worker_request(request):
         return jsonify({"error": "forbidden"}), 403
     payload = request.get_json(silent=True) or {}
-    matter_id, job_id = str(payload.get("matter_id") or ""), str(payload.get("job_id") or "")
-    if not matter_id or not job_id:
-        return jsonify({"error": "matter_id and job_id are required"}), 400
-    job = process_job(matter_id, job_id)
+    job_id = str(payload.get("job_id") or "")
+    if not job_id:
+        return jsonify({"error": "job_id is required"}), 400
+    if payload.get("scope") == "account":
+        uid = str(payload.get("uid") or "")
+        if not uid:
+            return jsonify({"error": "uid is required"}), 400
+        job = process_account_job(uid, job_id)
+    else:
+        matter_id = str(payload.get("matter_id") or "")
+        if not matter_id:
+            return jsonify({"error": "matter_id is required"}), 400
+        job = process_job(matter_id, job_id)
     status_code = 503 if job and job.get("status") == "queued" and job.get("stage") == "retrying" else 200
     return jsonify(job or {"status": "ignored"}), status_code
 
