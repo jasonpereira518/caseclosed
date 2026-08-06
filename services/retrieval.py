@@ -43,6 +43,7 @@ def index_matter_document(matter_id: str, uid: str, document_id: str,
     prefix = f"{document_id}-"
     for snap in collection.stream():
         if snap.id.startswith(prefix):
+            _vector_delete(config.VECTOR_PRIVATE_COLLECTION, snap.id)
             snap.reference.delete()
     chunks = chunk_text(text)
     for position, content in enumerate(chunks):
@@ -66,6 +67,7 @@ def index_legal_source(source_id: str, title: str, text: str, *, jurisdiction: s
     prefix = "law-" + hashlib.sha256(source_id.encode("utf-8")).hexdigest()[:20] + "-"
     for snap in collection.stream():
         if snap.id.startswith(prefix):
+            _vector_delete(config.VECTOR_LEGAL_COLLECTION, snap.id)
             snap.reference.delete()
     chunks = chunk_text(text)
     for position, content in enumerate(chunks):
@@ -85,8 +87,16 @@ def delete_matter_document_index(matter_id: str, uid: str, document_id: str):
     prefix = f"{document_id}-"
     for snap in matter_ref.collection("knowledge_chunks").stream():
         if snap.id.startswith(prefix):
-            snap.reference.delete()
             _vector_delete(config.VECTOR_PRIVATE_COLLECTION, snap.id)
+            snap.reference.delete()
+
+
+def delete_matter_index(matter_id: str, uid: str):
+    """Remove every retrieval object belonging to a matter before it is deleted."""
+    _, matter_ref, _ = require_matter(str(matter_id), str(uid))
+    for snap in matter_ref.collection("knowledge_chunks").stream():
+        _vector_delete(config.VECTOR_PRIVATE_COLLECTION, snap.id)
+        snap.reference.delete()
 
 
 def set_matter_document_included(matter_id: str, uid: str, document_id: str, included: bool):
@@ -236,9 +246,11 @@ def _vector_search(collection_id: str, query: str, top_k: int, filters: dict) ->
         search_text=query, search_field=config.VECTOR_SEARCH_FIELD, task_type="RETRIEVAL_QUERY",
         filter={key: {"$eq": value} for key, value in filters.items() if value is not None},
         top_k=top_k,
-        output_fields=["source_id", "source_type", "title", "text", "locator",
-                       "canonical_url", "jurisdiction", "workspace_id", "matter_id",
-                       "document_id", "legal_source_id"],
+        output_fields=vectorsearch_v1.OutputFields(data_fields=[
+            "source_id", "source_type", "title", "text", "locator",
+            "canonical_url", "jurisdiction", "workspace_id", "matter_id",
+            "document_id", "legal_source_id",
+        ]),
     )
     response = client.search_data_objects(request=vectorsearch_v1.SearchDataObjectsRequest(
         parent=_parent(collection_id), semantic_search=semantic))

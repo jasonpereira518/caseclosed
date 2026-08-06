@@ -46,6 +46,30 @@ class LandingRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.headers["Location"].endswith("/auth/login"))
 
+    def test_login_exposes_only_google_authentication(self):
+        with patch("routes.auth.config.AUTH_PROVIDER", "clerk"), \
+                patch("routes.auth.config.CLERK_PUBLISHABLE_KEY", "pk_test_example"), \
+                patch("routes.auth.config.CLERK_SECRET_KEY", "sk_test_example"), \
+                patch("routes.auth.config.CLERK_FRONTEND_API_URL", "https://clerk.example"):
+            response = self.client.get("/auth/login")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'id="clerk-sign-in"', response.data)
+        self.assertIn(b"Use your Google account to sign in or create your account.", response.data)
+        self.assertNotIn(b'type="password"', response.data)
+        self.assertNotIn(b"magic link", response.data)
+
+    def test_invitation_login_has_invitation_context(self):
+        with patch("routes.auth.config.AUTH_PROVIDER", "clerk"), \
+                patch("routes.auth.config.CLERK_PUBLISHABLE_KEY", "pk_test_example"), \
+                patch("routes.auth.config.CLERK_SECRET_KEY", "sk_test_example"), \
+                patch("routes.auth.config.CLERK_FRONTEND_API_URL", "https://clerk.example"):
+            response = self.client.get("/auth/login?invite=workspace-token")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Join your team workspace", response.data)
+        self.assertIn(b"/auth/complete", response.data)
+
     def test_api_requires_authentication_as_json(self):
         response = self.client.get("/api/account")
         self.assertEqual(response.status_code, 401)
@@ -82,8 +106,8 @@ class LandingRouteTests(unittest.TestCase):
 
     @patch("routes.auth.ensure_user")
     @patch("routes.auth.get_firestore_client")
-    @patch("routes.auth.firebase_auth.create_session_cookie")
-    @patch("routes.auth.firebase_auth.verify_id_token")
+    @patch("firebase_admin.auth.create_session_cookie")
+    @patch("firebase_admin.auth.verify_id_token")
     def test_firebase_token_creates_secure_server_session(
         self, verify_id_token, create_session_cookie, get_firestore_client, ensure_user
     ):
@@ -94,10 +118,11 @@ class LandingRouteTests(unittest.TestCase):
         ensure_user.return_value = {"uid": self.user.id, "email": self.user.email}
         create_session_cookie.return_value = "signed-cookie"
 
-        response = self.client.post(
-            "/auth/session", json={"id_token": "firebase-id-token"},
-            headers={"Origin": "http://localhost"},
-        )
+        with patch("routes.auth.config.AUTH_PROVIDER", "firebase"):
+            response = self.client.post(
+                "/auth/session", json={"id_token": "firebase-id-token"},
+                headers={"Origin": "http://localhost"},
+            )
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("__session=signed-cookie", response.headers["Set-Cookie"])
@@ -106,13 +131,14 @@ class LandingRouteTests(unittest.TestCase):
         ensure_user.assert_called_once()
 
     @patch("routes.auth.get_firestore_client")
-    @patch("routes.auth.firebase_auth.verify_id_token")
+    @patch("firebase_admin.auth.verify_id_token")
     def test_unverified_password_identity_is_rejected(self, verify_id_token, get_firestore_client):
         verify_id_token.return_value = {
             "uid": self.user.id, "email": self.user.email, "email_verified": False,
             "firebase": {"sign_in_provider": "password"},
         }
-        response = self.client.post("/auth/session", json={"id_token": "token"})
+        with patch("routes.auth.config.AUTH_PROVIDER", "firebase"):
+            response = self.client.post("/auth/session", json={"id_token": "token"})
         self.assertEqual(response.status_code, 403)
         self.assertIn("verify", response.get_json()["error"])
 
@@ -121,7 +147,8 @@ class LandingRouteTests(unittest.TestCase):
         load_user.return_value = self.user
         self._sign_in()
 
-        response = self.client.get("/auth/logout")
+        with patch("routes.auth.config.AUTH_PROVIDER", "firebase"):
+            response = self.client.get("/auth/logout")
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.headers["Location"].endswith("/"))

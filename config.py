@@ -1,6 +1,7 @@
 import os
 import tempfile
 import json
+import base64
 
 from dotenv import load_dotenv
 
@@ -14,6 +15,7 @@ MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 50 * 1024 * 1024))
 PORT = int(os.getenv("PORT", 5050))
 DEBUG = os.getenv("FLASK_DEBUG", "false").lower() == "true"
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production" if os.getenv("K_SERVICE") else "development").lower()
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:5050").rstrip("/")
 
 # File handling
 ALLOWED_EXTENSIONS = {"pdf"}
@@ -24,7 +26,7 @@ GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 GEMINI_LOCATION = os.getenv("GEMINI_LOCATION", "global")
 COURTLISTENER_TOKEN = os.getenv("COURTLISTENER_TOKEN")
 COURTLISTENER_BASE_URL = os.getenv("COURTLISTENER_BASE_URL", "https://www.courtlistener.com/api/rest/v4/search/")
-GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "key.json")
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 # Firebase / Firestore (context persistence). When unset, Firebase Admin uses
 # Application Default Credentials (for example, the Cloud Run service identity).
@@ -78,9 +80,40 @@ try:
 except json.JSONDecodeError:
     LEGAL_SOURCE_REGISTRY = []
 
-# Firebase Authentication. FIREBASE_WEB_CONFIG is the JSON object copied from
-# the Firebase console (apiKey, authDomain, projectId, appId, etc.). It is
-# intentionally public client configuration, not a service-account secret.
+# Identity. Clerk is the active provider; Firebase remains available as a
+# single-provider rollback during the migration window.
+AUTH_PROVIDER = os.getenv("AUTH_PROVIDER", "clerk").strip().lower()
+CLERK_PUBLISHABLE_KEY = os.getenv("CLERK_PUBLISHABLE_KEY", "").strip()
+CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY", "").strip()
+CLERK_JWT_KEY = os.getenv("CLERK_JWT_KEY", "").replace("\\n", "\n").strip()
+CLERK_WEBHOOK_SIGNING_SECRET = os.getenv("CLERK_WEBHOOK_SIGNING_SECRET", "").strip()
+CLERK_AUTHORIZED_PARTIES = [
+    value.strip().rstrip("/")
+    for value in os.getenv("CLERK_AUTHORIZED_PARTIES", APP_BASE_URL).split(",")
+    if value.strip()
+]
+FIRESTORE_CLERK_WEBHOOK_EVENTS_COLLECTION = os.getenv(
+    "FIRESTORE_CLERK_WEBHOOK_EVENTS_COLLECTION", "clerk_webhook_events")
+
+
+def _clerk_frontend_api_url(publishable_key: str) -> str:
+    if not publishable_key:
+        return ""
+    try:
+        encoded = publishable_key.split("_", 2)[2]
+        encoded += "=" * (-len(encoded) % 4)
+        hostname = base64.urlsafe_b64decode(encoded).decode("utf-8").rstrip("$")
+        return f"https://{hostname}" if hostname else ""
+    except (IndexError, ValueError, UnicodeDecodeError):
+        return ""
+
+
+CLERK_FRONTEND_API_URL = os.getenv(
+    "CLERK_FRONTEND_API_URL", _clerk_frontend_api_url(CLERK_PUBLISHABLE_KEY)
+).rstrip("/")
+
+# Firebase Authentication rollback configuration. FIREBASE_WEB_CONFIG is the
+# intentionally public browser configuration object.
 try:
     FIREBASE_WEB_CONFIG = json.loads(os.getenv("FIREBASE_WEB_CONFIG", "{}"))
 except json.JSONDecodeError:
@@ -98,11 +131,7 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 SMTP_FROM = os.getenv("SMTP_FROM")
-APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:5050")
 INVITATION_TTL_DAYS = int(os.getenv("INVITATION_TTL_DAYS", "7"))
-CLOUD_TASKS_QUEUE = os.getenv("CLOUD_TASKS_QUEUE")
-CLOUD_TASKS_LOCATION = os.getenv("CLOUD_TASKS_LOCATION", GOOGLE_CLOUD_LOCATION)
-JOB_WORKER_SECRET = os.getenv("JOB_WORKER_SECRET")
 
 # Google OAuth (backend)
 GOOGLE_OAUTH_CLIENT_SECRETS = os.getenv("GOOGLE_OAUTH_CLIENT_SECRETS", "client_secret.json")

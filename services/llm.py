@@ -56,7 +56,7 @@ def extract_answers_from_message(user_message: str, questions: list) -> dict:
     """Extract answers to questions from user's message."""
     _ea_lines = [f"{i+1}. {q}" for i, q in enumerate(questions)]
     prompt = (
-        f"Given these questions:\n" + "\n".join(_ea_lines) + "\n\n"
+        "Given these questions:\n" + "\n".join(_ea_lines) + "\n\n"
         f"And this user response: '{user_message}'\n\n"
         "Extract the answers to each question from the user's response. "
         "Respond strictly in JSON format:\n"

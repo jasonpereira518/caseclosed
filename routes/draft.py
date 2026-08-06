@@ -3,7 +3,7 @@ from flask_login import current_user, login_required
 import re
 from io import BytesIO
 from docx import Document
-from docx.shared import Pt, Inches, RGBColor
+from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 from models.context import get_context as get_stored_context, save_context

@@ -116,7 +116,7 @@ def case_ask():
     session_context_id = str(session.get("context_id", "")).strip()
     context_id = request_context_id or session_context_id
     case_index = payload.get("case_index")
-    question = (payload.get("question") or "").strip()
+    question = str(payload.get("question") or "").strip()
     user_id = str(current_user.get_id())
 
     if not context_id or not question:
@@ -210,13 +210,17 @@ def case_treatment():
 @chat_bp.route("/case/bookmark", methods=["POST"])
 @login_required
 def bookmark_case():
-    print(f"[DEBUG BOOKMARK] Route hit, method: {request.method}")
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     context_id = data.get("matter_id") or data.get("context_id")
-    case_index = data.get("case_index")
+    try:
+        case_index = int(data.get("case_index"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid case index"}), 400
     bookmarked = data.get("bookmarked", False)
+    if not isinstance(bookmarked, bool):
+        return jsonify({"error": "bookmarked must be a boolean"}), 400
 
-    if not context_id or case_index is None:
+    if not context_id:
         return jsonify({"error": "Missing parameters"}), 400
 
     user_id = str(current_user.get_id())

@@ -20,9 +20,10 @@ def _ensure_initialized():
         return True
     if _init_error is not None:
         return False
+    # FIREBASE_CREDENTIALS is the legacy explicit service-account certificate.
+    # Otherwise let Firebase Admin use Application Default Credentials natively;
+    # ADC can be a workload identity, service account, or authorized user file.
     cred_path = config.FIREBASE_CREDENTIALS
-    if not cred_path and config.GOOGLE_APPLICATION_CREDENTIALS and os.path.isfile(config.GOOGLE_APPLICATION_CREDENTIALS):
-        cred_path = config.GOOGLE_APPLICATION_CREDENTIALS
     if cred_path and not os.path.isfile(cred_path):
         _init_error = FileNotFoundError(
             f"Firebase credentials file not found: {cred_path!r}"

@@ -45,7 +45,7 @@
         {% if demo_mode %}
         <span class="badge badge--caution">Demo</span>
         {% else %}
-        <a href="{{ url_for('auth.logout') }}" class="account-signout">Sign out</a>
+        <a href="{{ url_for('auth.logout') }}" class="account-signout" data-clerk-sign-out>Sign out</a>
         {% endif %}
       </div>
     </div>

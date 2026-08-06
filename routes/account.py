@@ -8,7 +8,6 @@ import os
 import tempfile
 import zipfile
 
-from firebase_admin import auth as firebase_auth
 from flask import Blueprint, jsonify, request, session
 from flask_login import current_user, login_required
 from google.cloud import firestore as gc_firestore
@@ -19,7 +18,8 @@ from models.context import default_context
 from services.firestore import get_firestore_client
 from services.mailer import send_workspace_invitation
 from services.jobs import enqueue_account_job
-from services.matters import create_matter, delete_matter, list_matters, load_matter, require_matter, save_matter
+from services.matters import create_matter, delete_matter, list_matters, load_matter, patch_matter, require_matter
+from services.oidc import verify_service_account_request
 from services.storage import delete_prefix, download_to_file, signed_download_url, upload_avatar, upload_file_object
 from services.tenancy import (
     AuthorizationError, ValidationError, accept_invitation, active_matter, active_workspace,
@@ -251,9 +251,8 @@ def matter_assignments(matter_id):
         assigned = [str(value) for value in (request.get_json(silent=True) or {}).get("user_ids", [])]
         if any(not membership(workspace_id, uid) for uid in assigned):
             raise ValidationError("every assignee must be an active workspace member")
-        data["assigned_user_ids"] = list(dict.fromkeys(assigned))
-        data["updated_at"] = now()
-        save_matter(matter_id, data)
+        assigned = list(dict.fromkeys(assigned))
+        patch_matter(matter_id, _uid(), root={"assigned_user_ids": assigned})
         audit(workspace_id, _uid(), "matter.assignments_changed", {"assigned_user_ids": assigned}, matter_id)
         return jsonify({"assigned_user_ids": assigned})
     except (AuthorizationError, ValidationError) as exc:
@@ -287,7 +286,20 @@ def create_export():
 
 
 def _run_export(uid, job_ref):
-    job_ref.set({"status": "running", "started_at": now()}, merge=True)
+    transaction = get_firestore_client().transaction()
+
+    @gc_firestore.transactional
+    def claim(txn):
+        snap = job_ref.get(transaction=txn)
+        data = snap.to_dict() or {}
+        if (not snap.exists or data.get("uid") != uid or data.get("type") != "export"
+                or data.get("status") != "queued"):
+            return False
+        txn.set(job_ref, {"status": "running", "started_at": now()}, merge=True)
+        return True
+
+    if not claim(transaction):
+        return False
     archive = tempfile.SpooledTemporaryFile(max_size=16 * 1024 * 1024)
     try:
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
@@ -328,9 +340,13 @@ def _run_export(uid, job_ref):
 
 @internal_bp.route("/account-jobs/<job_id>", methods=["POST"])
 def run_account_job(job_id):
-    supplied = request.headers.get("X-Case-Closed-Worker", "")
-    expected = config.JOB_WORKER_SECRET or "disabled"
-    if not config.JOB_WORKER_SECRET or not hmac.compare_digest(supplied, expected):
+    supplied = request.headers.get("X-Worker-Token", "")
+    token_ok = bool(config.INTERNAL_WORKER_TOKEN and hmac.compare_digest(
+        supplied, config.INTERNAL_WORKER_TOKEN))
+    oidc_ok = bool(verify_service_account_request(
+        request, expected_email=config.TASKS_SERVICE_ACCOUNT,
+        audience=config.TASKS_WORKER_AUDIENCE))
+    if config.TASKS_MODE != "cloud" or not (token_ok or oidc_ok):
         return jsonify({"error": "forbidden"}), 403
     job_ref = get_firestore_client().collection(config.FIRESTORE_JOBS_COLLECTION).document(job_id)
     snap = job_ref.get()
@@ -367,6 +383,8 @@ def delete_account():
         return jsonify({"error": "transfer or delete owned teams first",
                         "workspace_ids": [w["workspace_id"] for w in owned_teams]}), 409
     db = get_firestore_client()
+    user_ref = db.collection(config.FIRESTORE_USERS_COLLECTION).document(uid)
+    user_record = user_ref.get().to_dict() or {}
     for workspace in workspaces:
         wid = workspace["workspace_id"]
         if workspace.get("type") == "personal":
@@ -387,11 +405,26 @@ def delete_account():
     delete_prefix(f"users/{uid}/")
     for job in db.collection(config.FIRESTORE_JOBS_COLLECTION).where("uid", "==", uid).stream():
         job.reference.delete()
-    db.collection(config.FIRESTORE_USERS_COLLECTION).document(uid).delete()
     if current_user.email:
         for invite in db.collection(config.FIRESTORE_INVITATIONS_COLLECTION).where("email", "==", current_user.email.lower()).stream():
             invite.reference.set({"status": "revoked", "email": None, "updated_at": now()}, merge=True)
-    firebase_auth.delete_user(uid)
+    if config.AUTH_PROVIDER == "clerk":
+        from services.clerk_auth import delete_clerk_identity
+
+        clerk_user_id = user_record.get("clerk_user_id")
+        if not clerk_user_id:
+            user_ref.set({"account_deletion_error": "missing Clerk user id", "updated_at": now()}, merge=True)
+            return jsonify({"error": "identity record is incomplete; contact support"}), 409
+        try:
+            delete_clerk_identity(clerk_user_id)
+        except Exception:
+            user_ref.set({"account_deletion_error": "Clerk identity deletion failed", "updated_at": now()}, merge=True)
+            return jsonify({"error": "account data was removed, but identity deletion must be retried"}), 502
+    else:
+        from firebase_admin import auth as firebase_auth
+
+        firebase_auth.delete_user(uid)
+    user_ref.delete()
     response = jsonify({"status": "deleted"})
     response.delete_cookie(config.AUTH_SESSION_COOKIE, path="/")
     session.clear()

@@ -20,6 +20,8 @@ done
 GCP_REGION="${GCP_REGION:-us-central1}"
 TASKS_LOCATION="${TASKS_LOCATION:-$GCP_REGION}"
 TASKS_QUEUE="${TASKS_QUEUE:-caseclosed-jobs}"
+TASKS_MAX_CONCURRENT_DISPATCHES="${TASKS_MAX_CONCURRENT_DISPATCHES:-5}"
+TASKS_MAX_DISPATCHES_PER_SECOND="${TASKS_MAX_DISPATCHES_PER_SECOND:-2}"
 VECTOR_LOCATION="${VECTOR_LOCATION:-$GCP_REGION}"
 VECTOR_PRIVATE_COLLECTION="${VECTOR_PRIVATE_COLLECTION:-caseclosed-matters}"
 VECTOR_LEGAL_COLLECTION="${VECTOR_LEGAL_COLLECTION:-caseclosed-law}"
@@ -132,9 +134,16 @@ done
 if ! $apply || ! gcloud tasks queues describe "$TASKS_QUEUE" --project "$GCP_PROJECT_ID" \
     --location "$TASKS_LOCATION" >/dev/null 2>&1; then
   run gcloud tasks queues create "$TASKS_QUEUE" --project "$GCP_PROJECT_ID" \
-    --location "$TASKS_LOCATION" --max-concurrent-dispatches 20 \
-    --max-dispatches-per-second 10
+    --location "$TASKS_LOCATION" \
+    --max-concurrent-dispatches "$TASKS_MAX_CONCURRENT_DISPATCHES" \
+    --max-dispatches-per-second "$TASKS_MAX_DISPATCHES_PER_SECOND"
 fi
+run gcloud tasks queues update "$TASKS_QUEUE" --project "$GCP_PROJECT_ID" \
+  --location "$TASKS_LOCATION" \
+  --max-concurrent-dispatches "$TASKS_MAX_CONCURRENT_DISPATCHES" \
+  --max-dispatches-per-second "$TASKS_MAX_DISPATCHES_PER_SECOND" \
+  --max-attempts 5 --max-retry-duration 3600s \
+  --min-backoff 10s --max-backoff 300s --max-doublings 5
 
 if [[ "$ENABLE_VECTOR_SEARCH" == "true" ]]; then
   ensure_collection "$VECTOR_PRIVATE_COLLECTION" "Case Closed matter evidence"

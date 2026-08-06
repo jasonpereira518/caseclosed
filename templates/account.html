@@ -5,7 +5,7 @@
 <main class="account-center" id="main">
   <header class="account-center__header">
     <div><a href="{{ url_for('main.workspace') }}">← Workspace</a><h1>Account center</h1><p>Manage your profile, workspaces, and information.</p></div>
-    <a href="{{ url_for('auth.logout') }}">Sign out</a>
+    <a href="{{ url_for('auth.logout') }}" data-clerk-sign-out>Sign out</a>
   </header>
   <div id="account-status" role="status" aria-live="polite"></div>
   <section class="account-panel">

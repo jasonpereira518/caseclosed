@@ -72,19 +72,24 @@ def ensure_user(claims: dict) -> dict:
     snap = user_ref.get()
     existing = snap.to_dict() if snap.exists else {}
     timestamp = now()
+    providers = {
+        str(value) for value in (claims.get("providers") or []) if value
+    }
+    providers |= set(existing.get("providers") or [])
+    providers |= set((claims.get("firebase") or {}).get("sign_in_provider", "").split())
+    providers |= set(((claims.get("firebase") or {}).get("identities") or {}).keys())
     identity = {
         "uid": uid,
         "email": claims.get("email") or existing.get("email"),
         "email_verified": bool(claims.get("email_verified", existing.get("email_verified", False))),
         "display_name": existing.get("display_name") or claims.get("name") or "",
         "avatar_url": existing.get("avatar_url") or claims.get("picture") or "",
-        "providers": sorted(
-            set(existing.get("providers") or [])
-            | set((claims.get("firebase") or {}).get("sign_in_provider", "").split())
-            | set(((claims.get("firebase") or {}).get("identities") or {}).keys())
-        ),
+        "providers": sorted(providers),
         "updated_at": timestamp,
     }
+    for field in ("auth_provider", "clerk_user_id", "legacy_firebase_uid", "auth_status"):
+        if claims.get(field) is not None:
+            identity[field] = claims[field]
     if not snap.exists:
         identity["created_at"] = timestamp
     wid = personal_workspace_id(uid)

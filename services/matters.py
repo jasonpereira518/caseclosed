@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 
 import config
+from google.cloud import firestore as gc_firestore
 from services.firestore import get_firestore_client
 from services.tenancy import ADMIN_ROLES, AuthorizationError, audit, membership, now
 
@@ -236,8 +237,10 @@ def list_matters(workspace_id: str, uid: str) -> list[dict]:
 
 def delete_matter(matter_id: str, uid: str) -> bool:
     workspace_id, ref, _ = require_matter(matter_id, uid)
+    from services.retrieval import delete_matter_index
+    delete_matter_index(matter_id, uid)
     for collection_name in [*LIST_COLLECTIONS.values(), "state", "drafts", "time_entries",
-                            "jobs", "knowledge_chunks"]:
+                            "jobs"]:
         for snap in ref.collection(collection_name).stream():
             if collection_name == "documents":
                 for chunk in snap.reference.collection("text_chunks").stream():
@@ -256,10 +259,26 @@ def append_time_entry(matter_id: str, uid: str, seconds: int):
     workspace_id, ref, _ = require_matter(matter_id, uid)
     value = max(0, int(seconds))
     if not value:
-        return
-    ref.collection("time_entries").document().set(
-        {"user_id": str(uid), "seconds": value, "created_at": now()})
+        raise ValueError("seconds must be positive")
+    entry_ref = ref.collection("time_entries").document()
+    transaction = get_firestore_client().transaction()
+
+    @gc_firestore.transactional
+    def record(txn):
+        snap = ref.get(transaction=txn)
+        if not snap.exists:
+            raise AuthorizationError("matter not found")
+        current = int((snap.to_dict() or {}).get("total_seconds", 0) or 0)
+        timestamp = now()
+        total = current + value
+        txn.set(ref, {"total_seconds": total, "updated_at": timestamp}, merge=True)
+        txn.set(entry_ref, {"user_id": str(uid), "seconds": value,
+                            "created_at": timestamp})
+        return total
+
+    total = record(transaction)
     audit(workspace_id, uid, "time.recorded", {"seconds": value}, matter_id)
+    return total
 
 
 def append_message(matter_id: str, uid: str, role: str, content: str,
@@ -312,11 +331,11 @@ def replace_matter_records(matter_id: str, uid: str, collection_name: str,
 
 
 def upsert_document(matter_id: str, uid: str, document_id: str, metadata: dict, text: str):
-    """Store extracted text only; no original-file location is accepted."""
+    """Store document metadata, its private object path, and extracted text."""
     _, ref, _ = require_matter(str(matter_id), str(uid))
     doc_ref = ref.collection("documents").document(str(document_id))
     payload = {key: value for key, value in dict(metadata or {}).items()
-               if key not in {"storage_path", "original_path", "text"}}
+               if key not in {"original_path", "text"}}
     payload.update({"text_chunked": bool(text), "updated_at": now()})
     doc_ref.set(payload, merge=True)
     existing = {snap.id: snap for snap in doc_ref.collection("text_chunks").stream()}

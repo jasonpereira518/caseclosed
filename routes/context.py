@@ -226,24 +226,20 @@ def delete_context_route():
 @context_bp.route("/session/track-time", methods=["POST"])
 @login_required
 def track_time():
-    print(f"[ROUTE] /session/track-time called with body: {request.get_json(silent=True)}")
     data = request.get_json(silent=True) or {}
     context_id = data.get("matter_id") or data.get("context_id")
-    seconds = data.get("seconds", 0)
+    if not context_id:
+        return jsonify({"error": "context_id is required"}), 400
+    try:
+        seconds = int(data.get("seconds", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "seconds must be an integer"}), 400
+    if seconds <= 0 or seconds > 86_400:
+        return jsonify({"error": "seconds must be between 1 and 86400"}), 400
     user_id = str(current_user.get_id())
-    
-    print(f"[TRACK-TIME] Received seconds: {seconds}")
-    
+
     context = get_stored_context(context_id, user_id)
     if not context:
         return jsonify({"total_seconds": 0}), 404
-
-    print(f"[TRACK-TIME] Context BEFORE: total_seconds = {context.get('total_seconds', 'KEY MISSING')}")
-    if hasattr(context, "set"):
-        context.set("total_seconds", int(context.get("total_seconds", 0)) + int(seconds), touch=False)
-    else:
-        context["total_seconds"] = int(context.get("total_seconds", 0)) + int(seconds)
-    append_time_entry(context_id, user_id, seconds)
-    print(f"[TRACK-TIME] Context AFTER: total_seconds = {context.get('total_seconds')}")
-    
-    return jsonify({"total_seconds": context["total_seconds"]})
+    total = append_time_entry(context_id, user_id, seconds)
+    return jsonify({"total_seconds": total})

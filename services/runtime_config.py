@@ -12,6 +12,22 @@ def validate_runtime_config(*, production: bool = False) -> dict:
 
     if config.ENVIRONMENT not in {"development", "test", "production"}:
         errors.append("ENVIRONMENT must be development, test, or production")
+    if config.AUTH_PROVIDER not in {"clerk", "firebase"}:
+        errors.append("AUTH_PROVIDER must be clerk or firebase")
+    if config.AUTH_PROVIDER == "clerk":
+        required = {
+            "CLERK_PUBLISHABLE_KEY": config.CLERK_PUBLISHABLE_KEY,
+            "CLERK_SECRET_KEY": config.CLERK_SECRET_KEY,
+            "CLERK_FRONTEND_API_URL": config.CLERK_FRONTEND_API_URL,
+        }
+        errors.extend(f"{name} is required when AUTH_PROVIDER=clerk"
+                      for name, value in required.items() if not value)
+        if not config.CLERK_AUTHORIZED_PARTIES:
+            errors.append("CLERK_AUTHORIZED_PARTIES must include at least one trusted origin")
+        if production and not config.CLERK_WEBHOOK_SIGNING_SECRET:
+            errors.append("CLERK_WEBHOOK_SIGNING_SECRET is required in production")
+    elif production and not config.FIREBASE_WEB_CONFIG:
+        errors.append("FIREBASE_WEB_CONFIG is required when AUTH_PROVIDER=firebase")
 
     if not config.PROJECT_ID:
         errors.append("PROJECT_ID is required")
@@ -64,7 +80,7 @@ def validate_runtime_config(*, production: bool = False) -> dict:
         warnings.append("Document AI is not configured; scanned PDFs will fail extraction")
 
     if production and not config.FIREBASE_STORAGE_BUCKET:
-        errors.append("FIREBASE_STORAGE_BUCKET is required for transient cloud ingestion")
+        errors.append("FIREBASE_STORAGE_BUCKET is required for durable document storage")
     if production and not (config.LEGAL_CORPUS_SYNC_TOKEN
                            or config.LEGAL_CORPUS_SYNC_SERVICE_ACCOUNT):
         warnings.append("Legal corpus synchronization is disabled because neither OIDC nor a token is configured")

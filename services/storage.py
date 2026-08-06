@@ -26,6 +26,20 @@ def upload_staging_file(file_object, workspace_id: str, matter_id: str,
     return storage_path
 
 
+def upload_matter_file(file_object, workspace_id: str, matter_id: str,
+                       document_id: str, filename: str,
+                       content_type: str | None = None) -> str:
+    """Persist an original upload at a server-owned, tenant-scoped path."""
+    storage_path = (
+        f"workspaces/{workspace_id}/matters/{matter_id}/documents/"
+        f"{document_id}/{filename}"
+    )
+    file_object.stream.seek(0)
+    _bucket().blob(storage_path).upload_from_file(
+        file_object.stream, content_type=content_type or "application/octet-stream")
+    return storage_path
+
+
 def upload_avatar(path: str, uid: str, filename: str, content_type: str | None = None) -> str:
     storage_path = f"users/{uid}/avatar/{filename}"
     blob = _bucket().blob(storage_path)

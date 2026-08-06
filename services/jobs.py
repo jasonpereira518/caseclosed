@@ -14,20 +14,35 @@ from services.tenancy import now
 
 
 def enqueue_account_job(job_id: str):
-    if not config.CLOUD_TASKS_QUEUE:
+    if config.TASKS_MODE == "inline":
         return False
-    if not config.PROJECT_ID or not config.JOB_WORKER_SECRET:
-        raise RuntimeError("PROJECT_ID and JOB_WORKER_SECRET are required with CLOUD_TASKS_QUEUE")
+    if config.TASKS_MODE != "cloud":
+        raise RuntimeError("TASKS_MODE must be 'inline' or 'cloud'")
+    if not all((config.TASKS_PROJECT_ID, config.TASKS_LOCATION, config.TASKS_QUEUE,
+                config.APP_BASE_URL, config.TASKS_SERVICE_ACCOUNT,
+                config.TASKS_WORKER_AUDIENCE)):
+        raise RuntimeError("Cloud Tasks configuration is incomplete")
     from google.cloud import tasks_v2
     client = tasks_v2.CloudTasksClient()
-    parent = client.queue_path(config.PROJECT_ID, config.CLOUD_TASKS_LOCATION, config.CLOUD_TASKS_QUEUE)
-    client.create_task(parent=parent, task={
+    parent = client.queue_path(config.TASKS_PROJECT_ID, config.TASKS_LOCATION, config.TASKS_QUEUE)
+    task = {
+        "name": client.task_path(config.TASKS_PROJECT_ID, config.TASKS_LOCATION,
+                                 config.TASKS_QUEUE, f"account-{job_id}"),
         "http_request": {
             "http_method": tasks_v2.HttpMethod.POST,
             "url": f"{config.APP_BASE_URL.rstrip('/')}/internal/account-jobs/{job_id}",
-            "headers": {"X-Case-Closed-Worker": config.JOB_WORKER_SECRET},
+            "oidc_token": {
+                "service_account_email": config.TASKS_SERVICE_ACCOUNT,
+                "audience": config.TASKS_WORKER_AUDIENCE,
+            },
         }
-    })
+    }
+    if config.INTERNAL_WORKER_TOKEN:
+        task["http_request"]["headers"] = {"X-Worker-Token": config.INTERNAL_WORKER_TOKEN}
+    try:
+        client.create_task(parent=parent, task=task)
+    except AlreadyExists:
+        pass
     return True
 
 

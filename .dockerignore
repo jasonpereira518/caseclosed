@@ -1,6 +1,12 @@
 .git
 .gitignore
 .DS_Store
+.agents
+.claude
+.codex
+.conda
+.idea
+.vscode
 .env
 .env.*
 .venv

@@ -3,11 +3,15 @@ import uuid
 from datetime import datetime, timezone
 
 from services.matters import (
+    LIST_COLLECTIONS,
+    ROOT_FIELDS,
+    STATE_FIELDS,
     create_matter,
     delete_matter,
     list_matters,
     load_matter,
     locate_matter,
+    patch_matter,
     save_matter,
 )
 from services.tenancy import active_workspace, personal_workspace_id
@@ -16,27 +20,44 @@ from services.firestore import get_firestore_client, load_context as load_legacy
 
 
 class FirestoreBackedDict(dict):
-    __slots__ = ("_context_id",)
+    __slots__ = ("_context_id", "_user_id")
 
-    def __init__(self, context_id, initial=None):
+    def __init__(self, context_id, user_id, initial=None):
         self._context_id = str(context_id)
+        self._user_id = str(user_id)
         super().__init__(initial or {})
 
     def __setitem__(self, key, value):
         super().__setitem__(key, value)
         _touch_updated_at(self)
-        save_context(self._context_id, dict(self))
+        _persist_fields(self._context_id, self._user_id, self, {key})
 
     def set(self, key, value, touch=True):
         super().__setitem__(key, value)
         if touch:
             _touch_updated_at(self)
-        save_context(self._context_id, dict(self))
+        _persist_fields(self._context_id, self._user_id, self, {key})
 
     def update(self, *args, **kwargs):
+        changed = set(dict(*args, **kwargs))
         super().update(*args, **kwargs)
         _touch_updated_at(self)
-        save_context(self._context_id, dict(self))
+        _persist_fields(self._context_id, self._user_id, self, changed)
+
+
+def _persist_fields(context_id, user_id, context, changed):
+    """Persist only changed matter sections so unrelated worker writes survive."""
+    changed = set(changed or ())
+    root = {key: context.get(key) for key in changed if key in ROOT_FIELDS}
+    state = {key: context.get(key) for key in changed if key in STATE_FIELDS}
+    if root or state:
+        patch_matter(str(context_id), str(user_id),
+                     root=root or None, state=state or None)
+    draft = {key: context.get(key) for key in changed if key in {"draft", "draft_type"}}
+    if draft:
+        save_matter(str(context_id), draft)
+    for key in changed & set(LIST_COLLECTIONS):
+        save_matter(str(context_id), {key: context.get(key) or []})
 
 
 def _now_iso():
@@ -83,7 +104,7 @@ def get_context(context_id, user_id=None):
         return {}
     loaded = load_matter(str(context_id), str(user_id)) or _migrate_legacy_context(
         str(context_id), str(user_id))
-    return FirestoreBackedDict(context_id, _ensure_metadata(loaded)) if loaded else {}
+    return FirestoreBackedDict(context_id, user_id, _ensure_metadata(loaded)) if loaded else {}
 
 
 def get_context_or_default(context_id, user_id=None):
@@ -92,9 +113,9 @@ def get_context_or_default(context_id, user_id=None):
     loaded = load_matter(str(context_id), str(user_id)) or _migrate_legacy_context(
         str(context_id), str(user_id))
     if loaded:
-        return FirestoreBackedDict(context_id, _ensure_metadata(loaded))
+        return FirestoreBackedDict(context_id, user_id, _ensure_metadata(loaded))
     _, ctx = create_new_context(str(user_id), context_id=str(context_id))
-    return FirestoreBackedDict(context_id, ctx)
+    return FirestoreBackedDict(context_id, user_id, ctx)
 
 
 def get_or_create_context(context_id, user_id=None):
@@ -103,17 +124,21 @@ def get_or_create_context(context_id, user_id=None):
     loaded = load_matter(str(context_id), str(user_id)) or _migrate_legacy_context(
         str(context_id), str(user_id))
     if loaded:
-        return FirestoreBackedDict(context_id, _ensure_metadata(loaded))
+        return FirestoreBackedDict(context_id, user_id, _ensure_metadata(loaded))
     # A missing indexed matter is new. A matter that exists but is inaccessible
     # must never be recreated in the caller's workspace under the same ID.
     workspace_id, _ = locate_matter(str(context_id))
     if workspace_id:
         return None
     _, ctx = create_new_context(str(user_id), context_id=str(context_id))
-    return FirestoreBackedDict(context_id, ctx)
+    return FirestoreBackedDict(context_id, user_id, ctx)
 
 
 def save_context(context_id, data):
+    if isinstance(data, FirestoreBackedDict):
+        # Field assignments on this wrapper are persisted immediately and
+        # granularly; rewriting the aggregate here would reintroduce races.
+        return
     save_matter(str(context_id), dict(data))
 
 

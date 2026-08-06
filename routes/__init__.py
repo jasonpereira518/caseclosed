@@ -12,6 +12,7 @@ from .demo import demo_bp
 from .account import account_bp, internal_bp
 from .jobs import jobs_bp
 from .system import system_bp
+from .webhooks import webhooks_bp
 
 
 def register_blueprints(app):
@@ -30,3 +31,4 @@ def register_blueprints(app):
     app.register_blueprint(internal_bp)
     app.register_blueprint(jobs_bp)
     app.register_blueprint(system_bp)
+    app.register_blueprint(webhooks_bp)

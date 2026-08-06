@@ -14,7 +14,7 @@ search_bp = Blueprint("search", __name__)
 def search():
     """Search across all user content. Accepts {query, filters}."""
     data = request.get_json(silent=True) or {}
-    query = (data.get("query") or "").strip()
+    query = str(data.get("query") or "").strip()
 
     if not query:
         return jsonify({"results": [], "total": 0, "query": ""})

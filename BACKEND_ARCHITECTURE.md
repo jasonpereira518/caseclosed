@@ -2,6 +2,8 @@
 
 Case Closed uses Flask as the authenticated gateway, Firestore as the system of record, Cloud Tasks for durable work, Gemini on Vertex AI for model calls, CourtListener for case search, Document AI for OCR, and Google Cloud Vector Search for semantic retrieval.
 
+Clerk authenticates browser requests with Google. The Flask gateway verifies Clerk session tokens and uses the custom `userId` session claim as the stable application user ID. Migrated accounts carry their Firebase UID as Clerk `external_id`, preserving existing Firestore ownership paths. New Clerk users use their Clerk ID until or unless a separate application ID is assigned. Firestore—not Clerk Organizations—remains authoritative for workspaces, membership, roles, invitations, and matter access.
+
 ## Request and data flow
 
 ```text
@@ -87,9 +89,9 @@ The model can cite only source IDs included in its retrieval packet. Unknown IDs
 
 ## Document ingestion and retention
 
-Uploads are jobs too. In Cloud Tasks mode the original is staged under `staging/{workspace}/{matter}/{document}` only long enough for the worker to extract it. Native PDF text is attempted first; low-text PDFs use Document AI when configured. DOCX and TXT are supported; legacy DOC is rejected explicitly.
+Uploads are jobs too. Originals are stored under a tenant-scoped `workspaces/{workspace}/matters/{matter}/documents/{document}` path and referenced by the Firestore document record. Native PDF text is attempted first; low-text PDFs use Document AI when configured. DOCX and TXT are supported; legacy DOC is rejected before a job is created.
 
-After extraction, only metadata, extracted text, and retrieval chunks are retained. The staging object is deleted in a `finally` block on success, failure, or cancellation. Configure a short Cloud Storage lifecycle rule on `staging/` as crash protection. There is intentionally no matter-document download endpoint.
+After extraction, metadata, the private original, extracted text, and retrieval chunks are retained. Account exports include originals. Legacy jobs that still reference `staging/` keep their source through automatic retries and remove it only after success, cancellation, or final failure. Configure a short Cloud Storage lifecycle rule on `staging/` as crash protection.
 
 ## Knowledge retrieval
 
@@ -99,13 +101,16 @@ Matter document chunks carry `workspace_id` and `matter_id`. Shared-law chunks c
 
 ## Production setup checklist
 
-1. Create the Cloud Tasks queue and grant its service account Cloud Run invoker access.
-2. Set `TASKS_MODE=cloud`, the queue variables, worker URL/audience, and task service account. The worker verifies Google-signed OIDC tokens; the static worker token is an optional emulator fallback only.
-3. Create private and shared Vector Search collections with the fields emitted by `services.retrieval`, then enable `VECTOR_SEARCH_ENABLED`.
-4. Create a Document AI OCR processor and set its processor ID.
-5. Add a Storage lifecycle rule that deletes `staging/` objects after one day or less.
-6. Configure and validate each official jurisdiction adapter, then schedule the protected corpus endpoint daily.
-7. Run the Firestore migration dry-run before `--apply`, deploy deny-all client rules, and monitor job failure rate, duration by stage, retrieval fallback warnings, and citation rejection rate.
+1. Create a Clerk production instance, configure production Google OAuth credentials and Google-only sign-in, and add `{ "userId": "{{user.external_id || user.id}}" }` to session claims.
+2. Configure the production `/webhooks/clerk` endpoint, subscribe to `user.created`, `user.updated`, and `user.deleted`, and set `CLERK_WEBHOOK_SIGNING_SECRET`.
+3. Import the Firebase user into production Clerk and write the Firestore mapping during a brief closed-traffic cutover. Existing sessions will require a one-time sign-in through Clerk.
+4. Create the Cloud Tasks queue and grant its service account Cloud Run invoker access.
+5. Set `TASKS_MODE=cloud`, the queue variables, worker URL/audience, and task service account. The worker verifies Google-signed OIDC tokens; the static worker token is an optional emulator fallback only.
+6. Create private and shared Vector Search collections with the fields emitted by `services.retrieval`, then enable `VECTOR_SEARCH_ENABLED`.
+7. Create a Document AI OCR processor and set its processor ID.
+8. Add a Storage lifecycle rule that deletes `staging/` objects after one day or less.
+9. Configure and validate each official jurisdiction adapter, then schedule the protected corpus endpoint daily.
+10. Run the Firestore migration dry-run before `--apply`, deploy deny-all client rules, and monitor authentication failures, webhook retries, job failure rate, duration by stage, retrieval fallback warnings, and citation rejection rate.
 
 Gemini inference uses a separate endpoint setting from regional infrastructure. The default `GEMINI_LOCATION=global` serves the GA fast/reasoning tiers (`gemini-3.5-flash-lite` and `gemini-3.6-flash`); use an approved `us` or `eu` endpoint when the deployment requires jurisdictional processing and the selected models support it.
 

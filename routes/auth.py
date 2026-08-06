@@ -1,10 +1,9 @@
-"""Firebase Authentication browser flows and secure server sessions."""
+"""Clerk authentication flows with a temporary Firebase rollback path."""
 from datetime import timedelta
 from urllib.parse import urlparse
 
-from firebase_admin import auth as firebase_auth
 from flask import Blueprint, jsonify, make_response, redirect, render_template, request, session, url_for
-from flask_login import current_user, logout_user
+from flask_login import current_user, login_required, logout_user
 
 import config
 from services.firestore import get_firestore_client
@@ -20,21 +19,37 @@ def _safe_next(value):
 
 @auth_bp.route("/login")
 def login():
-    if current_user.is_authenticated and not request.args.get("invite"):
-        return redirect(_safe_next(request.args.get("next")))
-    return render_template("login.html", firebase_config=config.FIREBASE_WEB_CONFIG,
-                           next_url=_safe_next(request.args.get("next")),
-                           invite_token=request.args.get("invite", ""))
+    next_url = _safe_next(request.args.get("next"))
+    invite_token = request.args.get("invite", "")
+    if current_user.is_authenticated:
+        if invite_token:
+            return redirect(url_for("auth.complete_login", next=next_url, invite=invite_token))
+        return redirect(next_url)
+    complete_url = url_for("auth.complete_login", next=next_url, invite=invite_token)
+    return render_template(
+        "login.html",
+        firebase_config=config.FIREBASE_WEB_CONFIG,
+        next_url=next_url,
+        invite_token=invite_token,
+        complete_url=complete_url,
+        error=request.args.get("error", ""),
+    )
 
 
 @auth_bp.route("/session", methods=["POST"])
 def create_session():
+    if config.AUTH_PROVIDER != "firebase":
+        return jsonify({"error": "Firebase session exchange is disabled"}), 404
+    from firebase_admin import auth as firebase_auth
+
     data = request.get_json(silent=True) or {}
     id_token = data.get("id_token")
     if not id_token:
         return jsonify({"error": "id_token is required"}), 400
     origin = request.headers.get("Origin")
-    if origin and origin.rstrip("/") != request.host_url.rstrip("/"):
+    expected_origin = (config.APP_BASE_URL if config.ENVIRONMENT == "production"
+                       else request.host_url).rstrip("/")
+    if origin and origin.rstrip("/") != expected_origin:
         return jsonify({"error": "invalid origin"}), 403
     try:
         get_firestore_client()
@@ -55,8 +70,30 @@ def create_session():
     return response
 
 
+@auth_bp.route("/complete")
+@login_required
+def complete_login():
+    """Finish app-specific onboarding after Clerk establishes its session."""
+    next_url = _safe_next(request.args.get("next"))
+    invite_token = request.args.get("invite", "")
+    if invite_token:
+        from services.tenancy import AuthorizationError, ValidationError, accept_invitation
+
+        try:
+            accept_invitation(str(current_user.get_id()), current_user.email, invite_token)
+        except (AuthorizationError, ValidationError) as exc:
+            return redirect(url_for("auth.login", next=next_url, error=str(exc)))
+    session.clear()
+    return redirect(next_url)
+
+
 @auth_bp.route("/logout", methods=["GET", "POST"])
 def logout():
+    if config.AUTH_PROVIDER == "clerk":
+        session.clear()
+        return render_template("logout.html", redirect_url=url_for("main.index"))
+    from firebase_admin import auth as firebase_auth
+
     cookie = request.cookies.get(config.AUTH_SESSION_COOKIE)
     if cookie:
         try:

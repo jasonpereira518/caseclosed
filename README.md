@@ -2,7 +2,7 @@
 
 **Case Closed** is an AI-powered legal research assistant. It provides durable personal and team workspaces: matters, chats, documents, analysis, notes, and drafts are restored from the signed-in account on any device.
 
-The public landing page is available at `/`. The authenticated litigation workspace is at `/app`, and the profile/team/data center is at `/account`. Firebase Authentication supports Google, verified email/password, and email magic links.
+The public landing page is available at `/`. The authenticated litigation workspace is at `/app`, and the profile/team/data center is at `/account`. Clerk provides Google-only identity; Firestore remains authoritative for profiles, workspaces, roles, invitations, and matters.
 
 ---
 
@@ -10,7 +10,7 @@ The public landing page is available at `/`. The authenticated litigation worksp
 
 From a user’s perspective, the app provides:
 
-- **Background document ingestion** — Originals are staged transiently, OCR'd when necessary, and discarded after extracted text is indexed.
+- **Background document ingestion** — Originals are retained in private, tenant-scoped Storage while extraction and OCR run asynchronously.
 - **Intent-based, asynchronous chat** — Chat is acknowledged immediately; persisted jobs report progress while grounded Q&A or deeper research runs.
 - **Strict source grounding** — Matter evidence and shared law are retrieved separately, and model citations must resolve to a retrieved source.
 - **CourtListener case search with LLM-powered relevance ranking** — Cases are fetched from CourtListener, scored for relevance, and sorted with short explanations.
@@ -28,11 +28,11 @@ From a user’s perspective, the app provides:
 | LLM | Google Gemini via [Vertex AI](https://cloud.google.com/vertex-ai) (`google-genai`) |
 | Case search | [CourtListener](https://www.courtlistener.com/) REST API |
 | PDF | [pdfminer.six](https://github.com/pdfminer/pdfminer.six) |
-| Identity | Firebase Authentication |
+| Identity | Clerk (Firebase Authentication retained temporarily for rollback) |
 | Database | Cloud Firestore |
 | Background work | Google Cloud Tasks + Cloud Run |
 | Retrieval | Google Cloud Vector Search with tenant filters |
-| OCR / transient files | Document AI + private Cloud Storage staging |
+| Documents and OCR | Private Cloud Storage originals + Document AI |
 | Container | Docker (`python:3.11-slim`) |
 
 ---
@@ -81,8 +81,9 @@ caseclosed/
 2. **Credentials and environment**
    - Create a `.env` file in the project root (see [Environment variables](#environment-variables) below). Do not commit real secrets.
    - Add a Google Cloud **service account** JSON key as `key.json` in the project root (or set `GOOGLE_APPLICATION_CREDENTIALS` to another path). See [Google Cloud: service account keys](https://cloud.google.com/iam/docs/keys-create-delete).
-   - In Firebase Authentication, enable Google, Email/Password, and Email Link providers and add the local/production hosts to Authorized domains.
-   - Create a private Firebase Storage bucket, deploy the included Firestore/Storage rules, and place the Firebase web app configuration in `FIREBASE_WEB_CONFIG`.
+   - Link the project to the Case Closed Clerk application, pull development keys, and configure Google as the only sign-in method in Clerk.
+   - Customize the Clerk session token with `{ "userId": "{{user.external_id || user.id}}" }` so migrated Firebase users keep their existing app IDs.
+   - Create a private Firebase Storage bucket and deploy the included Firestore/Storage rules. Firebase remains the data plane, not the identity provider.
 
 3. **Install dependencies**
 
@@ -126,6 +127,11 @@ All values are read from the environment (and optionally `.env` via `python-dote
 | Variable | Purpose |
 |----------|---------|
 | `FLASK_SECRET_KEY` | Secret key for Flask sessions (signing cookies). |
+| `AUTH_PROVIDER` | Active identity provider: `clerk` (default) or temporary rollback value `firebase`. |
+| `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Clerk frontend and backend API keys. Never expose the secret key to browser code. |
+| `CLERK_JWT_KEY` | Optional PEM public key for networkless Clerk session verification. |
+| `CLERK_AUTHORIZED_PARTIES` | Comma-separated trusted origins checked against Clerk's `azp` claim. |
+| `CLERK_WEBHOOK_SIGNING_SECRET` | Svix signing secret for `/webhooks/clerk`. |
 | `UPLOAD_FOLDER` | Directory where uploaded PDFs are written temporarily (defaults to the system temp directory). |
 | `MAX_CONTENT_LENGTH` | Maximum upload size in bytes (default aligns with prior app limit). |
 | `PORT` | HTTP port for `python app.py` (default **5050**). |
@@ -135,15 +141,14 @@ All values are read from the environment (and optionally `.env` via `python-dote
 | `GEMINI_LOCATION` | Gemini model endpoint, normally `global` (or an approved jurisdictional multi-region). |
 | `COURTLISTENER_TOKEN` | Optional CourtListener API token for authenticated search requests. |
 | `COURTLISTENER_BASE_URL` | CourtListener search API base URL (override only if needed). |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to the GCP service account JSON file (default `key.json` in the working directory). |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Optional standard Google Application Default Credentials path. Leave unset on Cloud Run to use its service identity. |
 | `FIREBASE_CREDENTIALS` | Optional Firebase service-account path; otherwise Application Default Credentials are used. |
 | `FIREBASE_WEB_CONFIG` | Public Firebase web configuration as one JSON object. |
-| `FIREBASE_STORAGE_BUCKET` | Private bucket used for transient ingestion staging, avatars, and account exports. |
+| `FIREBASE_STORAGE_BUCKET` | Private bucket used for matter originals, avatars, and account exports. |
 | `AUTH_COOKIE_SECURE` | Set `true` for HTTPS deployments; defaults from `APP_BASE_URL`. |
 | `APP_BASE_URL` | Public application URL used in workspace invitations. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | SMTP delivery for team invitations. |
-| `CLOUD_TASKS_QUEUE`, `CLOUD_TASKS_LOCATION`, `JOB_WORKER_SECRET` | Optional durable background processing for large account exports. Without a queue, local development processes exports inline. |
-| `TASKS_MODE`, `TASKS_PROJECT_ID`, `TASKS_LOCATION`, `TASKS_QUEUE`, `TASKS_WORKER_URL`, `TASKS_WORKER_AUDIENCE`, `TASKS_SERVICE_ACCOUNT`, `INTERNAL_WORKER_TOKEN` | Matter chat/document worker transport. Use `inline` locally and verified service-account OIDC in production. |
+| `TASKS_MODE`, `TASKS_PROJECT_ID`, `TASKS_LOCATION`, `TASKS_QUEUE`, `TASKS_WORKER_URL`, `TASKS_WORKER_AUDIENCE`, `TASKS_SERVICE_ACCOUNT`, `INTERNAL_WORKER_TOKEN` | Chat, document, and account-export worker transport. Use `inline` locally and verified service-account OIDC in production. |
 | `VECTOR_SEARCH_ENABLED`, `VECTOR_SEARCH_PROJECT_ID`, `VECTOR_SEARCH_LOCATION`, `VECTOR_PRIVATE_COLLECTION`, `VECTOR_LEGAL_COLLECTION`, `VECTOR_SEARCH_FIELD`, `VECTOR_EMBEDDING_MODEL`, `VECTOR_EMBEDDING_DIMENSIONS` | Tenant-safe private/shared semantic retrieval and its managed embedding schema. |
 | `DOCUMENT_AI_PROCESSOR_ID`, `DOCUMENT_AI_LOCATION` | OCR fallback for scanned PDFs. |
 | `LEGAL_SOURCE_REGISTRY`, `LEGAL_CORPUS_SYNC_TOKEN`, `LEGAL_CORPUS_SYNC_SERVICE_ACCOUNT`, `LEGAL_CORPUS_SYNC_AUDIENCE`, `LEGAL_CORPUS_DAILY_LIMIT` | Official jurisdiction feed adapters and protected daily sync. OIDC is preferred in production. |
@@ -175,6 +180,8 @@ scripts/provision_gcp.sh --check
 # Review the commands, then explicitly run --apply when ready.
 ```
 
+The default deployment avoids always-on vector replicas and an empty daily sync job. Set `ENABLE_VECTOR_SEARCH=true` only when semantic-search volume justifies a billed index, and set `ENABLE_LEGAL_CORPUS_SYNC=true` only after official source feeds are configured.
+
 After deployment, run `scripts/verify_gcp.sh`. Document AI processor creation remains a separate explicit step with `python scripts/create_document_ai_processor.py --apply`.
 
 ### Database migration
@@ -186,7 +193,19 @@ python scripts/migrate_firestore_v2.py --report migration-report.json
 python scripts/migrate_firestore_v2.py --apply --report migration-report-applied.json
 ```
 
-The migration matches legacy users to Firebase identities through email, creates personal workspaces, normalizes owned contexts, and quarantines ownerless records instead of assigning them implicitly.
+The Firestore migration matches legacy users to Firebase identities through email, creates personal workspaces, normalizes owned contexts, and quarantines ownerless records instead of assigning them implicitly.
+
+To move Firebase identities to Clerk, export users with the Firebase CLI and run the importer in dry-run mode before applying it. Use development Clerk keys for a rehearsal without `--write-firestore-mapping`. During the production cutover, use production Clerk keys and write the mapping before opening traffic:
+
+```bash
+firebase auth:export /tmp/caseclosed-firebase-users.json --format=json --project YOUR_PROJECT_ID
+python scripts/migrate_firebase_user_to_clerk.py /tmp/caseclosed-firebase-users.json
+python scripts/migrate_firebase_user_to_clerk.py /tmp/caseclosed-firebase-users.json --apply
+# Production cutover only:
+python scripts/migrate_firebase_user_to_clerk.py /tmp/caseclosed-firebase-users.json --apply --write-firestore-mapping
+```
+
+Password migrations require `FIREBASE_AUTH_SIGNER_KEY`, `FIREBASE_AUTH_SALT_SEPARATOR`, `FIREBASE_AUTH_ROUNDS`, and `FIREBASE_AUTH_MEMORY_COST`. Google-only users need no password hash parameters. The importer preserves each Firebase UID as Clerk `external_id`, is idempotent, and expects one user by default. Existing sessions are intentionally invalidated at cutover, so every user signs in once through Clerk; new users are provisioned synchronously on their first authenticated request and then reconciled by webhook.
 
 Deploy `firestore.rules` and `storage.rules` to keep browsers out of the data plane; the Flask backend is the only authorized gateway.
 

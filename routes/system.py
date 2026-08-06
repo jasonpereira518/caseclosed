@@ -9,6 +9,7 @@ system_bp = Blueprint("system", __name__)
 
 
 @system_bp.route("/healthz")
+@system_bp.route("/livez")
 def healthz():
     return jsonify({"status": "ok"})
 

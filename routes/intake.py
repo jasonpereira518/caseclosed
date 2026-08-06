@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_login import current_user, login_required
 import traceback
 
-from models.context import get_context as get_stored_context, get_or_create_context, save_context
+from models.context import get_or_create_context, save_context
 from services.llm import extract_structured_analysis, extract_timeline, extract_statutes, extract_case_strength
 
 intake_bp = Blueprint("intake", __name__)
@@ -20,15 +20,17 @@ def process_intake():
     if ctx is None:
         return jsonify({"error": "forbidden"}), 403
 
-    case_title = payload.get("case_title", "").strip()
-    legal_category = payload.get("legal_category", "").strip()
-    jurisdiction = payload.get("jurisdiction", "").strip()
-    court_level = payload.get("court_level", "").strip()
-    user_role = payload.get("user_role", "").strip()
-    description = payload.get("description", "").strip()
+    case_title = str(payload.get("case_title") or "").strip()
+    legal_category = str(payload.get("legal_category") or "").strip()
+    jurisdiction = str(payload.get("jurisdiction") or "").strip()
+    court_level = str(payload.get("court_level") or "").strip()
+    user_role = str(payload.get("user_role") or "").strip()
+    description = str(payload.get("description") or "").strip()
     key_dates = payload.get("key_dates", [])
-    prior_legal_actions = payload.get("prior_legal_actions", "").strip()
-    opposing_party = payload.get("opposing_party", "").strip()
+    if not isinstance(key_dates, list) or any(not isinstance(item, dict) for item in key_dates):
+        return jsonify({"error": "key_dates must be an array of objects"}), 400
+    prior_legal_actions = str(payload.get("prior_legal_actions") or "").strip()
+    opposing_party = str(payload.get("opposing_party") or "").strip()
 
     ctx["intake"] = payload
     

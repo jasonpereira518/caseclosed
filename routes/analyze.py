@@ -12,13 +12,16 @@ analyze_bp = Blueprint("analyze", __name__)
 @login_required
 def analyze():
     """Extract structured analysis from text or use existing context."""
-    payload = request.json or {}
-    text = payload.get("text", "").strip()
+    payload = request.get_json(silent=True) or {}
+    text = str(payload.get("text") or "").strip()
     context_id = payload.get("matter_id") or payload.get("context_id")
 
     uid = str(current_user.get_id())
+    context = None
     if not text and context_id:
         context = get_stored_context(context_id, uid)
+        if not context:
+            return jsonify({"error": "forbidden or not found"}), 403
         text = context.get("description", "")
 
     if not text:
@@ -29,7 +32,8 @@ def analyze():
     statutes = extract_statutes(text, analysis)
 
     # Note logic explicitly requested by user mapping
-    strength = extract_case_strength(text, analysis, statutes, context.get("cases", []) if context_id else [])
+    cases = context.get("cases", []) if context else []
+    strength = extract_case_strength(text, analysis, statutes, cases)
 
     # Update context if provided
     if context_id:
@@ -59,9 +63,9 @@ def add_timeline_event():
     if not ctx:
         return jsonify({"error": "forbidden or not found"}), 403
         
-    date_val = payload.get("date", "").strip()
-    desc_val = payload.get("description", "").strip()
-    cat_val = payload.get("category", "other").strip()
+    date_val = str(payload.get("date") or "").strip()
+    desc_val = str(payload.get("description") or "").strip()
+    cat_val = str(payload.get("category") or "other").strip()
     if cat_val not in {"incident", "event"}:
         cat_val = "event"
         

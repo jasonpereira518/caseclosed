@@ -85,6 +85,7 @@ class AsyncChatTests(unittest.TestCase):
         response = self.client.get("/healthz")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"status": "ok"})
+        self.assertEqual(self.client.get("/livez").status_code, 200)
 
     @patch("services.runtime_config.config")
     def test_production_preflight_rejects_inline_jobs(self, runtime_config):

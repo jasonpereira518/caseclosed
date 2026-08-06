@@ -1,4 +1,5 @@
 import os
+import logging
 
 import config
 
@@ -54,23 +55,31 @@ def load_user(user_id):
 
 
 @login_manager.request_loader
-def load_user_from_firebase_cookie(req):
-    """Authenticate Firebase session cookies while legacy sessions migrate."""
-    cookie = req.cookies.get(config.AUTH_SESSION_COOKIE)
-    if not cookie:
-        return None
-    try:
-        from firebase_admin import auth as firebase_auth
-        from services.firestore import get_firestore_client
-        from services.tenancy import ensure_user
-        from models.user import load_user as load_user_from_store
+def load_user_from_identity_provider(req):
+    """Authenticate the one identity provider selected for this deployment."""
+    if config.AUTH_PROVIDER == "clerk":
+        from services.clerk_auth import authenticate_clerk_request
 
-        get_firestore_client()
-        claims = firebase_auth.verify_session_cookie(cookie, check_revoked=True)
-        ensure_user(claims)
-        return load_user_from_store(claims["uid"])
-    except Exception:
-        return None
+        try:
+            return authenticate_clerk_request(req)
+        except Exception as exc:
+            logging.info("Clerk request authentication failed: %s", exc.__class__.__name__)
+            return None
+    if config.AUTH_PROVIDER == "firebase":
+        cookie = req.cookies.get(config.AUTH_SESSION_COOKIE)
+        if not cookie:
+            return None
+        try:
+            from firebase_admin import auth as firebase_auth
+            from services.firestore import get_firestore_client
+            from models.user import load_user as load_user_from_store
+
+            get_firestore_client()
+            claims = firebase_auth.verify_session_cookie(cookie, check_revoked=True)
+            return load_user_from_store(claims["uid"])
+        except Exception as exc:
+            logging.info("Firebase session authentication failed: %s", exc.__class__.__name__)
+    return None
 
 
 @login_manager.unauthorized_handler
@@ -84,6 +93,24 @@ app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
 app.config["UPLOAD_FOLDER"] = config.UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH
+
+
+@app.context_processor
+def identity_template_context():
+    return {
+        "auth_provider": config.AUTH_PROVIDER,
+        "clerk_enabled": config.AUTH_PROVIDER == "clerk" and bool(
+            config.CLERK_PUBLISHABLE_KEY
+            and config.CLERK_SECRET_KEY
+            and config.CLERK_FRONTEND_API_URL
+        ),
+        "clerk_publishable_key": config.CLERK_PUBLISHABLE_KEY,
+        "clerk_frontend_api_url": config.CLERK_FRONTEND_API_URL,
+    }
+
+if config.ENVIRONMENT == "production":
+    from services.runtime_config import require_runtime_config
+    require_runtime_config(production=True)
 
 login_manager.init_app(app)
 login_manager.login_view = "auth.login"

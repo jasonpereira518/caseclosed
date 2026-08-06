@@ -7,7 +7,7 @@ from pdfminer.high_level import extract_text as extract_pdf_text_miner
 from werkzeug.utils import secure_filename
 
 def allowed_file(filename: str) -> bool:
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'pdf', 'docx', 'doc', 'txt'}
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'pdf', 'docx', 'txt'}
 
 def secure_save_document(file_obj, upload_folder: str) -> tuple[str, str]:
     """Generates a UUID-locked filename preventing cross-request race conditions."""

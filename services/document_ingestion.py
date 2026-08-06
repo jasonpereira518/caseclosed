@@ -19,24 +19,28 @@ def ingest_document_job(matter_id: str, job_id: str, data: dict) -> dict:
     uid = str(data.get("requested_by") or "")
     document_id = str(payload.get("document_id") or "")
     filename = str(payload.get("filename") or "document")
+    storage_path = str(payload.get("storage_path") or payload.get("staging_path") or "")
     staging_path = str(payload.get("staging_path") or "")
     local_path = str(payload.get("local_path") or "")
     temporary_download = ""
-    if not document_id or not (staging_path or local_path):
+    if not document_id or not (storage_path or local_path):
         raise ValueError("document ingestion payload is incomplete")
     try:
         path = local_path
-        if staging_path:
+        if storage_path:
             suffix = os.path.splitext(filename)[1]
             handle = tempfile.NamedTemporaryFile(prefix="caseclosed-ingest-", suffix=suffix, delete=False)
             temporary_download = handle.name
             try:
-                download_to_file(staging_path, handle)
+                download_to_file(storage_path, handle)
             finally:
                 handle.close()
             path = temporary_download
         with open(path, "rb") as source:
-            digest = hashlib.sha256(source.read()).hexdigest()
+            hasher = hashlib.sha256()
+            for block in iter(lambda: source.read(1024 * 1024), b""):
+                hasher.update(block)
+            digest = hasher.hexdigest()
         text = extract_document_text(path, filename).strip()
         if not text:
             raise ValueError("document yielded no extractable text")
@@ -49,6 +53,7 @@ def ingest_document_job(matter_id: str, job_id: str, data: dict) -> dict:
             "uploaded_at": now(), "sha256": digest,
             "content_type": payload.get("content_type") or "application/octet-stream",
             "size_bytes": os.path.getsize(path),
+            "storage_path": storage_path if storage_path and not staging_path else None,
         }
         upsert_document(matter_id, uid, document_id, metadata, text)
         chunks = index_matter_document(matter_id, uid, document_id, filename, text)
@@ -57,11 +62,25 @@ def ingest_document_job(matter_id: str, job_id: str, data: dict) -> dict:
             "chunk_count": chunks,
         }}
     finally:
-        if staging_path:
+        if temporary_download and os.path.exists(temporary_download):
+            try:
+                os.remove(temporary_download)
+            except OSError:
+                pass
+
+
+def cleanup_document_source(data: dict):
+    """Remove retry-only source files while retaining durable matter originals."""
+    payload = data.get("payload") or {}
+    staging_path = str(payload.get("staging_path") or "")
+    local_path = str(payload.get("local_path") or "")
+    if staging_path:
+        try:
             delete_path(staging_path)
-        for path in {temporary_download, local_path}:
-            if path and os.path.exists(path):
-                try:
-                    os.remove(path)
-                except OSError:
-                    pass
+        except Exception:
+            pass
+    if local_path and os.path.exists(local_path):
+        try:
+            os.remove(local_path)
+        except OSError:
+            pass
