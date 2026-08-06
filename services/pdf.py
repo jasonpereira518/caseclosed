@@ -84,24 +84,6 @@ def extract_document_text(filepath: str, original_filename: str) -> str:
     else:
         raise ValueError(f'Unsupported file type: .{ext}')
 
-def process_upload(file_obj, upload_folder: str, *, workspace_id=None, matter_id=None,
-                   document_id=None) -> dict:
-    """End-to-end ingestion: saves, parses, cleans up, and returns payload securely."""
-    if not file_obj or not allowed_file(file_obj.filename):
-        raise ValueError("Invalid or unsupported file type.")
-        
-    safe_name, path = secure_save_document(file_obj, upload_folder)
-    try:
-        text = extract_document_text(path, safe_name)
-        payload = {
-            "filename": safe_name,
-            "text": text,
-            "included": False
-        }
-        return payload
-    finally:
-        cleanup_temp_file(path)
-
 def cleanup_temp_file(filepath: str):
     try:
         if os.path.exists(filepath):

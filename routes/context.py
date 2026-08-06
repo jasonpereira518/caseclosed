@@ -23,7 +23,6 @@ context_bp = Blueprint("context", __name__)
 @context_bp.route("/context", methods=["GET"])
 @login_required
 def get_context():
-    print("[ROUTE] /context called")
     """Get current context for a session."""
     user_id = str(current_user.get_id())
     if "context_id" not in session:
@@ -42,7 +41,6 @@ def get_context():
     set_active_matter(user_id, context_id)
     context = get_context_or_default(context_id, user_id)
     session["workspace_id"] = context.get("workspace_id") or active_workspace(user_id)
-    print(f"[GET-CONTEXT] Returning total_seconds: {context.get('total_seconds', 0)}")
     return jsonify({
         "context_id": context_id, "matter_id": context_id,
         "workspace_id": session.get("workspace_id"),
@@ -54,13 +52,10 @@ def get_context():
 @context_bp.route("/contexts", methods=["GET"])
 @login_required
 def get_contexts():
-    print("[ROUTE] /contexts called")
     user_id = str(current_user.get_id())
     workspace_id = request.args.get("workspace_id") or session.get("workspace_id") or active_workspace(user_id)
     session["workspace_id"] = workspace_id
     sessions = list_user_contexts(user_id, workspace_id)
-    for ctx in sessions:
-        print(f"[CONTEXTS-LIST] {ctx.get('context_id', 'Unknown')}: total_seconds = {ctx.get('total_seconds', 'MISSING')}")
     sessions.sort(key=lambda s: s.get("updated_at") or "", reverse=True)
     if not sessions:
         context_id, ctx = create_new_context(user_id, workspace_id=workspace_id)
@@ -100,7 +95,6 @@ def create_context():
 @context_bp.route("/contexts/switch", methods=["POST"])
 @login_required
 def switch_context():
-    print(f"[ROUTE] /contexts/switch called with body: {request.get_json(silent=True)}")
     payload = request.json or {}
     context_id = str(payload.get("matter_id") or payload.get("context_id", "")).strip()
     user_id = str(current_user.get_id())
