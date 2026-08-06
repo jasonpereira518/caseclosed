@@ -722,33 +722,24 @@ function setupIntakeModal() {
                     body: JSON.stringify(payload)
                 });
                 const data = await res.json();
-                
+
                 if (!res.ok) throw new Error(data.error || 'Server error');
-                
+
                 contextId = data.context_id;
-                currentAnalysis = data.analysis || {};
-                currentTimeline = data.timeline || [];
-                currentStatutes = data.statutes || [];
-                currentStrength = data.strength || {};
-                
-                updateAnalysisPanel(data.analysis);
-                document.querySelector('[data-tab="record"]').click();
-                
-                if (data.messages && data.messages.length > 0) {
-                     const lastMsg = data.messages[data.messages.length - 1];
-                     appendMessage('user', lastMsg.content);
-                } else {
-                     appendMessage('user', '[Client Intake Form Submitted]');
-                }
-                
-                if (data.title) {
-                    const titleEl = document.getElementById('sidebar-session-title');
-                    if (titleEl) {
-                        titleEl.textContent = data.title;
-                    }
-                }
+                await pollJob(data.status_url, {
+                    onUpdate: job => {
+                        const stage = String(job.stage || 'analyzing').replace(/_/g, ' ');
+                        submitBtn.textContent = `${stage.charAt(0).toUpperCase()}${stage.slice(1)}…`;
+                    },
+                });
+
+                // The job persists analysis/timeline/statutes/strength and the
+                // intake route already persisted title/description/messages
+                // synchronously, so reloading the matter picks up all of it.
+                await loadContext();
                 await loadSessionHistory();
-                
+                document.querySelector('[data-tab="record"]').click();
+
                 closeModal(modal);
                 showToast('Case intake submitted and analyzed', 'success');
              } catch (err) {
@@ -1527,7 +1518,7 @@ async function handleAnalyze() {
         return;
     }
 
-    appendMessage('bot', 'Analyzing case...');
+    const loading = appendLoadingMessage('Analyzing case…');
     showAnalysisSkeleton();
 
     try {
@@ -1536,26 +1527,37 @@ async function handleAnalyze() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ context_id: contextId })
         });
-
         const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Unable to queue analysis');
 
-        if (data.error) {
-            appendMessage('bot', `Error: ${data.error}`);
+        const job = await pollJob(data.status_url, {
+            onUpdate: current => {
+                const bubble = loading.querySelector('.message-bubble');
+                if (bubble) {
+                    const stage = String(current.stage || 'working').replace(/_/g, ' ');
+                    bubble.innerHTML = `<span class="loading-spinner" aria-hidden="true"></span>${escapeHtml(stage)} · ${Number(current.progress || 0)}%`;
+                }
+            },
+        });
+        removeMessage(loading);
+
+        if (job.status !== 'succeeded') {
+            appendMessage('bot', `Error: ${job.error?.message || 'Analysis failed.'}`);
             return;
         }
 
-        if (data.analysis) {
-            currentAnalysis = data.analysis;
-            currentTimeline = data.timeline || [];
-            currentStatutes = data.statutes || [];
-            currentStrength = data.strength || {};
-            updateAnalysisPanel(data.analysis);
-            appendMessage('bot', 'Analysis complete! Check the Analysis panel.');
-            // Switch to analysis tab
-            document.querySelector('[data-tab="record"]').click();
-        }
+        const result = job.result || {};
+        currentAnalysis = result.analysis || {};
+        currentTimeline = result.timeline || [];
+        currentStatutes = result.statutes || [];
+        currentStrength = result.strength || {};
+        updateAnalysisPanel(currentAnalysis);
+        appendMessage('bot', 'Analysis complete! Check the Analysis panel.');
+        // Switch to analysis tab
+        document.querySelector('[data-tab="record"]').click();
     } catch (err) {
-        appendMessage('bot', 'Analysis failed.');
+        removeMessage(loading);
+        appendMessage('bot', err.message || 'Analysis failed.');
         console.error(err);
     }
 }
@@ -1748,22 +1750,29 @@ async function handleDraftGenerate() {
             return;
         }
 
-        if (data.error) {
-            draftContent.innerHTML = `<p class="empty-state">Error: ${data.error}</p>`;
+        if (!res.ok) {
+            draftContent.innerHTML = `<p class="empty-state">Error: ${data.error || 'Unable to queue draft'}</p>`;
             return;
         }
 
-        if (data.document) {
-            displayDraft(data.document);
-            currentDraft = data.document;
-            document.getElementById('draft-download-btn').hidden = false;
+        const job = await pollJob(data.status_url);
+
+        if (job.status !== 'succeeded') {
+            draftContent.innerHTML = `<p class="empty-state">${job.error?.message || 'Draft generation failed.'}</p>`;
+            return;
+        }
+
+        const draftDocument = job.result?.document;
+        if (draftDocument) {
+            displayDraft(draftDocument);
+            currentDraft = draftDocument;
             document.getElementById('draft-export-btn').hidden = false;
             appendMessage('bot', `Generated ${docType}! Check the Draft panel.`);
         } else {
             draftContent.innerHTML = '<p class="empty-state">Draft generation failed.</p>';
         }
     } catch (err) {
-        draftContent.innerHTML = '<p class="empty-state">Draft generation failed.</p>';
+        draftContent.innerHTML = `<p class="empty-state">${err.message || 'Draft generation failed.'}</p>`;
         console.error(err);
     }
 }

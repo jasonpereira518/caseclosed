@@ -47,13 +47,15 @@
   }
 
   /* --------------------------------------------------------- fake job queue
-     The real POST /chat is now asynchronous: it returns 202 + status_url
-     immediately, and the caller polls GET /api/matters/{matter}/jobs/{job}
-     until status is succeeded/failed/cancelled (services/jobs.py,
-     services/chat_orchestrator.py). The demo simulates that same shape —
-     stage names below are copied verbatim from chat_orchestrator._answer —
-     so pollChatJob() in script.js drives the demo exactly as it drives the
-     real backend, and a visitor sees the same staged progress messaging. */
+     The real POST /chat, /analyze, and /draft are all asynchronous: each
+     returns 202 + status_url immediately, and the caller polls
+     GET /api/matters/{matter}/jobs/{job} until status is
+     succeeded/failed/cancelled (services/jobs.py, services/worker.py). The
+     demo simulates that same shape for all three — stage names are copied
+     verbatim from the real job bodies (chat_orchestrator.py,
+     analysis_orchestrator.py) — so pollJob() in job-poller.js drives the
+     demo exactly as it drives the real backend, and a visitor sees the same
+     staged progress messaging. */
 
   const demoJobs = new Map();
   const CHAT_TOTAL_MS = 1500;
@@ -62,32 +64,50 @@
     { ms: 300, stage: 'retrieving_sources', progress: 35 },
     { ms: 950, stage: 'drafting_answer',    progress: 70 },
   ];
+  const ANALYZE_TOTAL_MS = 900;
+  const ANALYZE_STEPS = [
+    { ms: 0,   stage: 'queued',            progress: 0 },
+    { ms: 150, stage: 'analyzing',         progress: 30 },
+    { ms: 450, stage: 'building_timeline', progress: 60 },
+    { ms: 700, stage: 'scoring_strength',  progress: 85 },
+  ];
+  const DRAFT_TOTAL_MS = 1200;
+  const DRAFT_STEPS = [
+    { ms: 0,   stage: 'queued',            progress: 0 },
+    { ms: 300, stage: 'drafting_document', progress: 55 },
+  ];
 
-  function stageFor(elapsedMs) {
-    let step = CHAT_STEPS[0];
-    for (const candidate of CHAT_STEPS) {
+  function stageFor(steps, elapsedMs) {
+    let step = steps[0];
+    for (const candidate of steps) {
       if (candidate.ms <= elapsedMs) step = candidate;
     }
     return step;
   }
 
-  function createChatJob(result) {
+  function createDemoJob(result, steps, totalMs) {
     const jobId = `demo-job-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
-    demoJobs.set(jobId, { createdAt: Date.now(), result });
+    demoJobs.set(jobId, { createdAt: Date.now(), result, steps, totalMs });
     return jobId;
   }
 
-  function readChatJob(jobId) {
+  function readDemoJob(jobId) {
     const job = demoJobs.get(jobId);
     if (!job) return null;
     const elapsed = Date.now() - job.createdAt;
-    if (elapsed >= CHAT_TOTAL_MS) {
+    if (elapsed >= job.totalMs) {
       return { job_id: jobId, matter_id: FIXTURE.context_id, status: 'succeeded',
                progress: 100, stage: 'complete', result: job.result, error: null };
     }
-    const step = stageFor(elapsed);
+    const step = stageFor(job.steps, elapsed);
     return { job_id: jobId, matter_id: FIXTURE.context_id, status: 'running',
              progress: step.progress, stage: step.stage, result: null, error: null };
+  }
+
+  function queuedJobResponse(jobId) {
+    return { job_id: jobId, matter_id: FIXTURE.context_id, context_id: FIXTURE.context_id,
+             status: 'queued', progress: 0, stage: 'queued',
+             status_url: `/demo/jobs/${jobId}`, deduplicated: false };
   }
 
   /* ------------------------------------------------------------- handlers */
@@ -135,21 +155,22 @@
       return ok({ timeline: events });
     },
 
-    '/analyze': async () => {
-      await think(900);
-      return ok({
+    '/analyze': () => {
+      const jobId = createDemoJob({
+        status: 'success',
         analysis: clone(FIXTURE.analysis),
         timeline: clone(FIXTURE.timeline),
         statutes: clone(FIXTURE.statutes),
         strength: clone(FIXTURE.strength),
-      });
+      }, ANALYZE_STEPS, ANALYZE_TOTAL_MS);
+      return ok(queuedJobResponse(jobId));
     },
 
     '/chat': (body) => {
       // Matches the real POST /chat contract: acknowledge immediately with a
       // job_id + status_url, never the answer itself. script.js always polls
       // status_url now (routes/chat.py, services/task_queue.py).
-      const jobId = createChatJob({
+      const jobId = createDemoJob({
         status: 'answer',
         intent: 'legal_research',
         message: DEMO_REPLY,
@@ -158,22 +179,15 @@
         context_id: FIXTURE.context_id,
         matter_id: FIXTURE.context_id,
         title: FIXTURE.title,
-      });
-      return ok({
-        job_id: jobId,
-        matter_id: FIXTURE.context_id,
-        context_id: FIXTURE.context_id,
-        status: 'queued',
-        progress: 0,
-        stage: 'queued',
-        status_url: `/demo/jobs/${jobId}`,
-        deduplicated: false,
-      });
+      }, CHAT_STEPS, CHAT_TOTAL_MS);
+      return ok(queuedJobResponse(jobId));
     },
 
-    '/draft': async () => {
-      await think(1200);
-      return ok({ document: FIXTURE.draft, doc_type: 'memo' });
+    '/draft': () => {
+      const jobId = createDemoJob({
+        status: 'success', document: FIXTURE.draft, doc_type: 'memo',
+      }, DRAFT_STEPS, DRAFT_TOTAL_MS);
+      return ok(queuedJobResponse(jobId));
     },
 
     '/case/describe': async (body) => {
@@ -319,11 +333,11 @@
     // fixture request. Every handler needs FIXTURE, so gate them all on it.
     await ready;
 
-    // pollChatJob() polls this exact status_url on an interval; the job id is
-    // generated per-chat, so this can't be a static ROUTES entry.
+    // pollJob() polls this exact status_url on an interval; the job id is
+    // generated per-request, so this can't be a static ROUTES entry.
     const jobMatch = path.match(/^\/demo\/jobs\/(.+)$/);
     if (jobMatch) {
-      const job = readChatJob(jobMatch[1]);
+      const job = readDemoJob(jobMatch[1]);
       return job
         ? ok(job)
         : new Response(JSON.stringify({ error: 'job not found' }),
