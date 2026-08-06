@@ -9,6 +9,7 @@ from services.jobs import create_job, update_job
 from services.matters import delete_document as delete_document_record
 from services.matters import patch_document, patch_matter, require_matter, upsert_document
 from services.pdf import allowed_file, secure_save_document
+from services.request_context import resolve_matter_id
 from services.retrieval import delete_matter_document_index, set_matter_document_included
 from services.storage import delete_path, signed_download_url, upload_matter_file
 from services.task_queue import enqueue_job
@@ -28,7 +29,7 @@ def upload():
         files = [request.files.get("file")]  # fallback to single file
     
     jobs = []
-    context_id = request.form.get("matter_id") or request.form.get("context_id") or get_context_id(session)
+    context_id = resolve_matter_id(request.form) or get_context_id(session)
     context = get_or_create_context(context_id, str(current_user.get_id()))
     if context is None:
         return jsonify({"error": "forbidden"}), 403
@@ -86,7 +87,7 @@ def upload():
 @login_required
 def toggle_document():
     data = request.get_json(silent=True) or {}
-    context_id = data.get("matter_id") or data.get("context_id")
+    context_id = resolve_matter_id(data)
     if not context_id:
         return jsonify({"error": "context_id is required"}), 400
     try:
@@ -125,7 +126,7 @@ def toggle_document():
 @login_required
 def delete_document():
     data = request.get_json(silent=True) or {}
-    context_id = data.get("matter_id") or data.get("context_id")
+    context_id = resolve_matter_id(data)
     if not context_id:
         return jsonify({"error": "context_id is required"}), 400
     try:

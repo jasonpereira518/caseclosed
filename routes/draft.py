@@ -8,6 +8,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 from models.context import get_context as get_stored_context, save_context
 from services.llm import draft_legal_document, extract_structured_analysis
+from services.request_context import resolve_matter_id
 
 
 draft_bp = Blueprint("draft", __name__)
@@ -18,7 +19,7 @@ draft_bp = Blueprint("draft", __name__)
 def draft():
     """Generate legal memo or brief from context."""
     payload = request.json or {}
-    context_id = payload.get("matter_id") or payload.get("context_id")
+    context_id = resolve_matter_id(payload)
     doc_type = payload.get("doc_type", "memo")  # "memo" or "brief"
 
     if not context_id:
@@ -51,7 +52,7 @@ def draft():
 @login_required
 def draft_export():
     payload = request.json or {}
-    context_id = payload.get("matter_id") or payload.get("context_id")
+    context_id = resolve_matter_id(payload)
     if not context_id:
         return jsonify({"error": "No context_id provided"}), 400
 

@@ -4,6 +4,7 @@ import traceback
 
 from models.context import get_or_create_context, save_context
 from services.llm import extract_structured_analysis, extract_timeline, extract_statutes, extract_case_strength
+from services.request_context import resolve_matter_id
 
 intake_bp = Blueprint("intake", __name__)
 
@@ -11,7 +12,7 @@ intake_bp = Blueprint("intake", __name__)
 @login_required
 def process_intake():
     payload = request.json or {}
-    context_id = payload.get("matter_id") or payload.get("context_id")
+    context_id = resolve_matter_id(payload)
     if not context_id:
         return jsonify({"error": "No context_id provided"}), 400
 

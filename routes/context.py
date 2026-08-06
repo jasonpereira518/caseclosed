@@ -15,6 +15,7 @@ from models.context import (
 )
 from services.tenancy import active_matter, active_workspace, set_active_matter
 from services.matters import append_time_entry
+from services.request_context import resolve_matter_id
 
 
 context_bp = Blueprint("context", __name__)
@@ -96,7 +97,7 @@ def create_context():
 @login_required
 def switch_context():
     payload = request.json or {}
-    context_id = str(payload.get("matter_id") or payload.get("context_id", "")).strip()
+    context_id = resolve_matter_id(payload) or ""
     user_id = str(current_user.get_id())
     if not context_id:
         return jsonify({"error": "context_id is required"}), 400
@@ -143,7 +144,7 @@ def switch_context():
 @login_required
 def rename_context_route():
     payload = request.json or {}
-    context_id = str(payload.get("matter_id") or payload.get("context_id", "")).strip()
+    context_id = resolve_matter_id(payload) or ""
     title = str(payload.get("title", "")).strip()
     user_id = str(current_user.get_id())
     if not context_id:
@@ -158,7 +159,7 @@ def rename_context_route():
 @login_required
 def delete_context_route():
     payload = request.json or {}
-    context_id = str(payload.get("matter_id") or payload.get("context_id", "")).strip()
+    context_id = resolve_matter_id(payload) or ""
     user_id = str(current_user.get_id())
     if not context_id:
         return jsonify({"error": "context_id is required"}), 400
@@ -221,7 +222,7 @@ def delete_context_route():
 @login_required
 def track_time():
     data = request.get_json(silent=True) or {}
-    context_id = data.get("matter_id") or data.get("context_id")
+    context_id = resolve_matter_id(data)
     if not context_id:
         return jsonify({"error": "context_id is required"}), 400
     try:

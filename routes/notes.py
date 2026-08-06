@@ -11,6 +11,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
 from models.context import context_belongs_to_user, get_context
+from services.request_context import resolve_matter_id
 
 notes_bp = Blueprint("notes", __name__)
 
@@ -29,7 +30,7 @@ def _now_iso():
 def save_note():
     """Create or update a note on a specific case (upsert)."""
     data = request.get_json(silent=True) or {}
-    context_id = str(data.get("matter_id") or data.get("context_id", "")).strip()
+    context_id = resolve_matter_id(data) or ""
     case_index = data.get("case_index")
     content = data.get("content", "")
 
@@ -67,7 +68,7 @@ def save_note():
 def delete_note():
     """Delete (clear) a note from a specific case."""
     data = request.get_json(silent=True) or {}
-    context_id = str(data.get("matter_id") or data.get("context_id", "")).strip()
+    context_id = resolve_matter_id(data) or ""
     case_index = data.get("case_index")
 
     if not context_id or case_index is None:

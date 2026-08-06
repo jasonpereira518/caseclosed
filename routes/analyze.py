@@ -3,6 +3,7 @@ from flask_login import current_user, login_required
 
 from models.context import get_context as get_stored_context, get_or_create_context
 from services.llm import extract_structured_analysis, extract_timeline, sort_timeline, extract_statutes, extract_case_strength
+from services.request_context import resolve_matter_id
 
 
 analyze_bp = Blueprint("analyze", __name__)
@@ -14,7 +15,7 @@ def analyze():
     """Extract structured analysis from text or use existing context."""
     payload = request.get_json(silent=True) or {}
     text = str(payload.get("text") or "").strip()
-    context_id = payload.get("matter_id") or payload.get("context_id")
+    context_id = resolve_matter_id(payload)
 
     uid = str(current_user.get_id())
     context = None
@@ -54,7 +55,7 @@ def analyze():
 @login_required
 def add_timeline_event():
     payload = request.json or {}
-    context_id = payload.get("matter_id") or payload.get("context_id")
+    context_id = resolve_matter_id(payload)
     if not context_id:
         return jsonify({"error": "Missing context_id"}), 400
         

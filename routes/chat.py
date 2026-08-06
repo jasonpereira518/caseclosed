@@ -19,6 +19,7 @@ from services.llm import (
 )
 from services.jobs import create_job, update_job
 from services.matters import append_message
+from services.request_context import resolve_matter_id
 from services.task_queue import enqueue_job
 from services.tenancy import AuthorizationError
 
@@ -36,7 +37,7 @@ def chat():
         return jsonify({"error": "message is required"}), 400
     if len(message) > 20_000:
         return jsonify({"error": "message is too long"}), 413
-    context_id = str(payload.get("matter_id") or payload.get("context_id") or get_context_id(session))
+    context_id = resolve_matter_id(payload) or get_context_id(session)
     session["context_id"] = context_id
     context = get_or_create_context(context_id, str(current_user.get_id()))
     if context is None:
@@ -69,9 +70,7 @@ def chat():
 @login_required
 def case_describe():
     payload = request.get_json(silent=True) or {}
-    request_context_id = str(payload.get("matter_id") or payload.get("context_id", "")).strip()
-    session_context_id = str(session.get("context_id", "")).strip()
-    context_id = request_context_id or session_context_id
+    context_id = resolve_matter_id(payload, session=session) or ""
     case_index = payload.get("case_index")
     user_id = str(current_user.get_id())
 
@@ -112,9 +111,7 @@ def case_describe():
 @login_required
 def case_ask():
     payload = request.get_json(silent=True) or {}
-    request_context_id = str(payload.get("matter_id") or payload.get("context_id", "")).strip()
-    session_context_id = str(session.get("context_id", "")).strip()
-    context_id = request_context_id or session_context_id
+    context_id = resolve_matter_id(payload, session=session) or ""
     case_index = payload.get("case_index")
     question = str(payload.get("question") or "").strip()
     user_id = str(current_user.get_id())
@@ -166,9 +163,7 @@ def case_treatment():
     }
     try:
         payload = request.get_json(silent=True) or {}
-        request_context_id = str(payload.get("matter_id") or payload.get("context_id", "")).strip()
-        session_context_id = str(session.get("context_id", "")).strip()
-        context_id = request_context_id or session_context_id
+        context_id = resolve_matter_id(payload, session=session) or ""
         case_index = payload.get("case_index")
         user_id = str(current_user.get_id())
 
@@ -211,7 +206,7 @@ def case_treatment():
 @login_required
 def bookmark_case():
     data = request.get_json(silent=True) or {}
-    context_id = data.get("matter_id") or data.get("context_id")
+    context_id = resolve_matter_id(data)
     try:
         case_index = int(data.get("case_index"))
     except (TypeError, ValueError):
