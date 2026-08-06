@@ -90,14 +90,17 @@ async function renderTeam(wid) {
   catch (error) { panel.textContent = error.message; }
 }
 document.getElementById('export-account').addEventListener('click', async () => {
-  try { status('Building your archive…'); const job = await api('/api/account/export', {method: 'POST'});
-    let result; for (let attempt = 0; attempt < 120; attempt += 1) { result = await api(`/api/account/jobs/${job.job_id}`);
-      if (result.status === 'ready' || result.status === 'failed') break;
-      await new Promise(resolve => setTimeout(resolve, 2000)); }
-    if (result?.status === 'failed') throw new Error('Archive creation failed.');
-    if (!result?.download_url) throw new Error('Archive is still processing. Check again shortly.');
-    window.location.assign(result.download_url); status('Archive ready.'); }
-  catch (error) { status(error.message, true); }
+  try {
+    status('Building your archive…');
+    const job = await api('/api/account/export', {method: 'POST'});
+    const result = await pollJob(job.status_url, {
+      deadlineMs: 240000, intervalMs: 2000,
+      onUpdate: current => status(`Building your archive… ${Number(current.progress || 0)}%`),
+    });
+    if (result.status === 'failed') throw new Error(result.error?.message || 'Archive creation failed.');
+    if (!result.download_url) throw new Error('Archive is still processing. Check again shortly.');
+    window.location.assign(result.download_url); status('Archive ready.');
+  } catch (error) { status(error.message, true); }
 });
 document.getElementById('delete-account').addEventListener('click', async () => {
   if (window.prompt('Type DELETE to permanently delete your account') !== 'DELETE') return;

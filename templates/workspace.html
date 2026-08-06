@@ -501,5 +501,6 @@
 {# Must load before script.js: it replaces window.fetch and pre-loads the fixture. #}
 <script src="{{ url_for('static', filename='demo.js') }}"></script>
 {% endif %}
+<script src="{{ url_for('static', filename='job-poller.js') }}"></script>
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 {% endblock %}

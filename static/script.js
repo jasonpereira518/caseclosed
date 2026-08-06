@@ -1324,7 +1324,8 @@ async function handleFileUpload(event) {
         
         if (data.status === 'queued') {
             showToast(`${data.jobs.length} file(s) queued for extraction`, 'info');
-            const completed = await Promise.all(data.jobs.map(job => pollDocumentJob(job.status_url)));
+            const completed = await Promise.all(data.jobs.map(job =>
+                pollJob(job.status_url, { deadlineMs: 120000 })));
             const succeeded = completed.filter(job => job.status === 'succeeded').length;
             const failed = completed.length - succeeded;
             await loadContext();
@@ -1336,23 +1337,11 @@ async function handleFileUpload(event) {
             showToast(`Upload failed: ${data.error}`, 'error');
         }
     } catch (err) {
-        showToast('Upload failed due to network error.', 'error');
+        showToast(err.message || 'Upload failed due to network error.', 'error');
         console.error(err);
     }
-    
-    event.target.value = ''; // reset input
-}
 
-async function pollDocumentJob(statusUrl) {
-    const deadline = Date.now() + 120000;
-    while (Date.now() < deadline) {
-        const response = await fetch(statusUrl, { headers: { 'Accept': 'application/json' } });
-        const job = await response.json();
-        if (!response.ok) throw new Error(job.error || 'Unable to read document status');
-        if (['succeeded', 'failed', 'cancelled'].includes(job.status)) return job;
-        await new Promise(resolve => setTimeout(resolve, 900));
-    }
-    return { status: 'running' };
+    event.target.value = ''; // reset input
 }
 
 // Prevent browser from opening dropped files
@@ -1693,21 +1682,23 @@ async function handleChatSubmit(e) {
 }
 
 async function pollChatJob(statusUrl, loadingElement) {
-    if (!statusUrl) throw new Error('The server did not return a job status URL.');
-    const deadline = Date.now() + 95000;
-    while (Date.now() < deadline) {
-        const res = await fetch(statusUrl, { headers: { 'Accept': 'application/json' } });
-        const job = await res.json();
-        if (!res.ok) throw new Error(job.error || 'Unable to read job status');
-        const bubble = loadingElement?.querySelector('.message-bubble');
-        if (bubble) {
-            const stage = String(job.stage || 'working').replace(/_/g, ' ');
-            bubble.innerHTML = `<span class="loading-spinner" aria-hidden="true"></span>${escapeHtml(stage)} · ${Number(job.progress || 0)}%`;
+    try {
+        return await pollJob(statusUrl, {
+            deadlineMs: 95000,
+            onUpdate: job => {
+                const bubble = loadingElement?.querySelector('.message-bubble');
+                if (bubble) {
+                    const stage = String(job.stage || 'working').replace(/_/g, ' ');
+                    bubble.innerHTML = `<span class="loading-spinner" aria-hidden="true"></span>${escapeHtml(stage)} · ${Number(job.progress || 0)}%`;
+                }
+            },
+        });
+    } catch (err) {
+        if (err.message === 'This request is still running. Check again shortly.') {
+            throw new Error('This request is still running. Refresh the matter to see its result.');
         }
-        if (['succeeded', 'failed', 'cancelled'].includes(job.status)) return job;
-        await new Promise(resolve => setTimeout(resolve, 900));
+        throw err;
     }
-    throw new Error('This request is still running. Refresh the matter to see its result.');
 }
 
 function renderGroundedMessage(data) {
