@@ -1532,11 +1532,8 @@ async function handleAnalyze() {
 
         const job = await pollJob(data.status_url, {
             onUpdate: current => {
-                const bubble = loading.querySelector('.message-bubble');
-                if (bubble) {
-                    const stage = String(current.stage || 'working').replace(/_/g, ' ');
-                    bubble.innerHTML = `<span class="loading-spinner" aria-hidden="true"></span>${escapeHtml(stage)} · ${Number(current.progress || 0)}%`;
-                }
+                const stage = String(current.stage || 'working').replace(/_/g, ' ');
+                updateLoadingText(loading, `${stage} · ${Number(current.progress || 0)}%`);
             },
         });
         removeMessage(loading);
@@ -1590,96 +1587,123 @@ async function handleChatSubmit(e) {
             body: JSON.stringify(body)
         });
 
-        let data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Unable to queue chat');
-        contextId = data.context_id || data.matter_id || contextId;
-        data = await pollChatJob(data.status_url, thinking);
-        removeMessage(thinking);
-        if (data.status !== 'succeeded') {
-            const detail = data.error?.message || (data.status === 'cancelled' ? 'Request cancelled.' : 'Chat request failed.');
-            appendMessage('bot', escapeHtml(detail));
-            return;
-        }
-        data = data.result || {};
-        const completedId = data.context_id || contextId;
-        const completedHistory = sessionHistory.find((item) => item.context_id === completedId);
-        if (completedHistory && data.title) {
-            const wasNew = completedHistory.title === 'New Session' || !completedHistory.title;
-            completedHistory.title = data.title;
-            if (wasNew && data.title !== 'New Session') completedHistory._animateTitleNext = true;
-            renderSessionList();
-        }
-
-        // Handle clarifying
-        if (data.status === 'clarifying') {
-            clarifyMode = true;
-            clarifyAttempts = data.clarify_attempts;
-            contextId = data.context_id;
-            // Role selector will be updated if needed
-            clarificationAnswers = [];
-
-            appendMessage('bot', escapeHtml(data.message || '').replace(/\n/g, '<br>'));
-
-            if (data.analysis) {
-                showAnalysisSkeleton();
-                currentAnalysis = data.analysis;
-                currentTimeline = data.timeline || [];
-                currentStatutes = data.statutes || [];
-                currentStrength = data.strength || {};
-                updateAnalysisPanel(data.analysis);
-            }
-            return;
-        }
-
-        // Handle results
-        if (data.status === 'results') {
-            clarifyMode = false;
-            clarifyAttempts = 0;
-            clarificationAnswers = [];
-            contextId = data.context_id;
-            // Role selector will be updated if needed
-
-            const sid = data.context_id || contextId;
-            const hist = sessionHistory.find((s) => s.context_id === sid);
-            if (hist && data.title != null && data.title !== '') {
-                const wasNew = hist.title === 'New Session' || !hist.title;
-                hist.title = data.title;
-                if (wasNew && data.title !== 'New Session') {
-                    hist._animateTitleNext = true;
-                }
-            }
-
-            if (data.analysis) {
-                showAnalysisSkeleton();
-                currentAnalysis = data.analysis;
-                currentTimeline = data.timeline || [];
-                currentStatutes = data.statutes || [];
-                currentStrength = data.strength || {};
-                updateAnalysisPanel(data.analysis);
-            }
-
-            if (data.cases && data.cases.length > 0) {
-                showCasesSkeleton();
-                currentCases = data.cases;
-                updateCasesPanel(data.cases);
-                appendMessage('bot', renderGroundedMessage(data));
-                // Switch to cases tab
-                document.querySelector('[data-tab="authority"]')?.click();
-            } else {
-                appendMessage('bot', renderGroundedMessage(data));
-            }
-            renderSessionList();
-            return;
-        }
-
-        if (data.status === 'answer') {
-            appendMessage('bot', renderGroundedMessage(data));
-            return;
-        }
+        const queued = await res.json();
+        if (!res.ok) throw new Error(queued.error || 'Unable to queue chat');
+        contextId = queued.context_id || queued.matter_id || contextId;
+        addLoadingCancelControl(thinking, () => cancelJob(queued.status_url));
+        await settleChatJob(queued.status_url, thinking);
     } catch (err) {
         removeMessage(thinking);
         appendMessage('bot', escapeHtml(err.message || 'Server error.'));
         console.error(err);
+    }
+}
+
+/** Polls a chat job to completion and renders its result. On failure (not
+ *  cancellation), offers a Retry button that re-queues the same job via
+ *  POST .../retry and re-enters this same settle loop. */
+async function settleChatJob(statusUrl, loadingElement) {
+    let data = await pollChatJob(statusUrl, loadingElement);
+    removeMessage(loadingElement);
+
+    if (data.status !== 'succeeded') {
+        if (data.status === 'cancelled') {
+            appendMessage('bot', 'Request cancelled.');
+            return;
+        }
+        const detail = escapeHtml(data.error?.message || 'Chat request failed.');
+        const failureMsg = appendMessage('bot',
+            `${detail} <button type="button" class="btn btn--ghost btn--sm chat-retry-btn">Retry</button>`);
+        failureMsg.querySelector('.chat-retry-btn')?.addEventListener('click', async () => {
+            removeMessage(failureMsg);
+            const retrying = appendLoadingMessage('Retrying…');
+            try {
+                await retryJob(statusUrl);
+                addLoadingCancelControl(retrying, () => cancelJob(statusUrl));
+                await settleChatJob(statusUrl, retrying);
+            } catch (err) {
+                removeMessage(retrying);
+                appendMessage('bot', escapeHtml(err.message || 'Unable to retry.'));
+                console.error(err);
+            }
+        }, { once: true });
+        return;
+    }
+
+    data = data.result || {};
+    const completedId = data.context_id || contextId;
+    const completedHistory = sessionHistory.find((item) => item.context_id === completedId);
+    if (completedHistory && data.title) {
+        const wasNew = completedHistory.title === 'New Session' || !completedHistory.title;
+        completedHistory.title = data.title;
+        if (wasNew && data.title !== 'New Session') completedHistory._animateTitleNext = true;
+        renderSessionList();
+    }
+
+    // Handle clarifying
+    if (data.status === 'clarifying') {
+        clarifyMode = true;
+        clarifyAttempts = data.clarify_attempts;
+        contextId = data.context_id;
+        // Role selector will be updated if needed
+        clarificationAnswers = [];
+
+        appendMessage('bot', escapeHtml(data.message || '').replace(/\n/g, '<br>'));
+
+        if (data.analysis) {
+            showAnalysisSkeleton();
+            currentAnalysis = data.analysis;
+            currentTimeline = data.timeline || [];
+            currentStatutes = data.statutes || [];
+            currentStrength = data.strength || {};
+            updateAnalysisPanel(data.analysis);
+        }
+        return;
+    }
+
+    // Handle results
+    if (data.status === 'results') {
+        clarifyMode = false;
+        clarifyAttempts = 0;
+        clarificationAnswers = [];
+        contextId = data.context_id;
+        // Role selector will be updated if needed
+
+        const sid = data.context_id || contextId;
+        const hist = sessionHistory.find((s) => s.context_id === sid);
+        if (hist && data.title != null && data.title !== '') {
+            const wasNew = hist.title === 'New Session' || !hist.title;
+            hist.title = data.title;
+            if (wasNew && data.title !== 'New Session') {
+                hist._animateTitleNext = true;
+            }
+        }
+
+        if (data.analysis) {
+            showAnalysisSkeleton();
+            currentAnalysis = data.analysis;
+            currentTimeline = data.timeline || [];
+            currentStatutes = data.statutes || [];
+            currentStrength = data.strength || {};
+            updateAnalysisPanel(data.analysis);
+        }
+
+        if (data.cases && data.cases.length > 0) {
+            showCasesSkeleton();
+            currentCases = data.cases;
+            updateCasesPanel(data.cases);
+            appendMessage('bot', renderGroundedMessage(data));
+            // Switch to cases tab
+            document.querySelector('[data-tab="authority"]')?.click();
+        } else {
+            appendMessage('bot', renderGroundedMessage(data));
+        }
+        renderSessionList();
+        return;
+    }
+
+    if (data.status === 'answer') {
+        appendMessage('bot', renderGroundedMessage(data));
     }
 }
 
@@ -1688,11 +1712,8 @@ async function pollChatJob(statusUrl, loadingElement) {
         return await pollJob(statusUrl, {
             deadlineMs: 95000,
             onUpdate: job => {
-                const bubble = loadingElement?.querySelector('.message-bubble');
-                if (bubble) {
-                    const stage = String(job.stage || 'working').replace(/_/g, ' ');
-                    bubble.innerHTML = `<span class="loading-spinner" aria-hidden="true"></span>${escapeHtml(stage)} · ${Number(job.progress || 0)}%`;
-                }
+                const stage = String(job.stage || 'working').replace(/_/g, ' ');
+                updateLoadingText(loadingElement, `${stage} · ${Number(job.progress || 0)}%`);
             },
         });
     } catch (err) {
@@ -2981,7 +3002,14 @@ function appendLoadingMessage(text) {
 
     const bubble = document.createElement('div');
     bubble.classList.add('message-bubble');
-    bubble.innerHTML = `<span class="loading-spinner" aria-hidden="true"></span>${escapeHtml(text)}`;
+    const spinner = document.createElement('span');
+    spinner.classList.add('loading-spinner');
+    spinner.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('span');
+    label.classList.add('loading-text');
+    label.textContent = text;
+    bubble.appendChild(spinner);
+    bubble.appendChild(label);
 
     const timestamp = document.createElement('div');
     timestamp.classList.add('message-timestamp');
@@ -2992,6 +3020,36 @@ function appendLoadingMessage(text) {
     chatBox.appendChild(wrapper);
     scrollChatToBottom();
     return wrapper;
+}
+
+/** Updates only the stage text of a loading bubble, leaving any control
+ *  buttons appended to it (e.g. Cancel) untouched. */
+function updateLoadingText(loadingElement, text) {
+    const label = loadingElement?.querySelector('.loading-text');
+    if (label) label.textContent = text;
+}
+
+/** Appends a Cancel button to a loading bubble, wired to call onCancel once.
+ *  Safe to call repeatedly -- a second call on the same bubble is a no-op. */
+function addLoadingCancelControl(loadingElement, onCancel) {
+    const bubble = loadingElement?.querySelector('.message-bubble');
+    if (!bubble || bubble.querySelector('.loading-cancel-btn')) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn--ghost btn--sm loading-cancel-btn';
+    btn.textContent = 'Cancel';
+    btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = 'Cancelling…';
+        try {
+            await onCancel();
+        } catch (err) {
+            console.error(err);
+            btn.disabled = false;
+            btn.textContent = 'Cancel';
+        }
+    });
+    bubble.appendChild(btn);
 }
 
 function removeMessage(messageEl) {
