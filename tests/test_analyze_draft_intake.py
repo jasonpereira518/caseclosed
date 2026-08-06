@@ -1,13 +1,18 @@
-"""Safety-net coverage for routes/intake.py, routes/draft.py, routes/notes.py,
-routes/search.py, and services/chat_orchestrator.py's research/answer paths —
-written against today's synchronous contract so Phase 4's async conversion of
-analyze/intake/draft has a red/green signal to work against.
+"""Coverage for routes/intake.py, routes/draft.py, routes/notes.py,
+routes/search.py, and services/chat_orchestrator.py's research/answer paths.
+
+Intake and draft originally ran their LLM chains synchronously; Phase 4b
+converted both to queue a job (matter_analysis / matter_draft) and return
+202, matching /chat and /upload's contract. The route-level tests below
+assert that contract; services/analysis_orchestrator.py's own job-body
+behavior is covered separately in tests/test_analysis_job.py.
 """
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from app import app
 from models.user import User
+from services.tenancy import AuthorizationError
 
 
 class RouteTestCase(unittest.TestCase):
@@ -21,28 +26,32 @@ class RouteTestCase(unittest.TestCase):
 
 
 class IntakeRouteTests(RouteTestCase):
-    @patch("routes.intake.save_context")
-    @patch("routes.intake.extract_case_strength", return_value={"score": 1})
-    @patch("routes.intake.extract_statutes", return_value=[])
-    @patch("routes.intake.extract_timeline", return_value=[])
-    @patch("routes.intake.extract_structured_analysis", return_value={})
+    @patch("routes.intake.enqueue_job")
+    @patch("routes.intake.create_job")
     @patch("routes.intake.get_or_create_context")
     @patch("models.user.load_user")
-    def test_intake_runs_analysis_chain_and_returns_success(
-            self, load_user, get_context, analysis, timeline, statutes, strength, save_context):
+    def test_intake_persists_synchronously_then_queues_analysis_job(
+            self, load_user, get_context, create_job, enqueue_job):
         load_user.return_value = self.user
         ctx = {"title": "New Session", "description": "", "cases": [], "messages": []}
         get_context.return_value = ctx
+        create_job.return_value = ({"job_id": "job-1", "matter_id": "matter-1",
+                                    "status": "queued"}, True)
         response = self.client.post("/intake", json={
             "context_id": "matter-1", "case_title": "Smith v. Jones",
             "description": "Breach of contract.",
         })
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         body = response.get_json()
-        self.assertEqual(body["status"], "success")
-        self.assertEqual(body["context_id"], "matter-1")
-        analysis.assert_called_once()
-        save_context.assert_called_once()
+        self.assertEqual(body["status"], "queued")
+        self.assertEqual(body["status_url"], "/api/matters/matter-1/jobs/job-1")
+        self.assertEqual(body["title"], "Smith v. Jones")
+        # The description/title/messages fields are written synchronously,
+        # before the job (which reads the matter's stored description) is queued.
+        self.assertIn("CASE INTAKE", ctx["description"])
+        self.assertEqual(ctx["title"], "Smith v. Jones")
+        create_job.assert_called_once_with("matter-1", "test-user", "matter_analysis", {})
+        enqueue_job.assert_called_once_with("matter-1", "job-1")
 
     @patch("models.user.load_user")
     def test_intake_requires_context_id(self, load_user):
@@ -61,27 +70,28 @@ class IntakeRouteTests(RouteTestCase):
 
 
 class DraftRouteTests(RouteTestCase):
-    @patch("routes.draft.save_context")
-    @patch("routes.draft.draft_legal_document", return_value="MEMORANDUM\n\nBody text.")
-    @patch("routes.draft.get_stored_context")
+    @patch("routes.draft.enqueue_job")
+    @patch("routes.draft.create_job")
     @patch("models.user.load_user")
-    def test_draft_generates_document_from_existing_analysis(
-            self, load_user, get_context, draft_doc, save_context):
+    def test_draft_queues_a_matter_draft_job(self, load_user, create_job, enqueue_job):
         load_user.return_value = self.user
-        get_context.return_value = {"title": "Matter", "analysis": {"summary": "x"}}
+        create_job.return_value = ({"job_id": "job-1", "matter_id": "matter-1",
+                                    "status": "queued"}, True)
         response = self.client.post("/draft", json={"matter_id": "matter-1", "doc_type": "memo"})
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         body = response.get_json()
-        self.assertEqual(body["status"], "success")
-        self.assertIn("MEMORANDUM", body["document"])
-        save_context.assert_called_once()
+        self.assertEqual(body["status"], "queued")
+        self.assertEqual(body["status_url"], "/api/matters/matter-1/jobs/job-1")
+        create_job.assert_called_once_with(
+            "matter-1", "test-user", "matter_draft", {"doc_type": "memo"})
+        enqueue_job.assert_called_once_with("matter-1", "job-1")
 
-    @patch("routes.draft.get_stored_context", return_value=None)
+    @patch("routes.draft.create_job", side_effect=AuthorizationError("matter access denied"))
     @patch("models.user.load_user")
-    def test_draft_requires_existing_context(self, load_user, get_context):
+    def test_draft_rejects_inaccessible_matter(self, load_user, create_job):
         load_user.return_value = self.user
-        response = self.client.post("/draft", json={"matter_id": "missing-matter"})
-        self.assertEqual(response.status_code, 404)
+        response = self.client.post("/draft", json={"matter_id": "someone-elses-matter"})
+        self.assertEqual(response.status_code, 403)
 
 
 class NotesRouteTests(RouteTestCase):

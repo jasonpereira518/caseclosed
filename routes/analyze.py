@@ -1,9 +1,12 @@
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
-from models.context import get_context as get_stored_context, get_or_create_context
-from services.llm import extract_structured_analysis, extract_timeline, sort_timeline, extract_statutes, extract_case_strength
+from models.context import get_context as get_stored_context
+from services.jobs import create_job, update_job
+from services.llm import sort_timeline
 from services.request_context import resolve_matter_id
+from services.task_queue import enqueue_job
+from services.tenancy import AuthorizationError
 
 
 analyze_bp = Blueprint("analyze", __name__)
@@ -12,43 +15,28 @@ analyze_bp = Blueprint("analyze", __name__)
 @analyze_bp.route("/analyze", methods=["POST"])
 @login_required
 def analyze():
-    """Extract structured analysis from text or use existing context."""
+    """Queue a matter_analysis job; all LLM work runs in the job."""
     payload = request.get_json(silent=True) or {}
     text = str(payload.get("text") or "").strip()
-    context_id = resolve_matter_id(payload)
+    matter_id = resolve_matter_id(payload)
+    if not matter_id:
+        return jsonify({"error": "matter_id is required"}), 400
 
     uid = str(current_user.get_id())
-    context = None
-    if not text and context_id:
-        context = get_stored_context(context_id, uid)
-        if not context:
-            return jsonify({"error": "forbidden or not found"}), 403
-        text = context.get("description", "")
-
-    if not text:
-        return jsonify({"error": "No text provided"}), 400
-
-    analysis = extract_structured_analysis(text)
-    timeline = extract_timeline(text)
-    statutes = extract_statutes(text, analysis)
-
-    # Note logic explicitly requested by user mapping
-    cases = context.get("cases", []) if context else []
-    strength = extract_case_strength(text, analysis, statutes, cases)
-
-    # Update context if provided
-    if context_id:
-        ctx = get_or_create_context(context_id, uid)
-        if ctx is None:
-            return jsonify({"error": "forbidden"}), 403
-        ctx["analysis"] = analysis
-        ctx["timeline"] = timeline
-        ctx["statutes"] = statutes
-        ctx["strength"] = strength
-        if not ctx["description"]:
-            ctx["description"] = text
-
-    return jsonify({"status": "success", "analysis": analysis, "timeline": timeline, "statutes": statutes, "strength": strength, "context_id": context_id})
+    try:
+        job, created = create_job(matter_id, uid, "matter_analysis", {"text": text})
+        if created:
+            enqueue_job(matter_id, job["job_id"])
+    except AuthorizationError:
+        return jsonify({"error": "forbidden"}), 403
+    except Exception as exc:
+        if "job" in locals():
+            update_job(matter_id, job["job_id"], status="failed", stage="enqueue_failed",
+                       error={"code": "enqueue_failed", "message": str(exc)[:300]})
+        return jsonify({"error": "unable to queue analysis"}), 503
+    job["status_url"] = f"/api/matters/{matter_id}/jobs/{job['job_id']}"
+    job["context_id"] = matter_id
+    return jsonify(job), 202
 
 
 @analyze_bp.route("/timeline/add", methods=["POST"])

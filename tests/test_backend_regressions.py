@@ -23,21 +23,29 @@ class BackendRouteRegressionTests(unittest.TestCase):
             session["_user_id"] = self.user.id
             session["_fresh"] = True
 
-    @patch("routes.analyze.extract_case_strength", return_value={"score": 1})
-    @patch("routes.analyze.extract_statutes", return_value=[])
-    @patch("routes.analyze.extract_timeline", return_value=[])
-    @patch("routes.analyze.extract_structured_analysis", return_value={})
-    @patch("routes.analyze.get_or_create_context", return_value={"description": "", "cases": []})
+    @patch("routes.analyze.enqueue_job")
+    @patch("routes.analyze.create_job")
     @patch("models.user.load_user")
-    def test_analyze_accepts_text_with_context_id(self, load_user, get_context, analysis,
-                                                  timeline, statutes, strength):
+    def test_analyze_queues_a_matter_analysis_job(self, load_user, create_job, enqueue_job):
         load_user.return_value = self.user
+        create_job.return_value = ({"job_id": "job-1", "matter_id": "matter-1",
+                                    "status": "queued"}, True)
         response = self.client.post("/analyze", json={
             "context_id": "matter-1", "text": "Facts supplied directly",
         })
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["status"], "success")
-        self.assertEqual(strength.call_args.args[3], [])
+        self.assertEqual(response.status_code, 202)
+        body = response.get_json()
+        self.assertEqual(body["status"], "queued")
+        self.assertEqual(body["status_url"], "/api/matters/matter-1/jobs/job-1")
+        create_job.assert_called_once_with(
+            "matter-1", "test-user", "matter_analysis", {"text": "Facts supplied directly"})
+        enqueue_job.assert_called_once_with("matter-1", "job-1")
+
+    @patch("models.user.load_user")
+    def test_analyze_requires_matter_id(self, load_user):
+        load_user.return_value = self.user
+        response = self.client.post("/analyze", json={"text": "No matter attached"})
+        self.assertEqual(response.status_code, 400)
 
     @patch("models.user.load_user")
     def test_document_toggle_rejects_missing_payload(self, load_user):

@@ -5,7 +5,7 @@ import time
 import config
 
 from services.account_export import run_account_export
-from services.analysis_orchestrator import process_analysis_job
+from services.analysis_orchestrator import process_analysis_job, process_draft_job
 from services.chat_orchestrator import JobCancelled, process_chat_job
 from services.jobs import (
     claim_account_job, claim_job, get_account_job_internal, get_job_internal,
@@ -33,6 +33,8 @@ def process_job(matter_id: str, job_id: str) -> dict | None:
             cleanup_document_source(data)
         elif kind == "matter_analysis":
             result = process_analysis_job(matter_id, job_id, data)
+        elif kind == "matter_draft":
+            result = process_draft_job(matter_id, job_id, data)
         else:
             raise ValueError(f"unsupported job kind: {kind}")
         completed = update_job(matter_id, job_id, status="succeeded", progress=100,
