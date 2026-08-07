@@ -1266,6 +1266,17 @@ summary:focus-visible,
     background: var(--paper);
 }
 
+.workflow .section-heading {
+    max-width: 760px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.workflow .section-heading > p:last-child {
+    margin-left: auto;
+    margin-right: auto;
+}
+
 .workflow-steps {
     position: relative;
     margin: 72px 0 0;
@@ -1323,6 +1334,29 @@ summary:focus-visible,
     color: var(--clay-dark);
     font-size: 18px;
     font-weight: 650;
+    opacity: 0;
+    transform: scale(0.86);
+    transition: opacity 320ms ease, transform 380ms cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 200ms ease, border-color 200ms ease;
+}
+
+.workflow-steps.in-view li:nth-child(2) .step-icon {
+    transition-delay: 90ms;
+}
+
+.workflow-steps.in-view li:nth-child(3) .step-icon {
+    transition-delay: 180ms;
+}
+
+.workflow-steps.in-view .step-icon {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.workflow-steps li:hover .step-icon {
+    transform: translateY(-3px);
+    border-color: var(--clay);
+    box-shadow: 0 14px 30px rgba(58, 42, 26, 0.14);
 }
 
 .workflow-steps h3 {

@@ -62,6 +62,44 @@ def public_profile(data: dict) -> dict:
     return result
 
 
+def ensure_personal_workspace(uid: str) -> str:
+    """Guarantee the user's personal workspace and owner membership exist.
+
+    Idempotent and safe to call on every request: normal accounts created
+    through ensure_user() already have both, so this is a single membership
+    read that finds nothing to do. It exists for identities that reached
+    workspace-scoped code (active_workspace(), matter migration, etc.)
+    without ever going through ensure_user() -- e.g. an account created
+    before the workspace model existed -- which would otherwise fail every
+    workspace-scoped call with AuthorizationError forever.
+    """
+    uid = str(uid)
+    wid = personal_workspace_id(uid)
+    if membership(wid, uid):
+        return wid
+    db = get_firestore_client()
+    timestamp = now()
+    workspace_ref = db.collection(config.FIRESTORE_WORKSPACES_COLLECTION).document(wid)
+    if not workspace_ref.get().exists:
+        workspace_ref.set({
+            "name": "Personal",
+            "type": "personal",
+            "owner_id": uid,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        })
+    workspace_ref.collection("members").document(uid).set({
+        "uid": uid, "role": "owner", "status": "active",
+        "joined_at": timestamp, "updated_at": timestamp,
+    }, merge=True)
+    db.collection(config.FIRESTORE_USERS_COLLECTION).document(uid).set({
+        "personal_workspace_id": wid,
+        "workspace_ids": gc_firestore.ArrayUnion([wid]),
+        "updated_at": timestamp,
+    }, merge=True)
+    return wid
+
+
 def ensure_user(claims: dict) -> dict:
     """Upsert identity fields and create the user's private workspace."""
     uid = str(claims.get("uid") or claims.get("sub") or "").strip()
@@ -96,20 +134,7 @@ def ensure_user(claims: dict) -> dict:
     identity["personal_workspace_id"] = wid
     identity["workspace_ids"] = gc_firestore.ArrayUnion([wid])
     user_ref.set(identity, merge=True)
-
-    workspace_ref = db.collection(config.FIRESTORE_WORKSPACES_COLLECTION).document(wid)
-    if not workspace_ref.get().exists:
-        workspace_ref.set({
-            "name": "Personal",
-            "type": "personal",
-            "owner_id": uid,
-            "created_at": timestamp,
-            "updated_at": timestamp,
-        })
-    workspace_ref.collection("members").document(uid).set({
-        "uid": uid, "role": "owner", "status": "active",
-        "joined_at": timestamp, "updated_at": timestamp,
-    }, merge=True)
+    ensure_personal_workspace(uid)
     return public_profile(user_ref.get().to_dict() or {})
 
 
@@ -177,8 +202,9 @@ def active_workspace(uid: str) -> str:
     preferred = (data or {}).get("active_workspace_id")
     if preferred and membership(preferred, uid):
         return preferred
-    wid = (data or {}).get("personal_workspace_id") or personal_workspace_id(uid)
-    return wid
+    # No valid preferred workspace: fall back to (and guarantee) the user's
+    # own personal workspace, never an arbitrary/attacker-supplied id.
+    return ensure_personal_workspace(uid)
 
 
 def set_active_workspace(uid: str, workspace_id: str):
