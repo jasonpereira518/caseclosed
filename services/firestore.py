@@ -75,10 +75,9 @@ def save_context(context_id, data):
 
 
 def load_context(context_id):
-    """Load context document; return None if missing."""
-    if not _ensure_initialized():
-        return None
-    db = _db
+    """Load context document; return None if missing. Raises if Firestore is unavailable,
+    consistent with save_context/delete_context/list_contexts."""
+    db = get_firestore_client()
     col = db.collection(config.FIRESTORE_COLLECTION)
     snap = col.document(str(context_id)).get()
     if not snap.exists:

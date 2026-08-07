@@ -117,18 +117,20 @@ login_manager.login_view = "auth.login"
 
 register_blueprints(app)
 
-_missing = {
-    "/case/ask",
-    "/chat/case/ask",
-    "/case/describe",
-    "/chat/case/describe",
-    "/case/treatment",
-    "/chat/case/treatment",
-} - {r.rule for r in app.url_map.iter_rules()}
+# PROTECTED_JSON_PATHS decides whether an unauthenticated request gets a 401
+# JSON body or an HTML redirect (see unauthorized() above). If a path in it
+# were ever renamed, removed, or its blueprint failed to register, callers
+# would silently start getting redirected instead of 401ed. Checking every
+# entry here (not just a hand-picked subset) is the single source of truth
+# for "did every protected route actually register."
+_registered_paths = {r.rule for r in app.url_map.iter_rules()}
+_missing = {path for path in PROTECTED_JSON_PATHS
+            if path not in _registered_paths and f"{path}/" not in _registered_paths}
 if _missing:
     raise RuntimeError(
-        f"chat blueprint did not register expected POST case-ask paths; missing: {sorted(_missing)}. "
-        "Check routes.chat (case_ask decorators) and routes.register_blueprints."
+        f"PROTECTED_JSON_PATHS references paths with no registered route: {sorted(_missing)}. "
+        "A route was renamed, removed, or a blueprint failed to register -- fix the "
+        "mismatch, or update PROTECTED_JSON_PATHS if the path was intentionally removed."
     )
 
 # =====================================================
