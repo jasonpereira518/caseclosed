@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Signing out — Case Closed{% endblock %}
+{% block content %}
+<main class="login-page" id="main">
+  <section class="login-card" aria-labelledby="logout-title">
+    <h1 class="login-title" id="logout-title">Signing out…</h1>
+    <p class="login-tagline">Closing your Case Closed session securely.</p>
+    <p id="auth-status" class="auth-status" role="status" aria-live="polite"></p>
+    <a href="{{ redirect_url }}">Return home</a>
+  </section>
+</main>
+{% endblock %}
+{% block page_scripts %}<script defer src="{{ url_for('static', filename='logout.js') }}"></script>{% endblock %}

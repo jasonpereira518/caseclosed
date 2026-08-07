@@ -11,6 +11,7 @@ build/
 venv/
 .env
 .env.*
+!.env.example
 .venv
 *.log
 
@@ -19,6 +20,8 @@ key.json
 *.json
 !package.json
 !package-lock.json
+!firebase.deploy.json
+!infra/*.json
 
 # IDEs / editors
 .vscode/
@@ -46,6 +49,9 @@ instance/
 
 # Node (if you add frontend stuff)
 node_modules/
+
+# Local tool scratch
+.impeccable/
 
 # Others
 __MACOSX/

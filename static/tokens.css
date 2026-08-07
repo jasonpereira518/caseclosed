@@ -1,0 +1,310 @@
+/* ============================================================================
+   Case Closed — design tokens
+   Single source of truth for both static/app.css and static/landing.css.
+
+   Direction: the category standard, executed at full commitment.
+   Craft bar: Harvey, CoCounsel, Spellbook — legal-professional register.
+   Consequences of that bar, encoded below:
+     · flat surfaces; elevation is carried by borders, not shadows
+     · minimal radii (2–8px). Nothing is 18px or 20px any more.
+     · no gradients anywhere
+     · the accent is reserved for action and active state, never decoration
+     · generous vertical rhythm; density comes from alignment, not small text
+
+   Palette is retained from the existing product and is not up for replacement.
+   Every value below is either one of those nine originals or a derived state
+   of one, with contrast verified at WCAG 2.2 AA.
+
+   Light theme only, deliberately: the product's output is a document the
+   lawyer prints and edits in Word. The [data-theme] hook exists so a second
+   theme is a swap, not a rewrite — do not add one without a design pass.
+   ========================================================================== */
+
+:root {
+  /* ---------------------------------------------------------------- colour */
+
+  /* Brand originals — retained verbatim. Reference only; use the roles. */
+  --cc-paper:        #fdfcfa;
+  --cc-white:        #ffffff;
+  --cc-ink:          #3a2a1a;
+  --cc-body:         #3e2f24;
+  --cc-espresso:     #4a3228;
+  --cc-espresso-2:   #5c4033;
+  --cc-clay:         #b8805f;
+  --cc-clay-dark:    #a06e4f;
+  --cc-sand:         #f5ede3;
+  --cc-sand-deep:    #ede7dd;
+  --cc-rule:         #e0d5c8;
+  --cc-rule-strong:  #d4c4b0;
+  --cc-muted:        #9e8e7e;
+
+  /* Surfaces */
+  --surface-page:          var(--cc-paper);
+  --surface:               var(--cc-white);
+  --surface-sunken:        #f9f5f0;
+  --surface-muted:         var(--cc-sand);
+  --surface-muted-strong:  var(--cc-sand-deep);
+  --surface-hover:         #f7f4ef;
+  --surface-active:        var(--cc-sand-deep);
+  --surface-inverse:       var(--cc-espresso);
+  --surface-inverse-hover: var(--cc-espresso-2);
+
+  /* Text — every role below passes AA on --surface and --surface-page.
+     --text-muted is 4.53:1 and is therefore valid for body text, but is
+     reserved for secondary content; never use it for a control label. */
+  --text-strong:     var(--cc-ink);      /* 13.4:1 on paper */
+  --text:            var(--cc-body);     /* 12.5:1 */
+  --text-secondary:  #6b5744;            /* 6.7:1  */
+  --text-muted:      #72665b;            /* 4.53:1 on the WORST surface (sand-deep) */
+  --text-inverse:    var(--cc-white);
+  --text-link:       #8a5a3a;            /* 5.8:1  */
+  /* NOTE: brand --cc-muted #9e8e7e is 3.1:1 and FAILS as text on every
+     surface. It survives only as --icon-decorative below. The app currently
+     uses it for text 35 times; every one of those becomes --text-muted. */
+
+  /* Borders.
+     WCAG 1.4.11 requires 3:1 only where a boundary IDENTIFIES a control.
+     Dividers and container edges are exempt, so the delicate rules stay
+     delicate — but form-control edges must use --border-control. */
+  --border-subtle:   #ede4d9;   /* 1.2:1 — hairline dividers */
+  --border:          var(--cc-rule);        /* 1.45:1 — container edges */
+  --border-strong:   var(--cc-rule-strong); /* 1.70:1 — emphasis dividers */
+  --border-control:  #928779;   /* 3.03:1 on sand — inputs, selects, textareas */
+  --border-inverse:  #3f2a21;
+
+  /* Accent.
+     Clay is 3.34:1 on white. That clears the 3:1 non-text threshold, so it is
+     valid for icons, indicators, active rules, and selected-state borders —
+     and INVALID as a background for any text. See --action-* below. */
+  --accent:          var(--cc-clay);
+  --accent-hover:    var(--cc-clay-dark);
+  --accent-active:   #8b5f43;
+  --accent-text:     #8a5a3a;   /* 5.8:1 — the readable clay, for text and links */
+  --accent-subtle:   #fdf6f0;
+  --accent-muted:    #f2e2d6;
+  --accent-border:   #d9ad90;
+  --icon-decorative: var(--cc-muted);  /* non-meaningful glyphs only */
+
+  /* Primary action.
+     The shipping product fills primary buttons with clay and sets white on
+     top: 3.34:1, a live AA failure on the most important control in the
+     product. Clay cannot be rescued — white 3.34, ink 4.12, espresso 3.54,
+     all short of 4.5. So the fill becomes espresso (11.81:1), which is also
+     what the craft bar does: Harvey's primary CTA is dark navy, not a
+     mid-tone brand colour. Clay is freed to be the accent it should have
+     been instead of a fill used forty times. */
+  --action:            var(--cc-espresso);
+  --action-hover:      var(--cc-espresso-2);
+  --action-active:     #3f2a21;
+  --action-text:       var(--cc-white);     /* 11.81:1 */
+  --action-secondary-bg:     transparent;
+  --action-secondary-text:   var(--cc-ink);
+  --action-secondary-border: var(--border-control);
+
+  /* Status. Source values (#4a7c59, #e69138, #cc0000) failed AA as text;
+     these are the darkened, verified equivalents. The -surface and -border
+     pairs carry the original hue so the badges still read as themselves. */
+  --positive:          #3c6b4a;
+  --positive-surface:  #eef4ef;
+  --positive-border:   #b9d0c0;
+
+  --caution:           #8a5510;
+  --caution-surface:   #fdf3e6;
+  --caution-border:    #e8c795;
+
+  --negative:          #a8261d;
+  --negative-surface:  #fdeceb;
+  --negative-border:   #e8b3ae;
+
+  --info:              #4a3228;
+  --info-surface:      var(--cc-sand);
+  --info-border:       var(--cc-rule);
+
+  /* Focus — must be plainly visible. The old ring was rgba(...,0.1) and
+     was effectively invisible; WCAG 2.2 AA makes that a failure. */
+  --focus-ring-color:  var(--cc-clay-dark);
+  --focus-ring:        0 0 0 2px var(--surface), 0 0 0 4px var(--focus-ring-color);
+  --focus-ring-inset:  inset 0 0 0 2px var(--focus-ring-color);
+
+  /* Selection */
+  --selection-bg:   var(--cc-sand);
+  --selection-text: var(--cc-ink);
+
+  /* --------------------------------------------------------------- spacing */
+  /* 4px base. Use these; do not reintroduce 7px, 9px, 11px, 13px, 19px, 21px. */
+  --space-0:   0;
+  --space-px:  1px;
+  --space-1:   0.25rem;  /*  4 */
+  --space-2:   0.5rem;   /*  8 */
+  --space-3:   0.75rem;  /* 12 */
+  --space-4:   1rem;     /* 16 */
+  --space-5:   1.25rem;  /* 20 */
+  --space-6:   1.5rem;   /* 24 */
+  --space-7:   2rem;     /* 32 */
+  --space-8:   2.5rem;   /* 40 */
+  --space-9:   3rem;     /* 48 */
+  --space-10:  4rem;     /* 64 */
+  --space-11:  5rem;     /* 80 */
+  --space-12:  6rem;     /* 96 */
+  --space-13:  7.5rem;   /* 120 */
+
+  /* Section rhythm on marketing surfaces. Craft bar sits at 80–120px. */
+  --section-pad-y:       clamp(4rem, 7vw, 7.5rem);
+  --section-pad-y-tight: clamp(3rem, 5vw, 5rem);
+
+  /* ------------------------------------------------------------ typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               Helvetica, Arial, sans-serif;
+  --font-serif: 'Georgia', 'Times New Roman', serif;   /* drafted documents only */
+  --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Menlo', 'Consolas',
+               monospace;
+
+  /* One ramp for both surfaces. Nothing below 11px exists any more; the app
+     previously shipped 8px and 9px text. 11px is uppercase micro-labels only. */
+  --text-2xs:  0.6875rem;  /* 11 — uppercase labels with tracking, never prose */
+  --text-xs:   0.75rem;    /* 12 — timestamps, counts, table metadata */
+  --text-sm:   0.8125rem;  /* 13 — dense secondary UI */
+  --text-base: 0.9375rem;  /* 15 — app body. Was 14; the bar is legibility. */
+  --text-md:   1rem;       /* 16 — marketing body */
+  --text-lg:   1.125rem;   /* 18 — lede */
+  --text-xl:   1.25rem;    /* 20 */
+  --text-2xl:  1.5rem;     /* 24 */
+  --text-3xl:  1.875rem;   /* 30 */
+  --text-4xl:  2.375rem;   /* 38 */
+  --display-sm: clamp(1.75rem, 3.4vw, 2.5rem);
+  --display:    clamp(2.25rem, 5vw, 3.5rem);   /* 36 → 56, matches the bar */
+
+  --weight-normal:   400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  --leading-tight:   1.15;
+  --leading-snug:    1.3;
+  --leading-normal:  1.5;
+  --leading-relaxed: 1.6;
+
+  --tracking-tight:  -0.02em;
+  --tracking-snug:   -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide:   0.04em;
+  --tracking-caps:   0.08em;   /* pairs with --text-2xs */
+
+  /* ---------------------------------------------------------------- radius */
+  /* Craft bar is 0–4px on controls. Nothing here approaches the old 18/20px. */
+  --radius-xs:   2px;
+  --radius-sm:   3px;
+  --radius-md:   5px;   /* inputs, buttons, cards */
+  --radius-lg:   8px;   /* modals, panels */
+  --radius-full: 9999px; /* avatars and true pills only */
+
+  /* ------------------------------------------------------------- elevation */
+  /* Flat by default. A shadow means "this floats above the page" and nothing
+     else — it is not a decoration and not a hover affordance. */
+  --shadow-none: none;
+  --shadow-sm:   0 1px 2px rgba(58, 42, 26, 0.06);
+  --shadow-md:   0 4px 12px rgba(58, 42, 26, 0.08);
+  --shadow-lg:   0 12px 32px rgba(58, 42, 26, 0.12);
+  --shadow-overlay: 0 24px 64px rgba(58, 42, 26, 0.18);
+
+  /* ---------------------------------------------------------------- motion */
+  --duration-instant: 80ms;
+  --duration-fast:    140ms;
+  --duration-base:    200ms;
+  --duration-slow:    320ms;
+  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:   cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --transition-base: var(--duration-fast) var(--ease-standard);
+
+  /* --------------------------------------------------------------- z-index */
+  --z-base:     0;
+  --z-raised:   10;
+  --z-sticky:   100;
+  --z-dropdown: 200;
+  --z-backdrop: 900;
+  --z-modal:    1000;
+  --z-toast:    1100;
+  --z-tooltip:  1200;
+
+  /* ---------------------------------------------------------------- layout */
+  --page-max:     1180px;
+  --page-gutter:  max(1.5rem, calc((100vw - var(--page-max)) / 2));
+  --measure:      68ch;      /* prose line length ceiling */
+  --sidebar-w:    260px;
+  --control-h:    36px;
+  --control-h-lg: 44px;      /* WCAG 2.2 AA primary target size */
+
+  /* ----------------------------------------------------------- breakpoints */
+  /* Documented for reference — CSS cannot use vars in media queries.
+     One set across both stylesheets. The old files disagreed
+     (1040/820/600 vs 1024/768/600); these supersede both.
+       --bp-lg: 1280px   --bp-md: 1024px   --bp-sm: 768px   --bp-xs: 600px */
+}
+
+/* ============================================================================
+   Global reduced-motion honouring.
+   The landing page respected this; the application never did, despite
+   shipping eight keyframe animations including a pulsing microphone.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-instant: 1ms;
+    --duration-fast:    1ms;
+    --duration-base:    1ms;
+    --duration-slow:    1ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================================
+   Shared primitives — the small number of rules both surfaces must agree on.
+   Everything else lives in app.css or landing.css.
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+
+:where(:focus-visible) {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+/* Numerals must not shift width in tables, timers, scores, or dates.
+   Relevance percentages and the session timer both jitter without this. */
+.tabular,
+:where(time, .metric, .score, .count, [data-tabular]) {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* Visually hidden but available to assistive technology. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

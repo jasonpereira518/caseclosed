@@ -125,7 +125,7 @@ def check_case_treatment(cluster_id: str, citation_string: str = "") -> dict:
             base_treatment["status"] = "good"
             base_treatment["label"] = "✓ No Negative Treatment Found"
             
-    except Exception as e:
+    except Exception:
         # Don't crash on rate limits or API failures
         pass
         

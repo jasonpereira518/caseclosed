@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Account — Case Closed{% endblock %}
+{% block body_attrs %} class="app-body"{% endblock %}
+{% block content %}
+<main class="account-center" id="main">
+  <header class="account-center__header">
+    <div><a href="{{ url_for('main.workspace') }}">← Workspace</a><h1>Account center</h1><p>Manage your profile, workspaces, and information.</p></div>
+    <a href="{{ url_for('auth.logout') }}" data-clerk-sign-out>Sign out</a>
+  </header>
+  <div id="account-status" role="status" aria-live="polite"></div>
+  <section class="account-panel">
+    <h2>Profile</h2>
+    <form id="profile-form" class="account-form">
+      <label>Display name<input name="display_name"></label><label>Job title<input name="job_title"></label>
+      <label>Organization<input name="organization"></label><label>Phone<input name="phone" type="tel"></label>
+      <label>Timezone<input name="timezone" placeholder="America/New_York"></label><label>Bar number<input name="bar_number"></label>
+      <label>Jurisdictions<input name="jurisdictions" placeholder="New York, Federal"></label>
+      <label>Practice areas<input name="practice_areas" placeholder="Civil litigation, Employment"></label>
+      <label><span>Email notifications</span><input name="notification_email" type="checkbox"></label>
+      <label class="account-form__wide">Office address<input name="office_address"></label>
+      <label class="account-form__wide">Bio<textarea name="bio" rows="4"></textarea></label>
+      <button class="btn btn--primary" type="submit">Save profile</button>
+    </form>
+    <form id="avatar-form"><label>Profile photo<input type="file" name="avatar" accept="image/png,image/jpeg,image/webp"></label><button class="btn btn--secondary">Upload</button></form>
+  </section>
+  <section class="account-panel"><h2>Workspaces</h2><div id="workspace-list"></div>
+    <form id="team-form" class="account-inline"><input name="name" placeholder="New team name" required><button class="btn btn--primary">Create team</button></form>
+  </section>
+  <section class="account-panel"><h2>Your information</h2><p>Download your profile and every personal or team matter you can currently access, including original files.</p>
+    <button id="export-account" class="btn btn--secondary">Create portable ZIP</button>
+  </section>
+  <section class="account-panel account-panel--danger"><h2>Delete account</h2><p>Personal matters will be permanently removed. Team records remain with the team. Team ownership must be transferred first.</p>
+    <button id="delete-account" class="btn btn--danger">Delete my account</button>
+  </section>
+</main>
+{% endblock %}
+{% block page_scripts %}<script src="{{ url_for('static', filename='job-poller.js') }}"></script><script src="{{ url_for('static', filename='account.js') }}"></script>{% endblock %}

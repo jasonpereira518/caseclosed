@@ -10,11 +10,12 @@ from services.firestore import get_firestore_client
 class User(UserMixin):
     """Flask-Login user backed by Google account fields."""
 
-    def __init__(self, id, email=None, name=None, profile_pic=None):
+    def __init__(self, id, email=None, name=None, profile_pic=None, **profile):
         self.id = str(id)
         self.email = email
         self.name = name
         self.profile_pic = profile_pic
+        self.profile = profile
 
 
 def save_user(user_data):
@@ -27,6 +28,8 @@ def save_user(user_data):
         "email": user_data.get("email"),
         "name": user_data.get("name"),
         "profile_pic": user_data.get("profile_pic") or user_data.get("picture"),
+        "display_name": user_data.get("display_name") or user_data.get("name"),
+        "avatar_url": user_data.get("avatar_url") or user_data.get("profile_pic") or user_data.get("picture"),
     }
     db = get_firestore_client()
     db.collection(config.FIRESTORE_USERS_COLLECTION).document(uid).set(doc, merge=True)
@@ -44,9 +47,17 @@ def load_user(user_id):
     if not snap.exists:
         return None
     d = snap.to_dict() or {}
+    profile_pic = d.get("avatar_url") or d.get("profile_pic")
+    if d.get("avatar_storage_path"):
+        try:
+            from services.storage import signed_download_url
+            profile_pic = signed_download_url(d["avatar_storage_path"], minutes=60)
+        except RuntimeError:
+            profile_pic = None
     return User(
         id=str(user_id),
         email=d.get("email"),
-        name=d.get("name"),
-        profile_pic=d.get("profile_pic"),
+        name=d.get("display_name") or d.get("name"),
+        profile_pic=profile_pic,
+        **{key: value for key, value in d.items() if key not in {"name", "display_name", "profile_pic", "avatar_url", "email"}},
     )

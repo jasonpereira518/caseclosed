@@ -20,8 +20,11 @@ def _ensure_initialized():
         return True
     if _init_error is not None:
         return False
+    # FIREBASE_CREDENTIALS is the legacy explicit service-account certificate.
+    # Otherwise let Firebase Admin use Application Default Credentials natively;
+    # ADC can be a workload identity, service account, or authorized user file.
     cred_path = config.FIREBASE_CREDENTIALS
-    if not cred_path or not os.path.isfile(cred_path):
+    if cred_path and not os.path.isfile(cred_path):
         _init_error = FileNotFoundError(
             f"Firebase credentials file not found: {cred_path!r}"
         )
@@ -33,8 +36,15 @@ def _ensure_initialized():
         return False
     try:
         if not firebase_admin._apps:
-            cred = credentials.Certificate(cred_path)
-            firebase_admin.initialize_app(cred)
+            if cred_path:
+                cred = credentials.Certificate(cred_path)
+                options = ({"storageBucket": config.FIREBASE_STORAGE_BUCKET}
+                           if config.FIREBASE_STORAGE_BUCKET else None)
+                firebase_admin.initialize_app(cred, options)
+            else:
+                options = ({"storageBucket": config.FIREBASE_STORAGE_BUCKET}
+                           if config.FIREBASE_STORAGE_BUCKET else None)
+                firebase_admin.initialize_app(options=options)
         _db = firestore.client()
         logging.info("Firestore client initialized (collection=%s).", config.FIRESTORE_COLLECTION)
         return True
@@ -65,10 +75,9 @@ def save_context(context_id, data):
 
 
 def load_context(context_id):
-    """Load context document; return None if missing."""
-    if not _ensure_initialized():
-        return None
-    db = _db
+    """Load context document; return None if missing. Raises if Firestore is unavailable,
+    consistent with save_context/delete_context/list_contexts."""
+    db = get_firestore_client()
     col = db.collection(config.FIRESTORE_COLLECTION)
     snap = col.document(str(context_id)).get()
     if not snap.exists:

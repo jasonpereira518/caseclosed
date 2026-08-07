@@ -6,6 +6,13 @@ from .analyze import analyze_bp
 from .draft import draft_bp
 from .context import context_bp
 from .intake import intake_bp
+from .notes import notes_bp
+from .search import search_bp
+from .demo import demo_bp
+from .account import account_bp
+from .jobs import jobs_bp
+from .system import system_bp
+from .webhooks import webhooks_bp
 
 
 def register_blueprints(app):
@@ -17,4 +24,10 @@ def register_blueprints(app):
     app.register_blueprint(draft_bp)
     app.register_blueprint(context_bp)
     app.register_blueprint(intake_bp)
-
+    app.register_blueprint(notes_bp)
+    app.register_blueprint(search_bp)
+    app.register_blueprint(demo_bp)
+    app.register_blueprint(account_bp)
+    app.register_blueprint(jobs_bp)
+    app.register_blueprint(system_bp)
+    app.register_blueprint(webhooks_bp)

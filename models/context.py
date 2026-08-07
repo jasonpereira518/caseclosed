@@ -1,50 +1,63 @@
+"""Compatibility aggregate over normalized, workspace-scoped matter records."""
 import uuid
 from datetime import datetime, timezone
 
-import config
-from google.cloud.firestore_v1.base_query import FieldFilter
-
-from services.firestore import (
-    delete_context as delete_context_doc,
-    get_firestore_client,
-    load_context,
-    save_context,
-    try_startup_init,
+from services.matters import (
+    LIST_COLLECTIONS,
+    ROOT_FIELDS,
+    STATE_FIELDS,
+    create_matter,
+    delete_matter,
+    list_matters,
+    load_matter,
+    locate_matter,
+    patch_matter,
+    save_matter,
 )
-
-
-try_startup_init()
+from services.tenancy import active_workspace, personal_workspace_id
+import config
+from services.firestore import get_firestore_client, load_context as load_legacy_context
 
 
 class FirestoreBackedDict(dict):
-    """
-    Persists top-level context mutations to Firestore so route handlers that
-    mutate the returned dict in place stay in sync without changing routes.
-    """
+    __slots__ = ("_context_id", "_user_id")
 
-    __slots__ = ("_context_id",)
-
-    def __init__(self, context_id, initial=None):
-        self._context_id = context_id
-        if initial is None:
-            initial = {}
-        super().__init__(initial)
+    def __init__(self, context_id, user_id, initial=None):
+        self._context_id = str(context_id)
+        self._user_id = str(user_id)
+        super().__init__(initial or {})
 
     def __setitem__(self, key, value):
         super().__setitem__(key, value)
         _touch_updated_at(self)
-        save_context(self._context_id, dict(self))
-        
+        _persist_fields(self._context_id, self._user_id, self, {key})
+
     def set(self, key, value, touch=True):
         super().__setitem__(key, value)
         if touch:
             _touch_updated_at(self)
-        save_context(self._context_id, dict(self))
+        _persist_fields(self._context_id, self._user_id, self, {key})
 
     def update(self, *args, **kwargs):
+        changed = set(dict(*args, **kwargs))
         super().update(*args, **kwargs)
         _touch_updated_at(self)
-        save_context(self._context_id, dict(self))
+        _persist_fields(self._context_id, self._user_id, self, changed)
+
+
+def _persist_fields(context_id, user_id, context, changed):
+    """Persist only changed matter sections so unrelated worker writes survive."""
+    changed = set(changed or ())
+    root = {key: context.get(key) for key in changed if key in ROOT_FIELDS}
+    state = {key: context.get(key) for key in changed if key in STATE_FIELDS}
+    if root or state:
+        patch_matter(str(context_id), str(user_id),
+                     root=root or None, state=state or None)
+    draft = {key: context.get(key) for key in changed if key in {"draft", "draft_type"}}
+    if draft:
+        save_matter(str(context_id), draft)
+    for key in changed & set(LIST_COLLECTIONS):
+        save_matter(str(context_id), {key: context.get(key) or []})
 
 
 def _now_iso():
@@ -52,55 +65,32 @@ def _now_iso():
 
 
 def _touch_updated_at(ctx):
-    if isinstance(ctx, dict):
-        if isinstance(ctx, FirestoreBackedDict):
-            dict.__setitem__(ctx, "updated_at", _now_iso())
-        else:
-            ctx["updated_at"] = _now_iso()
+    if isinstance(ctx, FirestoreBackedDict):
+        dict.__setitem__(ctx, "updated_at", _now_iso())
+    elif isinstance(ctx, dict):
+        ctx["updated_at"] = _now_iso()
 
 
 def _ensure_metadata(ctx):
     if not isinstance(ctx, dict):
         return ctx
-    now = _now_iso()
+    timestamp = _now_iso()
     ctx.setdefault("title", "New Session")
-    ctx.setdefault("created_at", now)
-    ctx.setdefault("updated_at", now)
+    ctx.setdefault("created_at", timestamp)
+    ctx.setdefault("updated_at", timestamp)
     return ctx
 
 
 def default_context():
-    now = _now_iso()
+    timestamp = _now_iso()
     return {
-        "description": "",
-        "total_seconds": 0,
-        "clarify_attempts": 0,
-        "pending_questions": [],
-        "messages": [],
-        "analysis": {},
-        "summary": "",
-        "search_query": "",
-        "cases": [],
-        "timeline": [],
-        "statutes": [],
-        "strength": {},
-        "intake": {},
-        "title": "New Session",
-        "created_at": now,
-        "updated_at": now,
+        "description": "", "uploaded_documents": [], "total_seconds": 0,
+        "clarify_attempts": 0, "pending_questions": [], "messages": [],
+        "analysis": {}, "summary": "", "search_query": "", "cases": [],
+        "timeline": [], "statutes": [], "strength": {}, "intake": {},
+        "draft": "", "title": "New Session", "created_at": timestamp,
+        "updated_at": timestamp, "status": "active",
     }
-
-
-def _context_allowed_for_user(loaded, user_id):
-    """Return True if loaded context may be accessed by user_id (str or None)."""
-    if loaded is None:
-        return False
-    if user_id is None:
-        return True
-    doc_uid = loaded.get("user_id")
-    if doc_uid is None:
-        return True
-    return str(doc_uid) == str(user_id)
 
 
 def get_context_id(session_obj):
@@ -110,183 +100,150 @@ def get_context_id(session_obj):
 
 
 def get_context(context_id, user_id=None):
-    loaded = load_context(context_id)
-    if loaded is None or not _context_allowed_for_user(loaded, user_id):
+    if not context_id or not user_id:
         return {}
-    loaded = _ensure_metadata(loaded)
-    return FirestoreBackedDict(context_id, loaded)
+    loaded = load_matter(str(context_id), str(user_id)) or _migrate_legacy_context(
+        str(context_id), str(user_id))
+    return FirestoreBackedDict(context_id, user_id, _ensure_metadata(loaded)) if loaded else {}
 
 
 def get_context_or_default(context_id, user_id=None):
-    loaded = load_context(context_id)
-    if loaded is None:
+    if not user_id:
         return default_context()
-    if not _context_allowed_for_user(loaded, user_id):
-        return default_context()
-    loaded = _ensure_metadata(loaded)
-    return FirestoreBackedDict(context_id, loaded)
+    loaded = load_matter(str(context_id), str(user_id)) or _migrate_legacy_context(
+        str(context_id), str(user_id))
+    if loaded:
+        return FirestoreBackedDict(context_id, user_id, _ensure_metadata(loaded))
+    _, ctx = create_new_context(str(user_id), context_id=str(context_id))
+    return FirestoreBackedDict(context_id, user_id, ctx)
 
 
 def get_or_create_context(context_id, user_id=None):
-    loaded = load_context(context_id)
-    if loaded is not None:
-        loaded = _ensure_metadata(loaded)
-        if user_id is not None:
-            doc_uid = loaded.get("user_id")
-            if doc_uid is not None and str(doc_uid) != str(user_id):
-                return None
-            if doc_uid is None:
-                merged = dict(loaded)
-                merged["user_id"] = str(user_id)
-                save_context(context_id, merged)
-                loaded = merged
-        return FirestoreBackedDict(context_id, loaded)
+    if not user_id:
+        return None
+    loaded = load_matter(str(context_id), str(user_id)) or _migrate_legacy_context(
+        str(context_id), str(user_id))
+    if loaded:
+        return FirestoreBackedDict(context_id, user_id, _ensure_metadata(loaded))
+    # A missing indexed matter is new. A matter that exists but is inaccessible
+    # must never be recreated in the caller's workspace under the same ID.
+    workspace_id, _ = locate_matter(str(context_id))
+    if workspace_id:
+        return None
+    _, ctx = create_new_context(str(user_id), context_id=str(context_id))
+    return FirestoreBackedDict(context_id, user_id, ctx)
 
-    ctx = default_context()
-    if user_id is not None:
-        ctx["user_id"] = str(user_id)
-    wrapped = FirestoreBackedDict(context_id, ctx)
-    save_context(context_id, dict(wrapped))
-    return wrapped
+
+def save_context(context_id, data):
+    if isinstance(data, FirestoreBackedDict):
+        # Field assignments on this wrapper are persisted immediately and
+        # granularly; rewriting the aggregate here would reintroduce races.
+        return
+    save_matter(str(context_id), dict(data))
 
 
 def update_context(context_id, data, user_id=None):
     context = get_or_create_context(context_id, user_id)
     if context is None:
         return None
-    _touch_updated_at(data)
     context.update(data)
     return context
 
 
-def list_user_contexts(user_id):
-    """Return context metadata list owned by user_id."""
+def list_user_contexts(user_id, workspace_id=None):
     if not user_id:
         return []
-    try:
-        db = get_firestore_client()
-    except RuntimeError:
-        return []
-    col = db.collection(config.FIRESTORE_COLLECTION)
-    sessions = []
-    for doc in col.where(filter=FieldFilter("user_id", "==", str(user_id))).stream():
-        data = _ensure_metadata(doc.to_dict() or {})
-        sessions.append(
-            {
-                "context_id": doc.id,
-                "title": data.get("title", "New Session"),
-                "total_seconds": data.get("total_seconds", 0),
-                "created_at": data.get("created_at"),
-                "updated_at": data.get("updated_at"),
-            }
-        )
-    return sessions
+    wid = workspace_id or active_workspace(str(user_id))
+    _migrate_legacy_for_user(str(user_id), wid)
+    return list_matters(wid, str(user_id))
+
+
+def _migrate_legacy_context(context_id: str, user_id: str, workspace_id=None):
+    """Lazily adopt only legacy records with an exact owner identity match."""
+    existing_workspace, _ = locate_matter(context_id)
+    if existing_workspace:
+        return load_matter(context_id, user_id)
+    legacy = load_legacy_context(context_id)
+    if not legacy or str(legacy.get("user_id") or "") != str(user_id):
+        return None
+    wid = workspace_id or active_workspace(user_id) or personal_workspace_id(user_id)
+    _, loaded = create_matter(wid, user_id, matter_id=context_id, initial=legacy)
+    get_firestore_client().collection(config.FIRESTORE_COLLECTION).document(context_id).set({
+        "migration_status": "migrated", "migrated_uid": user_id,
+    }, merge=True)
+    return loaded
+
+
+def _migrate_legacy_for_user(user_id: str, workspace_id: str):
+    if not workspace_id:
+        return
+    collection = get_firestore_client().collection(config.FIRESTORE_COLLECTION)
+    for snap in collection.where("user_id", "==", user_id).stream():
+        data = snap.to_dict() or {}
+        if data.get("migration_status") == "migrated" or locate_matter(snap.id)[0]:
+            continue
+        _migrate_legacy_context(snap.id, user_id, workspace_id)
 
 
 def context_belongs_to_user(context_id, user_id):
-    loaded = load_context(context_id)
-    return _context_allowed_for_user(loaded, user_id)
+    return bool(user_id and get_context(str(context_id), str(user_id)))
 
 
 def rename_context(context_id, user_id, title):
     context = get_context(context_id, user_id)
     if not context:
         return False
-    clean_title = (title or "").strip()[:120] or "New Session"
-    context["title"] = clean_title
+    context["title"] = (title or "").strip()[:120] or "New Session"
     return True
 
 
 def delete_user_context(context_id, user_id):
-    if not context_belongs_to_user(context_id, user_id):
-        return False
     try:
-        delete_context_doc(context_id)
-        return True
-    except Exception:
+        return delete_matter(str(context_id), str(user_id))
+    except (PermissionError, ValueError):
         return False
 
 
-def create_new_context(user_id, context_id=None):
-    if not context_id:
-        context_id = str(uuid.uuid4())
-    ctx = default_context()
-    ctx["user_id"] = str(user_id)
-    save_context(context_id, ctx)
-    return context_id, ctx
+def create_new_context(user_id, context_id=None, workspace_id=None):
+    wid = workspace_id or active_workspace(str(user_id)) or personal_workspace_id(str(user_id))
+    return create_matter(wid, str(user_id), matter_id=context_id, initial=default_context())
 
 
 def cap_session_title(text: str, max_len: int = 28) -> str:
-    """Trim to max_len characters at the last full word; strip noise punctuation."""
-    text = (text or "").strip()
-    text = text.strip("\"'“”‘’")
+    text = (text or "").strip().strip("\"'“”‘’")
     while text and text[-1] in ".,;:!?":
         text = text[:-1].strip()
     if not text:
         return "New Session"
     if len(text) <= max_len:
         return text
-    chunk = text[: max_len + 1]
-    if " " in chunk:
-        cut = text[:max_len].rsplit(" ", 1)[0].strip()
-        return cut if cut else text[:max_len].strip()
-    return text[:max_len].strip()
+    chunk = text[:max_len + 1]
+    return (text[:max_len].rsplit(" ", 1)[0].strip() if " " in chunk else text[:max_len].strip()) or "New Session"
 
 
 def _strip_conversational_lead_in(text: str) -> str:
-    t = (text or "").strip()
-    if not t:
-        return t
-    low = t.lower()
-    for prefix in (
-        "i need help with ",
-        "i need help ",
-        "can you help with ",
-        "help with ",
-        "question about ",
-        "i have a question about ",
-    ):
-        if low.startswith(prefix):
-            return t[len(prefix) :].strip()
-    return t
+    value = (text or "").strip()
+    lowered = value.lower()
+    for prefix in ("i need help with ", "i need help ", "can you help with ", "help with ",
+                   "question about ", "i have a question about "):
+        if lowered.startswith(prefix):
+            return value[len(prefix):].strip()
+    return value
 
 
 def _first_line_preview_words(text: str, max_words: int = 5) -> str:
-    line = _strip_conversational_lead_in((text or "").strip().split("\n", 1)[0])
-    words = line.split()
-    return " ".join(words[:max_words]) if words else ""
+    words = _strip_conversational_lead_in((text or "").strip().split("\n", 1)[0]).split()
+    return " ".join(words[:max_words])
 
 
 def auto_generate_title(context):
-    """Non-LLM fallback: short topic (≤28 chars) from first user message or description."""
-    if not isinstance(context, dict):
-        return "New Session"
-
-    messages = context.get("messages") or []
-    if isinstance(messages, list) and messages:
+    messages = context.get("messages") or [] if isinstance(context, dict) else []
+    if messages:
         first = messages[0]
-        if isinstance(first, dict):
-            text = str(first.get("content") or first.get("text") or "").strip()
-        else:
-            text = str(first).strip()
-        snippet = _first_line_preview_words(text, 5)
-        if snippet:
-            return cap_session_title(snippet)
-
-    description = str(context.get("description", "")).strip()
+        text = first.get("content") or first.get("text") if isinstance(first, dict) else str(first)
+        if text:
+            return cap_session_title(_first_line_preview_words(text))
+    description = str(context.get("description", "")).strip() if isinstance(context, dict) else ""
     if description:
-        for line in description.splitlines():
-            line = line.strip()
-            if line.startswith("[PDF:") and "]" in line:
-                name = line[5 : line.index("]")].strip()
-                base = name.replace(".pdf", "").replace("_", " ").strip()
-                if base:
-                    return cap_session_title(_first_line_preview_words(base, 5) or base)
-        for line in description.splitlines():
-            line = line.strip()
-            if line and not line.startswith("[PDF:"):
-                snippet = _first_line_preview_words(line, 5)
-                if snippet:
-                    return cap_session_title(snippet)
-
+        return cap_session_title(_first_line_preview_words(description))
     return "New Session"

@@ -1,0 +1,318 @@
+{% extends "landing_base.html" %}
+
+{% block content %}
+<div class="announcement" role="status">
+    <span>Now welcoming solo and small-firm litigators for early access</span>
+    <a href="{{ primary_cta_url }}">Get started <span aria-hidden="true">→</span></a>
+</div>
+
+<header class="landing-header" data-header>
+    <nav class="landing-nav" aria-label="Primary navigation">
+        <a class="brand" href="#top" aria-label="Case Closed home">
+            <img src="{{ url_for('static', filename='briefcase.png') }}" alt="" width="34" height="34">
+            <span>Case Closed</span>
+        </a>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links" data-nav-toggle>
+            <span class="nav-toggle-label">Menu</span>
+            <span class="nav-toggle-lines" aria-hidden="true"></span>
+        </button>
+        <div class="nav-links" id="nav-links" data-nav-links>
+            <a href="#product">Product</a>
+            <a href="#workflow">Workflow</a>
+            <a href="#control">Lawyer Control</a>
+            <a href="#faq">FAQ</a>
+        </div>
+        <div class="nav-actions">
+            {% if current_user.is_authenticated %}
+            <a class="nav-signin" href="{{ primary_cta_url }}">Workspace</a>
+            <a class="button button-small" href="{{ primary_cta_url }}">Open Workspace</a>
+            {% else %}
+            <a class="nav-signin" href="{{ url_for('auth.login') }}">Sign in</a>
+            <a class="button button-small" href="{{ primary_cta_url }}">Start a matter</a>
+            {% endif %}
+        </div>
+    </nav>
+</header>
+
+<main id="main-content">
+    <section class="hero" id="top">
+        <div class="hero-copy reveal">
+            <p class="eyebrow">Litigation workspace for focused practices</p>
+            <h1>From case file to<br><span>first draft, faster.</span></h1>
+            <p class="hero-lede">Organize the record, uncover relevant authority, and prepare review-ready legal work in one matter-aware workspace.</p>
+            <div class="hero-actions">
+                <a class="button" href="{{ primary_cta_url }}">
+                    {% if current_user.is_authenticated %}Open Workspace{% else %}Start a matter{% endif %}
+                    <span aria-hidden="true">→</span>
+                </a>
+                <a class="text-link" href="https://youtu.be/-iNLur6breI">Watch the product tour <span aria-hidden="true">↗</span></a>
+            </div>
+            <ul class="confidence-list" aria-label="Product principles">
+                <li>Matter-aware analysis</li>
+                <li>Inspectable authority</li>
+                <li>Lawyer-controlled drafting</li>
+            </ul>
+        </div>
+
+        <div class="hero-product-wrap reveal" data-delay="1">
+            {# Was 137 lines of hand-maintained HTML replicating the dashboard,
+               backed by ~835 lines of CSS. It looked better than the real app
+               and would have drifted on the next feature. This frames the
+               actual workspace, running the actual stylesheet, on fixture
+               data — so it cannot drift and cannot mislead. #}
+            <figure class="hero-product" data-product-frame>
+                <div class="hero-product-chrome" aria-hidden="true">
+                    <span class="hero-product-dot"></span>
+                    <span class="hero-product-dot"></span>
+                    <span class="hero-product-dot"></span>
+                    <span class="hero-product-url">app.caseclosed.legal</span>
+                </div>
+                <div class="hero-product-viewport">
+                    <iframe
+                        src="/demo"
+                        title="The Case Closed workspace, running on a demonstration matter"
+                        loading="lazy"
+                        tabindex="-1"
+                        scrolling="no"></iframe>
+                    <a class="hero-product-overlay" href="/demo" target="_blank" rel="noopener">
+                        <span class="hero-product-cue">Open the live workspace</span>
+                    </a>
+                </div>
+                <figcaption class="hero-product-caption">
+                    The workspace on a demonstration matter. Every party, document and authority
+                    shown is synthetic.
+                </figcaption>
+            </figure>
+        </div>
+    </section>
+
+    <section class="fragmented section-pad" aria-labelledby="fragmented-title">
+        <div class="section-heading reveal">
+            <p class="eyebrow">The problem</p>
+            <h2 id="fragmented-title">Your matter should not be scattered across six different tools.</h2>
+            <p>Pleadings, evidence, notes, research, and drafts all depend on the same context. Case Closed keeps that context connected as the work moves forward.</p>
+        </div>
+        <div class="fragmented-demo reveal" data-delay="1">
+            <div class="artifact artifact-pdf"><span>PDF</span><strong>Complaint.pdf</strong><small>42 pages</small></div>
+            <div class="artifact artifact-note"><span>NOTE</span><strong>Dispatch log</strong><small>Contradicts clock-out</small></div>
+            <div class="artifact artifact-date"><span>DATE</span><strong>Mar 14, 2026</strong><small>Incident report</small></div>
+            <div class="artifact artifact-case"><span>CASE</span><strong>Relevant authority</strong><small>Fict. 2019 · Vicarious liability</small></div>
+            <div class="connected-matter">
+                <img src="{{ url_for('static', filename='briefcase.png') }}" alt="" width="36" height="36">
+                <div><small>ONE CONNECTED MATTER</small><strong>Rivera v. Northline</strong></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="product-section section-pad" id="product" aria-labelledby="product-title">
+        <div class="section-heading section-heading-light reveal">
+            <p class="eyebrow">Product</p>
+            <h2 id="product-title">The matter stays with the work.</h2>
+            <p>Move from raw documents to legal work without rebuilding the same context at every step.</p>
+        </div>
+        <div class="feature-layout reveal" data-delay="1">
+            <div class="feature-list" role="tablist" aria-label="Product capabilities">
+                <button class="feature-button active" type="button" role="tab" aria-selected="true" data-feature="record">
+                    <span>01</span><strong>Organize the record</strong><small>Bring documents, facts, and correspondence into one matter.</small>
+                </button>
+                <button class="feature-button" type="button" role="tab" aria-selected="false" data-feature="timeline">
+                    <span>02</span><strong>Build the chronology</strong><small>Turn dated facts into a reviewable event timeline.</small>
+                </button>
+                <button class="feature-button" type="button" role="tab" aria-selected="false" data-feature="issues">
+                    <span>03</span><strong>Identify legal issues</strong><small>Structure parties, claims, disputes, and open questions.</small>
+                </button>
+                <button class="feature-button" type="button" role="tab" aria-selected="false" data-feature="authority">
+                    <span>04</span><strong>Research relevant authority</strong><small>Review ranked case law, or ask a question and get a cited, sourced answer.</small>
+                </button>
+                <button class="feature-button" type="button" role="tab" aria-selected="false" data-feature="draft">
+                    <span>05</span><strong>Prepare the first draft</strong><small>Create an editable memo or brief from accumulated context.</small>
+                </button>
+            </div>
+            <div class="feature-preview" aria-live="polite">
+                <div class="feature-preview-top">
+                    <span class="preview-breadcrumb">Rivera v. Northline Logistics</span>
+                    <span class="preview-state" data-preview-state>Record organized</span>
+                </div>
+                <div class="preview-canvas" data-preview-canvas data-state="record">
+                    <div class="preview-sidebar">
+                        <span class="active">Overview</span><span>Documents</span><span>Timeline</span><span>Cases</span><span>Draft</span>
+                    </div>
+                    <div class="preview-content">
+                        <div class="preview-heading"><small data-preview-eyebrow>MATTER RECORD</small><strong data-preview-title>Four documents, one working record</strong></div>
+                        <div class="preview-records" data-preview-records>
+                            <div><span>PDF</span><p><strong>Complaint.pdf</strong><small>42 pages · Analyzed</small></p><b>✓</b></div>
+                            <div><span>PDF</span><p><strong>Incident report.pdf</strong><small>8 pages · Analyzed</small></p><b>✓</b></div>
+                            <div><span>DOC</span><p><strong>Witness statement.docx</strong><small>6 pages · Analyzed</small></p><b>✓</b></div>
+                            <div><span>TXT</span><p><strong>Client notes.txt</strong><small>Updated today</small></p><b>✓</b></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="workflow section-pad" id="workflow" aria-labelledby="workflow-title">
+        <div class="section-heading reveal">
+            <p class="eyebrow">How it works</p>
+            <h2 id="workflow-title">One matter. Three stages.</h2>
+            <p>A focused path from the record in front of you to work you can continue reviewing.</p>
+        </div>
+        <ol class="workflow-steps">
+            <li class="reveal">
+                <div class="step-number">01</div>
+                <div class="step-icon" aria-hidden="true">+</div>
+                <h3>Add the record</h3>
+                <p>Describe the matter and upload relevant documents, correspondence, evidence, and notes.</p>
+            </li>
+            <li class="reveal" data-delay="1">
+                <div class="step-number">02</div>
+                <div class="step-icon" aria-hidden="true">⌕</div>
+                <h3>Develop the case</h3>
+                <p>Review facts, parties, chronology, legal issues, statutes, and relevant authority.</p>
+            </li>
+            <li class="reveal" data-delay="2">
+                <div class="step-number">03</div>
+                <div class="step-icon" aria-hidden="true">Aa</div>
+                <h3>Prepare the work</h3>
+                <p>Create an editable memo or brief using the matter's accumulated context.</p>
+            </li>
+        </ol>
+    </section>
+
+    <section class="control section-pad" id="control" aria-labelledby="control-title">
+        <div class="control-copy reveal">
+            <p class="eyebrow">Lawyer control</p>
+            <h2 id="control-title">AI assistance without surrendering legal judgment.</h2>
+            <p>Case Closed helps organize and develop the work. You decide what is accurate, relevant, and ready to use.</p>
+            <ul class="control-list">
+                <li><span>✓</span> Review extracted facts before relying on them</li>
+                <li><span>✓</span> Inspect cases and matter-specific relevance</li>
+                <li><span>✓</span> See when a cited case may have been negatively treated</li>
+                <li><span>✓</span> Add notes and treatment checks</li>
+                <li><span>✓</span> Edit and export generated drafts</li>
+            </ul>
+        </div>
+        <div class="citation-demo reveal" data-delay="1">
+            <div class="source-card">
+                <div class="source-meta"><span>RELEVANT AUTHORITY</span><b>92% fit</b></div>
+                <h3>Alvarado v. Crestmoor Freight Co.</h3>
+                <p>182 Ohio App. 3d 411 · Fict. 2019</p>
+                <blockquote>Telemetry establishing that a delivery vehicle remained on its assigned route after the operator&rsquo;s recorded shift end was sufficient to create a jury question on scope of employment.</blockquote>
+                <div class="source-actions"><span>View source</span><span>Add note</span></div>
+            </div>
+            <div class="citation-line" aria-hidden="true"><span></span></div>
+            <div class="draft-card">
+                <div class="draft-toolbar"><span>Legal memorandum</span><b>Editing</b></div>
+                <p><strong>III. Scope of employment</strong></p>
+                <p>The dispatch log places the vehicle on its assigned route forty-one minutes after the recorded clock-out, which supports a jury question on scope of employment.<sup>1</sup></p>
+                <div class="footnote"><sup>1</sup> Alvarado v. Crestmoor Freight Co., 182 Ohio App. 3d 411 (Fict. 2019).</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="matter-outcome section-pad" aria-labelledby="outcome-title">
+        <div class="section-heading section-heading-light reveal">
+            <p class="eyebrow">A fictional matter walkthrough</p>
+            <h2 id="outcome-title">Turn a working file into a working case picture.</h2>
+            <p>Rivera v. Northline Logistics is a fictional example showing how matter context develops across the workspace.</p>
+        </div>
+        <div class="outcome-row reveal" data-delay="1">
+            <div><strong data-count="4">4</strong><span>matter documents</span></div>
+            <span class="outcome-arrow" aria-hidden="true">→</span>
+            <div><strong data-count="14">14</strong><span>key events</span></div>
+            <span class="outcome-arrow" aria-hidden="true">→</span>
+            <div><strong data-count="4">4</strong><span>legal issues</span></div>
+            <span class="outcome-arrow" aria-hidden="true">→</span>
+            <div><strong data-count="9">9</strong><span>relevant authorities</span></div>
+            <span class="outcome-arrow" aria-hidden="true">→</span>
+            <div><strong data-count="1">1</strong><span>memo outline</span></div>
+        </div>
+        <p class="outcome-note">Illustrative workflow only. Results depend on the matter, source material, and lawyer review.</p>
+    </section>
+
+    <section class="early-access section-pad" aria-labelledby="access-title">
+        <div class="early-access-inner reveal">
+            <div>
+                <p class="eyebrow">Early access</p>
+                <h2 id="access-title">Designed around the workflow of focused litigation practices.</h2>
+            </div>
+            <div>
+                <p>Bring the matter you are already working on. See how Case Closed keeps its record, research, analysis, and drafting connected.</p>
+                <a class="button" href="{{ primary_cta_url }}">
+                    {% if current_user.is_authenticated %}Open Workspace{% else %}Join early access{% endif %}
+                    <span aria-hidden="true">→</span>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <section class="faq section-pad" id="faq" aria-labelledby="faq-title">
+        <div class="section-heading reveal">
+            <p class="eyebrow">FAQ</p>
+            <h2 id="faq-title">Questions before starting a matter.</h2>
+        </div>
+        <div class="faq-list reveal" data-delay="1">
+            <details>
+                <summary>What does Case Closed do?<span aria-hidden="true">+</span></summary>
+                <p>It helps litigators organize matter documents, develop facts and timelines, research relevant case law, and prepare editable first drafts in one connected workspace.</p>
+            </details>
+            <details>
+                <summary>Is Case Closed a replacement for legal research?<span aria-hidden="true">+</span></summary>
+                <p>No. It assists with research by using matter context to find and explain potentially relevant authority. Lawyers should inspect every source independently.</p>
+            </details>
+            <details>
+                <summary>Can I inspect the cited authority?<span aria-hidden="true">+</span></summary>
+                <p>Yes. Case results include citations, jurisdiction information, relevance explanations, and links for reviewing the source. An automated check also flags cases that may have been negatively treated, so you know to look closer — always verify treatment independently before relying on a citation.</p>
+            </details>
+            <details>
+                <summary>What types of documents can I upload?<span aria-hidden="true">+</span></summary>
+                <p>The current workspace supports PDF, DOCX, DOC, and TXT matter documents.</p>
+            </details>
+            <details>
+                <summary>Can I edit and export drafts?<span aria-hidden="true">+</span></summary>
+                <p>Yes. Generated memo and brief drafts remain editable and can be exported for continued lawyer review.</p>
+            </details>
+            <details>
+                <summary>What happens if analysis takes a while?<span aria-hidden="true">+</span></summary>
+                <p>Document analysis, research, and drafting run as background jobs, so you are not stuck waiting on one screen. You can cancel a running job or retry one that failed.</p>
+            </details>
+            <details>
+                <summary>Does Case Closed replace lawyer review?<span aria-hidden="true">+</span></summary>
+                <p>No. Case Closed provides assistance with organization, research, and drafting. Its output must be reviewed by a qualified attorney before use.</p>
+            </details>
+        </div>
+    </section>
+
+    <section class="final-cta">
+        <div class="final-cta-inner reveal">
+            <p class="eyebrow">Start with the matter</p>
+            <h2>Stop rebuilding the context of your case.</h2>
+            <p>Keep the record, research, analysis, and first draft connected in one focused workspace.</p>
+            <a class="button button-light" href="{{ primary_cta_url }}">
+                {% if current_user.is_authenticated %}Open Workspace{% else %}Start a matter{% endif %}
+                <span aria-hidden="true">→</span>
+            </a>
+        </div>
+    </section>
+</main>
+
+<footer class="landing-footer">
+    <div class="footer-main">
+        <div class="footer-brand">
+            <a class="brand brand-footer" href="#top">
+                <img src="{{ url_for('static', filename='briefcase.png') }}" alt="" width="34" height="34">
+                <span>Case Closed</span>
+            </a>
+            <p>AI-assisted litigation workspace for solo and small-firm lawyers.</p>
+        </div>
+        <div class="footer-links">
+            <div><strong>Product</strong><a href="#product">Product</a><a href="#workflow">Workflow</a><a href="#control">Lawyer Control</a></div>
+            <div><strong>Access</strong><a href="{{ primary_cta_url }}">{% if current_user.is_authenticated %}Workspace{% else %}Start a matter{% endif %}</a><a href="https://youtu.be/-iNLur6breI">Product tour</a><a href="#faq">FAQ</a></div>
+        </div>
+    </div>
+    <div class="footer-bottom">
+        <p>© {{ current_year }} Case Closed. All rights reserved.</p>
+        <p>Case Closed does not provide legal advice. All output should be reviewed by a qualified attorney before use.</p>
+    </div>
+</footer>
+{% endblock %}

@@ -3,11 +3,14 @@ from flask_login import current_user, login_required
 import re
 from io import BytesIO
 from docx import Document
-from docx.shared import Pt, Inches, RGBColor
+from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-from models.context import get_context as get_stored_context, save_context
-from services.llm import draft_legal_document, extract_structured_analysis
+from models.context import get_context as get_stored_context
+from services.jobs import create_job, update_job
+from services.request_context import resolve_matter_id
+from services.task_queue import enqueue_job
+from services.tenancy import AuthorizationError
 
 
 draft_bp = Blueprint("draft", __name__)
@@ -16,42 +19,36 @@ draft_bp = Blueprint("draft", __name__)
 @draft_bp.route("/draft", methods=["POST"])
 @login_required
 def draft():
-    """Generate legal memo or brief from context."""
+    """Queue a matter_draft job; document generation runs in the job."""
     payload = request.json or {}
-    context_id = payload.get("context_id")
-    doc_type = payload.get("doc_type", "memo")  # "memo" or "brief"
+    context_id = resolve_matter_id(payload)
+    doc_type = str(payload.get("doc_type") or "memo")  # "memo" or "brief"
 
     if not context_id:
         return jsonify({"error": "No context_id provided"}), 400
 
-    context = get_stored_context(context_id, str(current_user.get_id()))
-    if not context:
-        return jsonify({"error": "Context not found"}), 404
-
-    # Ensure we have analysis
-    if not context.get("analysis"):
-        if context.get("description"):
-            context["analysis"] = extract_structured_analysis(context["description"])
-        else:
-            return jsonify({"error": "No case information available"}), 400
-
-    # Generate document
-    document = draft_legal_document(context, doc_type)
-    
-    # Save the draft text back to context
-    context["draft"] = document
-    save_context(context_id, context)
-
-    return jsonify(
-        {"status": "success", "document": document, "doc_type": doc_type, "context_id": context_id}
-    )
+    uid = str(current_user.get_id())
+    try:
+        job, created = create_job(context_id, uid, "matter_draft", {"doc_type": doc_type})
+        if created:
+            enqueue_job(context_id, job["job_id"])
+    except AuthorizationError:
+        return jsonify({"error": "forbidden"}), 403
+    except Exception as exc:
+        if "job" in locals():
+            update_job(context_id, job["job_id"], status="failed", stage="enqueue_failed",
+                       error={"code": "enqueue_failed", "message": str(exc)[:300]})
+        return jsonify({"error": "unable to queue draft"}), 503
+    job["status_url"] = f"/api/matters/{context_id}/jobs/{job['job_id']}"
+    job["context_id"] = context_id
+    return jsonify(job), 202
 
 
 @draft_bp.route("/draft/export", methods=["POST"])
 @login_required
 def draft_export():
     payload = request.json or {}
-    context_id = payload.get("context_id")
+    context_id = resolve_matter_id(payload)
     if not context_id:
         return jsonify({"error": "No context_id provided"}), 400
 

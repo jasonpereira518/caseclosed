@@ -1,113 +1,109 @@
-"""
-Google OAuth — browser redirect flow (backend only; no login UI templates yet).
-"""
-import logging
+"""Clerk authentication flows with a temporary Firebase rollback path."""
+from datetime import timedelta
+from urllib.parse import urlparse
 
-import requests
-from flask import Blueprint, redirect, request, session, url_for
-from flask_login import login_user, logout_user
-from google_auth_oauthlib.flow import Flow
+from flask import Blueprint, jsonify, make_response, redirect, render_template, request, session, url_for
+from flask_login import current_user, login_required, logout_user
 
 import config
-from models.user import load_user, save_user
+from services.firestore import get_firestore_client
+from services.tenancy import ensure_user
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-_OAUTH_SCOPES = [
-    "openid",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-]
 
-
-def _oauth_not_configured_response():
-    return (
-        "Google OAuth is not configured (set GOOGLE_OAUTH_CLIENT_SECRETS to a valid client_secret.json path).",
-        503,
-        {"Content-Type": "text/plain; charset=utf-8"},
-    )
-
-
-def _build_flow():
-    if not config.GOOGLE_OAUTH_CLIENT_SECRETS:
-        raise RuntimeError("OAuth client credentials missing")
-    return Flow.from_client_secrets_file(
-        config.GOOGLE_OAUTH_CLIENT_SECRETS,
-        scopes=_OAUTH_SCOPES,
-        redirect_uri=config.OAUTH_REDIRECT_URI,
-    )
+def _safe_next(value):
+    parsed = urlparse(value or "")
+    return value if not parsed.netloc and not parsed.scheme and (value or "").startswith("/") else url_for("main.workspace")
 
 
 @auth_bp.route("/login")
 def login():
-    """Start Google OAuth; redirect to Google consent screen."""
-    try:
-        flow = _build_flow()
-    except RuntimeError:
-        return _oauth_not_configured_response()
-    authorization_url, state = flow.authorization_url(
-        access_type="offline",
-        include_granted_scopes="true",
-        prompt="consent",
+    next_url = _safe_next(request.args.get("next"))
+    invite_token = request.args.get("invite", "")
+    if current_user.is_authenticated:
+        if invite_token:
+            return redirect(url_for("auth.complete_login", next=next_url, invite=invite_token))
+        return redirect(next_url)
+    complete_url = url_for("auth.complete_login", next=next_url, invite=invite_token)
+    return render_template(
+        "login.html",
+        firebase_config=config.FIREBASE_WEB_CONFIG,
+        next_url=next_url,
+        invite_token=invite_token,
+        complete_url=complete_url,
+        error=request.args.get("error", ""),
     )
-    session["oauth_state"] = state
-    return redirect(authorization_url)
 
 
-@auth_bp.route("/callback")
-def oauth_callback():
-    """Exchange code for tokens, persist user, log in, redirect home."""
+@auth_bp.route("/session", methods=["POST"])
+def create_session():
+    if config.AUTH_PROVIDER != "firebase":
+        return jsonify({"error": "Firebase session exchange is disabled"}), 404
+    from firebase_admin import auth as firebase_auth
+
+    data = request.get_json(silent=True) or {}
+    id_token = data.get("id_token")
+    if not id_token:
+        return jsonify({"error": "id_token is required"}), 400
+    origin = request.headers.get("Origin")
+    expected_origin = (config.APP_BASE_URL if config.ENVIRONMENT == "production"
+                       else request.host_url).rstrip("/")
+    if origin and origin.rstrip("/") != expected_origin:
+        return jsonify({"error": "invalid origin"}), 403
     try:
-        flow = _build_flow()
-    except RuntimeError:
-        return _oauth_not_configured_response()
-
-    if request.args.get("state") != session.get("oauth_state"):
-        return "Invalid OAuth state", 400
-
-    try:
-        flow.fetch_token(authorization_response=request.url)
+        get_firestore_client()
+        claims = firebase_auth.verify_id_token(id_token, check_revoked=True)
+        provider = (claims.get("firebase") or {}).get("sign_in_provider")
+        if provider == "password" and not claims.get("email_verified"):
+            return jsonify({"error": "verify your email address before signing in"}), 403
+        profile = ensure_user(claims)
+        expires = timedelta(days=config.AUTH_SESSION_DAYS)
+        cookie = firebase_auth.create_session_cookie(id_token, expires_in=expires)
     except Exception:
-        logging.exception("OAuth token exchange failed")
-        return "Authentication failed", 400
-
-    session.pop("oauth_state", None)
-    creds = flow.credentials
-    try:
-        resp = requests.get(
-            "https://www.googleapis.com/oauth2/v2/userinfo",
-            headers={"Authorization": f"Bearer {creds.token}"},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        info = resp.json()
-    except Exception:
-        logging.exception("Failed to fetch Google userinfo")
-        return "Failed to load profile", 400
-
-    user_id = info.get("id")
-    if not user_id:
-        return "Missing user id from Google", 400
-
-    save_user(
-        {
-            "id": user_id,
-            "email": info.get("email"),
-            "name": info.get("name"),
-            "profile_pic": info.get("picture"),
-        }
-    )
-    user = load_user(user_id)
-    if user is None:
-        return "Could not load user after save", 500
-
-    login_user(user, remember=True)
-    return redirect(url_for("main.index"))
+        return jsonify({"error": "authentication failed"}), 401
+    response = make_response(jsonify({"status": "ok", "profile": profile}))
+    response.set_cookie(config.AUTH_SESSION_COOKIE, cookie,
+                        max_age=int(expires.total_seconds()), httponly=True,
+                        secure=config.AUTH_COOKIE_SECURE, samesite="Lax", path="/")
+    session.clear()
+    return response
 
 
-@auth_bp.route("/logout")
+@auth_bp.route("/complete")
+@login_required
+def complete_login():
+    """Finish app-specific onboarding after Clerk establishes its session."""
+    next_url = _safe_next(request.args.get("next"))
+    invite_token = request.args.get("invite", "")
+    if invite_token:
+        from services.tenancy import AuthorizationError, ValidationError, accept_invitation
+
+        try:
+            accept_invitation(str(current_user.get_id()), current_user.email, invite_token)
+        except (AuthorizationError, ValidationError) as exc:
+            return redirect(url_for("auth.login", next=next_url, error=str(exc)))
+    session.clear()
+    return redirect(next_url)
+
+
+@auth_bp.route("/logout", methods=["GET", "POST"])
 def logout():
-    """Log out and clear session; redirect to OAuth login."""
+    if config.AUTH_PROVIDER == "clerk":
+        session.clear()
+        return render_template("logout.html", redirect_url=url_for("main.index"))
+    from firebase_admin import auth as firebase_auth
+
+    cookie = request.cookies.get(config.AUTH_SESSION_COOKIE)
+    if cookie:
+        try:
+            get_firestore_client()
+            claims = firebase_auth.verify_session_cookie(cookie)
+            firebase_auth.revoke_refresh_tokens(claims["uid"])
+        except Exception:
+            pass
     logout_user()
     session.clear()
-    return redirect(url_for("auth.login"))
+    response = make_response(redirect(url_for("main.index")))
+    response.delete_cookie(config.AUTH_SESSION_COOKIE, path="/")
+    return response

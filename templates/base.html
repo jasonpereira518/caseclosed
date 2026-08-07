@@ -2,32 +2,46 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Case Closed</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Case Closed{% endblock %}</title>
+    <meta name="theme-color" content="#4a3228">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Favicon assets (using uploaded PNG briefcase.png) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='briefcase.png') }}">
-    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='briefcase.png') }}">
-    <link rel="icon" type="image/png" sizes="48x48" href="{{ url_for('static', filename='briefcase.png') }}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='briefcase.png') }}">
-    <!-- Fallback shortcut icon -->
     <link rel="shortcut icon" href="{{ url_for('static', filename='briefcase.png') }}">
 </head>
-<body>
-    <!-- Top site header (ONE place for the title) -->
-    <header class="site-header">
-        <div class="site-header-inner">
-            <span class="site-icon"><i class="fas fa-briefcase"></i></span>
-            <h1 class="site-title">Case Closed</h1>
-        </div>
-    </header>
-
-    <div class="container">
-        {% block content %}{% endblock %}
-    </div>
+<body{% block body_attrs %}{% endblock %}>
+{% block direction_contract %}
+<!--
+  THESIS: A matter-aware litigation workspace, presented as the software its
+  buyer already trusts. Refuses the concept-world reading and the decorative
+  legal-tech reading alike; convention executed at full craft is the position.
+  OWN-WORLD: Retained espresso/clay/sand on paper. Flat surfaces, borders
+  instead of shadows, radii 2-8px, no gradients anywhere. Espresso carries
+  primary action; clay is accent only. Inter, one ramp, tabular numerals.
+  STORY: A litigator opens a matter, sees the whole record at once, and
+  reaches a reviewable draft without reassembling context.
+  FIRST VIEWPORT: History rail left, conversation centre, matter panel right
+  under a persistent caption header carrying title, jurisdiction and strength.
+  FORM: Canon — the category standard, chosen deliberately over the dealt
+  directions. Seed key 432d4b9c. Craft bar: Harvey, CoCounsel, Spellbook.
+  FINISH: unreviewed and undocumented is unfinished; this build ends with the
+  finish review, the verdict, and DESIGN.md.
+-->
+{% endblock %}
+    {% include "_icons.html" %}
+    <a class="skip-link" href="#main">Skip to main content</a>
+    {% block content %}{% endblock %}
+    <div class="toast-region" id="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
+    {% if clerk_enabled and (current_user.is_authenticated or request.endpoint in ('auth.login', 'auth.logout')) %}
+    <script defer crossorigin="anonymous" src="{{ clerk_frontend_api_url }}/npm/@clerk/ui@1/dist/ui.browser.js"></script>
+    <script defer crossorigin="anonymous" data-clerk-publishable-key="{{ clerk_publishable_key }}" src="{{ clerk_frontend_api_url }}/npm/@clerk/clerk-js@6/dist/clerk.browser.js"></script>
+    <script defer src="{{ url_for('static', filename='clerk.js') }}"></script>
+    {% endif %}
     {% block page_scripts %}
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     {% endblock %}

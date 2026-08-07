@@ -1,0 +1,513 @@
+{% extends "base.html" %}
+{% block title %}Workspace — Case Closed{% endblock %}
+{% block body_attrs %} class="app-body"{% endblock %}
+{% block content %}
+<div class="app" data-user-name="{{ user_name or user_email or '' }}"{% if demo_mode %} data-demo="1"{% endif %}>
+
+  {# ---------------------------------------------------------------- rail #}
+  <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Toggle history" aria-expanded="false" aria-controls="sidebar">
+    <svg class="icon" aria-hidden="true"><use href="#i-menu"></use></svg>
+  </button>
+  <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
+
+  <aside class="sidebar" id="sidebar" aria-label="Matter history">
+    <div class="sidebar-brand">
+      <span class="brand-mark" aria-hidden="true">CC</span>
+      <span class="brand-name">Case Closed</span>
+    </div>
+
+    {# Hidden until initWorkspaceSwitcher() finds more than one workspace to
+       switch between (script.js) -- most users only have their personal one. #}
+    <div class="sidebar-workspace" id="workspace-switcher" hidden>
+      <label class="sr-only" for="workspace-select">Workspace</label>
+      <select class="select" id="workspace-select"></select>
+    </div>
+
+    <div class="sidebar-head">
+      <h2 class="sidebar-heading">Matters</h2>
+      <button id="new-session-btn" class="btn btn--ghost btn--sm" type="button" title="New matter">
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-plus"></use></svg>
+        <span>New</span>
+      </button>
+    </div>
+
+    <button class="sidebar-search" id="sidebar-search" type="button">
+      <svg class="icon icon-sm" aria-hidden="true"><use href="#i-search"></use></svg>
+      <span>Search all matters</span>
+      <kbd class="kbd">⌘K</kbd>
+    </button>
+
+    <div class="sidebar-sessions" id="session-list"></div>
+
+    <div class="sidebar-foot">
+      <div class="account">
+        {% if user_profile_pic %}
+        <img src="{{ user_profile_pic }}" alt="" class="account-avatar" width="28" height="28" referrerpolicy="no-referrer">
+        {% else %}
+        <span class="account-avatar account-avatar--fallback" aria-hidden="true">
+          <svg class="icon icon-sm"><use href="#i-user"></use></svg>
+        </span>
+        {% endif %}
+        <a class="account-name" href="{{ url_for('main.account_center') }}">{{ user_name or user_email or 'Account' }}</a>
+        {% if demo_mode %}
+        <span class="badge badge--caution">Demo</span>
+        {% else %}
+        <a href="{{ url_for('auth.logout') }}" class="account-signout" data-clerk-sign-out>Sign out</a>
+        {% endif %}
+      </div>
+    </div>
+  </aside>
+
+  {# ---------------------------------------------------------------- main #}
+  <main class="main" id="main">
+
+    {% if demo_mode %}
+    {# Sits in the flow, not over it — a synthetic-data label that covers the
+       composer would be worse than no label. #}
+    <p class="demo-notice" role="note">
+      <strong>Demonstration.</strong> Every matter, party, document and authority shown here is
+      synthetic. Case names are invented so that none can be mistaken for real authority.
+    </p>
+    {% endif %}
+
+    {# The matter caption. Strength lives here, not in a tab: it is a verdict
+       on the whole matter, not the content of one panel. #}
+    <header class="matter-bar">
+      <div class="matter-identity">
+        <h1 class="matter-title" id="matter-title">New matter</h1>
+        <p class="matter-meta" id="matter-meta">Describe the matter or upload a document to begin</p>
+      </div>
+
+      <div class="matter-status">
+        <div class="strength-chip" id="matter-strength" hidden>
+          <span class="strength-chip__label">Strength</span>
+          <span class="strength-chip__value" id="matter-strength-value">—</span>
+          <span class="strength-chip__track" aria-hidden="true"><span class="strength-chip__fill" id="matter-strength-fill"></span></span>
+        </div>
+
+        <button class="timer-chip" id="time-report-btn" type="button" title="Time report">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-clock"></use></svg>
+          <span id="session-timer" class="tabular">0s</span>
+        </button>
+
+        <div class="role-selector" id="role-selector">
+          <span class="role-label">Role</span>
+          <div class="role-dropdown" id="role-dropdown">
+            <button class="role-dropdown-toggle" id="role-toggle" type="button" aria-haspopup="listbox" aria-expanded="false">
+              <span id="role-selected-text">Defendant</span>
+              <svg class="icon icon-sm" aria-hidden="true"><use href="#i-chevron-down"></use></svg>
+            </button>
+            <div class="role-dropdown-menu" id="role-menu" role="listbox">
+              <div class="role-option active" data-value="defendant" role="option" tabindex="0" aria-selected="true">Defendant</div>
+              <div class="role-option" data-value="prosecutor" role="option" tabindex="0" aria-selected="false">Prosecutor</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="workspace">
+
+      {# ------------------------------------------------------ conversation #}
+      <section class="chat-pane" aria-label="Conversation">
+        <div class="toolbar" role="toolbar" aria-label="Matter actions">
+          <button type="button" class="toolbar-btn" id="upload-btn" title="Upload documents">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-upload"></use></svg>
+            <span class="btn-text">Upload</span>
+          </button>
+          <input type="file" id="file-upload-input" multiple accept=".pdf,.docx,.doc,.txt" hidden>
+          <button type="button" class="toolbar-btn" id="analyze-btn" title="Analyze matter">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-analyze"></use></svg>
+            <span class="btn-text">Analyze</span>
+          </button>
+          <button type="button" class="toolbar-btn" id="draft-btn" title="Draft document">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-draft"></use></svg>
+            <span class="btn-text">Draft</span>
+          </button>
+          <button type="button" class="toolbar-btn" id="intake-btn" title="Client intake form">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-intake"></use></svg>
+            <span class="btn-text">Intake</span>
+          </button>
+          <input type="file" name="pdf" accept="application/pdf" id="pdf-input" hidden aria-hidden="true">
+        </div>
+
+        <div class="chat-box" id="chat-box" aria-live="polite" aria-label="Messages">
+          <div class="chat-message ai-message">
+            <div class="message-bubble">Upload a case document or describe the matter to begin.</div>
+            <div class="message-timestamp">Now</div>
+          </div>
+        </div>
+
+        <form id="chat-form" class="composer" autocomplete="off">
+          <textarea id="chat-input" name="message" rows="1"
+            placeholder="Describe the matter or ask a question…"
+            aria-label="Message"></textarea>
+          <div class="composer-actions">
+            <button type="button" class="icon-btn mic-btn" id="mic-btn" title="Dictate" aria-label="Dictate">
+              <svg class="icon icon-sm" aria-hidden="true"><use href="#i-mic"></use></svg>
+            </button>
+            <button type="submit" class="icon-btn icon-btn--primary send-btn" aria-label="Send message">
+              <svg class="icon icon-sm" aria-hidden="true"><use href="#i-send"></use></svg>
+            </button>
+          </div>
+          <p class="composer-hint">Shift + Enter for a new line. AI-assisted output requires lawyer review.</p>
+        </form>
+      </section>
+
+      {# ------------------------------------------------------- matter panel #}
+      {# Was three tabs holding nine information types. Now four, each with a
+         single job: what the record says, when it happened, what law applies,
+         and what we drafted from it. #}
+      <section class="panel-pane" aria-label="Matter">
+        <div class="panel-tabs" role="tablist" aria-label="Matter sections">
+          <button class="panel-tab active" data-tab="record" role="tab" aria-selected="true" aria-controls="tab-record" id="tabbtn-record">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-record"></use></svg>
+            <span class="tab-label">Record</span>
+          </button>
+          <button class="panel-tab" data-tab="chronology" role="tab" aria-selected="false" aria-controls="tab-chronology" id="tabbtn-chronology">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-chronology"></use></svg>
+            <span class="tab-label">Chronology</span>
+          </button>
+          <button class="panel-tab" data-tab="authority" role="tab" aria-selected="false" aria-controls="tab-authority" id="tabbtn-authority">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-authority"></use></svg>
+            <span class="tab-label">Authority</span>
+            <span class="tab-count" id="authority-count" hidden></span>
+          </button>
+          <button class="panel-tab" data-tab="draft" role="tab" aria-selected="false" aria-controls="tab-draft" id="tabbtn-draft">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-draft"></use></svg>
+            <span class="tab-label">Draft</span>
+          </button>
+        </div>
+
+        <div class="panel-content">
+
+          {# ------ Record: what the matter says ------ #}
+          <div class="panel-tab-content active" id="tab-record" role="tabpanel" aria-labelledby="tabbtn-record" tabindex="0">
+            <div class="panel-section">
+              <div class="panel-section-head">
+                <h3 class="section-title">Record</h3>
+                <button class="btn btn--ghost btn--sm" id="doc-manager-btn" type="button">
+                  <svg class="icon icon-sm" aria-hidden="true"><use href="#i-record"></use></svg>
+                  <span>Documents</span>
+                  <span class="tab-count" id="doc-count" hidden></span>
+                </button>
+              </div>
+              <div id="record-content" class="record-content">
+                <div class="empty-state">
+                  <svg class="empty-state__icon" aria-hidden="true"><use href="#i-record"></use></svg>
+                  <p class="empty-state__title">No record yet</p>
+                  <p class="empty-state__body">Upload a document or describe the matter. Facts, parties, jurisdictions, and legal issues will be extracted here for your review.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {# ------ Chronology: when it happened ------ #}
+          <div class="panel-tab-content" id="tab-chronology" role="tabpanel" aria-labelledby="tabbtn-chronology" tabindex="0" hidden>
+            <div class="panel-section">
+              <div class="panel-section-head">
+                <h3 class="section-title">Chronology</h3>
+                <button class="btn btn--ghost btn--sm" id="timeline-add-btn" type="button">
+                  <svg class="icon icon-sm" aria-hidden="true"><use href="#i-plus"></use></svg>
+                  <span>Add event</span>
+                </button>
+              </div>
+              <div id="chronology-content" class="chronology-content">
+                <div class="empty-state">
+                  <svg class="empty-state__icon" aria-hidden="true"><use href="#i-chronology"></use></svg>
+                  <p class="empty-state__title">No chronology yet</p>
+                  <p class="empty-state__body">Dates found in the record appear here in order. You can add events by hand at any time.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {# ------ Authority: what law applies ------ #}
+          {# Cases and statutes answer the same question and were split only
+             because they were built in different weeks. #}
+          <div class="panel-tab-content" id="tab-authority" role="tabpanel" aria-labelledby="tabbtn-authority" tabindex="0" hidden>
+            <div class="panel-section">
+              <div class="authority-switch" role="tablist" aria-label="Authority type">
+                <button class="authority-switch__btn active" data-authority="cases" role="tab" aria-selected="true">Case law</button>
+                <button class="authority-switch__btn" data-authority="statutes" role="tab" aria-selected="false">Statutes</button>
+              </div>
+
+              <div id="cases-content" class="cases-content" data-authority-panel="cases">
+                <div class="empty-state">
+                  <svg class="empty-state__icon" aria-hidden="true"><use href="#i-authority"></use></svg>
+                  <p class="empty-state__title">No authority retrieved yet</p>
+                  <p class="empty-state__body">Describe the matter to search CourtListener. Results are graded for relevance and every source remains inspectable.</p>
+                </div>
+              </div>
+
+              <div id="statutes-content" class="statutes-content" data-authority-panel="statutes" hidden>
+                <div class="empty-state">
+                  <svg class="empty-state__icon" aria-hidden="true"><use href="#i-statute"></use></svg>
+                  <p class="empty-state__title">No statutes identified yet</p>
+                  <p class="empty-state__body">Statutes referenced by the record appear here. Verify each against an official source.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {# ------ Draft ------ #}
+          <div class="panel-tab-content" id="tab-draft" role="tabpanel" aria-labelledby="tabbtn-draft" tabindex="0" hidden>
+            <div class="panel-section">
+              <div class="panel-section-head">
+                <h3 class="section-title">Draft</h3>
+                <button class="btn btn--ghost btn--sm" id="draft-export-btn" type="button" hidden>
+                  <svg class="icon icon-sm" aria-hidden="true"><use href="#i-download"></use></svg>
+                  <span>Export .docx</span>
+                </button>
+              </div>
+
+              <div class="draft-controls">
+                <label class="field field--inline">
+                  <span class="field-label">Document</span>
+                  <select id="draft-type" class="select">
+                    <option value="memo">Legal memo</option>
+                    <option value="brief">Brief</option>
+                  </select>
+                </label>
+                <button type="button" class="btn btn--primary btn--sm" id="draft-generate-btn">Generate</button>
+                {# The old "Download PDF" button POSTed to /download-draft, which no
+                   blueprint registers — it 404'd on every click. The .docx export
+                   above is the working path, so the dead control is gone. #}
+              </div>
+
+              <div id="draft-content" class="draft-content">
+                <div class="empty-state">
+                  <svg class="empty-state__icon" aria-hidden="true"><use href="#i-draft"></use></svg>
+                  <p class="empty-state__title">No draft yet</p>
+                  <p class="empty-state__body">Generate a memo or brief from the matter record. Every draft is a first draft and is marked for attorney review.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </div>
+  </main>
+
+  {# ------------------------------------------------------------- modals #}
+  {# One pattern for all six: .modal > .modal__panel, toggled by [hidden],
+     with focus trap, Esc, scroll lock and focus restore handled centrally. #}
+
+  <div class="modal" id="intake-modal" hidden role="dialog" aria-modal="true" aria-labelledby="intake-modal-title">
+    <div class="modal__panel modal__panel--wide">
+      <div class="modal__head">
+        <h2 class="modal__title" id="intake-modal-title">Client intake</h2>
+        <button class="icon-btn modal__close" id="intake-close" type="button" aria-label="Close">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-close"></use></svg>
+        </button>
+      </div>
+      <div class="modal__body">
+        <div class="field">
+          <label class="field-label" for="intake-case-title">Matter title <span class="required" aria-hidden="true">*</span></label>
+          <input class="input" type="text" id="intake-case-title" placeholder="e.g. State v. Smith" required>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label" for="intake-legal-category">Legal category <span class="required" aria-hidden="true">*</span></label>
+            <select class="select" id="intake-legal-category" required>
+              <option value="" disabled selected>Select…</option>
+              <option>Criminal</option><option>Civil</option><option>Family</option>
+              <option>Employment</option><option>Immigration</option><option>Personal Injury</option>
+              <option>Real Estate</option><option>Intellectual Property</option><option>Contract</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="intake-court-level">Court level</label>
+            <select class="select" id="intake-court-level">
+              <option value="" disabled selected>Select…</option>
+              <option>Lower Court</option><option>Appeals Court</option>
+              <option>Supreme Court</option><option>Not Yet Filed</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="intake-jurisdiction">Jurisdiction <span class="required" aria-hidden="true">*</span></label>
+          <select class="select" id="intake-jurisdiction" required>
+            <option value="" disabled selected>Select state or jurisdiction…</option>
+            <option>Alabama</option><option>Alaska</option><option>Arizona</option>
+            <option>Arkansas</option><option>California</option><option>Colorado</option>
+            <option>Connecticut</option><option>Delaware</option><option>Florida</option>
+            <option>Georgia</option><option>Hawaii</option><option>Idaho</option>
+            <option>Illinois</option><option>Indiana</option><option>Iowa</option>
+            <option>Kansas</option><option>Kentucky</option><option>Louisiana</option>
+            <option>Maine</option><option>Maryland</option><option>Massachusetts</option>
+            <option>Michigan</option><option>Minnesota</option><option>Mississippi</option>
+            <option>Missouri</option><option>Montana</option><option>Nebraska</option>
+            <option>Nevada</option><option>New Hampshire</option><option>New Jersey</option>
+            <option>New Mexico</option><option>New York</option><option>North Carolina</option>
+            <option>North Dakota</option><option>Ohio</option><option>Oklahoma</option>
+            <option>Oregon</option><option>Pennsylvania</option><option>Rhode Island</option>
+            <option>South Carolina</option><option>South Dakota</option><option>Tennessee</option>
+            <option>Texas</option><option>Utah</option><option>Vermont</option>
+            <option>Virginia</option><option>Washington</option><option>West Virginia</option>
+            <option>Wisconsin</option><option>Wyoming</option><option>District of Columbia</option>
+            <option>Federal</option><option>Other / International</option>
+          </select>
+        </div>
+        <fieldset class="field">
+          <legend class="field-label">Your role <span class="required" aria-hidden="true">*</span></legend>
+          <div class="radio-group">
+            <label class="radio"><input type="radio" name="intake-role" value="Plaintiff"><span>Plaintiff</span></label>
+            <label class="radio"><input type="radio" name="intake-role" value="Defendant"><span>Defendant</span></label>
+            <label class="radio"><input type="radio" name="intake-role" value="Third Party"><span>Third party</span></label>
+            <label class="radio"><input type="radio" name="intake-role" value="Witness"><span>Witness</span></label>
+          </div>
+        </fieldset>
+        <div class="field">
+          <label class="field-label" for="intake-description">Facts <span class="required" aria-hidden="true">*</span></label>
+          <textarea class="input" id="intake-description" rows="5" placeholder="Describe the matter in detail…" required></textarea>
+        </div>
+        <div class="field">
+          <span class="field-label">Key dates</span>
+          <div id="intake-dates-container">
+            <div class="intake-date-row">
+              <input type="date" class="input intake-date-input" aria-label="Date">
+              <input type="text" class="input intake-date-label" placeholder="What happened on this date?" aria-label="Description">
+            </div>
+          </div>
+          <button type="button" class="btn btn--ghost btn--sm" id="intake-add-date">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-plus"></use></svg>
+            <span>Add date</span>
+          </button>
+        </div>
+        <div class="field">
+          <label class="field-label" for="intake-prior-actions">Prior legal actions <span class="optional">optional</span></label>
+          <textarea class="input" id="intake-prior-actions" rows="2" placeholder="Previous filings, motions, or actions…"></textarea>
+        </div>
+        <div class="field">
+          <label class="field-label" for="intake-opposing-party">Opposing party <span class="optional">optional</span></label>
+          <input class="input" type="text" id="intake-opposing-party" placeholder="Name or description">
+        </div>
+      </div>
+      <div class="modal__foot">
+        <button class="btn btn--secondary" id="intake-cancel-btn" type="button">Cancel</button>
+        <button class="btn btn--primary" id="intake-submit-btn" type="button">Submit &amp; analyze</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="delete-modal" hidden role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+    <div class="modal__panel modal__panel--sm">
+      <div class="modal__head">
+        <h2 class="modal__title" id="delete-modal-title">Delete matter</h2>
+      </div>
+      <div class="modal__body">
+        <p>This permanently deletes the matter and everything in it. This cannot be undone.</p>
+      </div>
+      <div class="modal__foot">
+        <button class="btn btn--secondary" id="delete-cancel" type="button">Cancel</button>
+        <button class="btn btn--danger" id="delete-confirm" type="button">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal modal--top" id="quick-switcher-modal" hidden role="dialog" aria-modal="true" aria-label="Search all matters">
+    <div class="modal__panel modal__panel--search">
+      <div class="global-search-input-row">
+        <svg class="icon global-search-icon" aria-hidden="true"><use href="#i-search"></use></svg>
+        <input type="text" id="quick-switcher-input" placeholder="Search matters, authority, notes, messages…" autocomplete="off" aria-label="Search">
+        <kbd class="kbd">Esc</kbd>
+      </div>
+      <div class="global-search-filters" id="global-search-filters" role="tablist">
+        <button class="global-search-filter active" data-filter="all" role="tab" aria-selected="true">All</button>
+        <button class="global-search-filter" data-filter="sessions" role="tab" aria-selected="false">Matters</button>
+        <button class="global-search-filter" data-filter="cases" role="tab" aria-selected="false">Authority</button>
+        <button class="global-search-filter" data-filter="notes" role="tab" aria-selected="false">Notes</button>
+        <button class="global-search-filter" data-filter="messages" role="tab" aria-selected="false">Messages</button>
+      </div>
+      <div class="global-search-results" id="quick-switcher-results" role="listbox" aria-label="Results"></div>
+    </div>
+  </div>
+
+  <div class="modal" id="shortcuts-modal" hidden role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
+    <div class="modal__panel modal__panel--sm">
+      <div class="modal__head">
+        <h2 class="modal__title" id="shortcuts-modal-title">Keyboard shortcuts</h2>
+        <button class="icon-btn modal__close" id="shortcuts-close" type="button" aria-label="Close">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-close"></use></svg>
+        </button>
+      </div>
+      <div class="modal__body">
+        <dl class="shortcuts-list">
+          <div class="shortcut-row"><dt><kbd class="kbd">⌘N</kbd></dt><dd>New matter</dd></div>
+          <div class="shortcut-row"><dt><kbd class="kbd">⌘K</kbd></dt><dd>Search all matters</dd></div>
+          <div class="shortcut-row"><dt><kbd class="kbd">⌘B</kbd></dt><dd>Toggle history</dd></div>
+          <div class="shortcut-row"><dt><kbd class="kbd">⌘I</kbd></dt><dd>Open intake form</dd></div>
+          <div class="shortcut-row"><dt><kbd class="kbd">⌘1</kbd></dt><dd>Record</dd></div>
+          <div class="shortcut-row"><dt><kbd class="kbd">⌘2</kbd></dt><dd>Chronology</dd></div>
+          <div class="shortcut-row"><dt><kbd class="kbd">⌘3</kbd></dt><dd>Authority</dd></div>
+          <div class="shortcut-row"><dt><kbd class="kbd">⌘4</kbd></dt><dd>Draft</dd></div>
+          <div class="shortcut-row"><dt><kbd class="kbd">⌘↵</kbd></dt><dd>Send message</dd></div>
+          <div class="shortcut-row"><dt><kbd class="kbd">⌘⇧N</kbd></dt><dd>Focus case notes</dd></div>
+          <div class="shortcut-row"><dt><kbd class="kbd">Esc</kbd></dt><dd>Close dialog or history</dd></div>
+          <div class="shortcut-row"><dt><kbd class="kbd">?</kbd></dt><dd>Show this help</dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="time-report-modal" hidden role="dialog" aria-modal="true" aria-labelledby="time-report-title">
+    <div class="modal__panel modal__panel--sm">
+      <div class="modal__head">
+        <h2 class="modal__title" id="time-report-title">Time report</h2>
+        <button class="icon-btn modal__close" id="time-report-close" type="button" aria-label="Close">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-close"></use></svg>
+        </button>
+      </div>
+      <div class="modal__body">
+        <div class="time-report-total">
+          <span class="time-report-total-label">Total across all matters</span>
+          <span class="time-report-total-value tabular" id="time-report-grand-total">0h 0m</span>
+        </div>
+        <div class="time-report-list" id="time-report-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="doc-manager-modal" hidden role="dialog" aria-modal="true" aria-labelledby="doc-manager-title">
+    <div class="modal__panel">
+      <div class="modal__head">
+        <h2 class="modal__title" id="doc-manager-title">Documents</h2>
+        <button class="icon-btn modal__close" id="doc-manager-close" type="button" aria-label="Close">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-close"></use></svg>
+        </button>
+      </div>
+      <div class="modal__body">
+        <p class="modal__hint">Only documents that are switched on are used as matter context.</p>
+        <div class="doc-manager-list" id="doc-manager-list"></div>
+      </div>
+      <div class="modal__foot">
+        <button class="btn btn--secondary" id="doc-manager-upload-more" type="button">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-upload"></use></svg>
+          <span>Upload more</span>
+        </button>
+        <button class="btn btn--primary" id="doc-manager-done" type="button">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="drop-zone" id="drop-zone" hidden aria-hidden="true">
+    <div class="drop-zone__inner">
+      <svg class="drop-zone__icon" aria-hidden="true"><use href="#i-cloud-upload"></use></svg>
+      <p class="drop-zone__title">Drop files to add to the matter</p>
+      <p class="drop-zone__hint">PDF, DOCX, DOC, TXT</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+{% if demo_mode %}
+{# Must load before script.js: it replaces window.fetch and pre-loads the fixture. #}
+<script src="{{ url_for('static', filename='demo.js') }}"></script>
+{% endif %}
+<script src="{{ url_for('static', filename='job-poller.js') }}"></script>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+{% endblock %}

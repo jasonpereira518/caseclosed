@@ -6,79 +6,16 @@ import config
 from utils.helpers import extract_json_object
 
 
-# Setup Vertex AI Client and Model Endpoints
-# Note: Using Gemini 2.5 for optimal performance/cost balance
-# Configuration managed via environment variables for security
+# The model endpoint is independent from the regional infrastructure used by
+# Cloud Tasks, Document AI, and Vector Search. Current Gemini models are served
+# from global or jurisdictional multi-region endpoints.
 client = genai.Client(
     vertexai=True,
     project=config.PROJECT_ID,
-    location=config.GOOGLE_CLOUD_LOCATION,
+    location=config.GEMINI_LOCATION,
 )
 
 # Agents will be instantiated statelessly per call.
-
-
-def ask_clarifying_questions(user_input: str, existing_analysis: dict = None, description: str = "") -> list:
-    """
-    Generate up to 3 clarifying legal questions relevant to building a case argument.
-    Avoid repeating questions about information already in `existing_analysis` or `description`.
-    """
-    context_text = ""
-
-    if existing_analysis:
-        context_text += "KNOWN INFORMATION:\n"
-        for key, val in existing_analysis.items():
-            if val:
-                context_text += f"- {key}: {json.dumps(val, indent=2)}\n"
-    if description:
-        context_text += f"\nFULL CASE DESCRIPTION (so far):\n{description}\n"
-
-    prompt = (
-        f"You are a professional legal paralegal assisting a lawyer in building a legal argument.\n"
-        f"Given the user's most recent message:\n'{user_input}'\n\n"
-        "Ask a maximum of 4-5 clarifying questions. Focus only on the most critical missing information needed to proceed with legal analysis. Do not ask more than 5 questions.\n"
-        "Do NOT ask about information already in the context.\n"
-        "If you already have sufficient facts, respond exactly with 'NO QUESTIONS NEEDED'."
-    )
-
-    try:
-        response = client.chats.create(model=config.CLARIFIER_MODEL).send_message(prompt)
-        lines = [q.strip() for q in response.text.splitlines() if q.strip()]
-        if any("NO QUESTIONS NEEDED" in q.upper() for q in lines):
-            return []
-        lines = lines[:5]
-        return lines
-    except Exception as e:
-        return [f"[Error asking clarifications: {e}]"]
-
-
-def extract_answers_from_message(user_message: str, questions: list) -> dict:
-    """Extract answers to questions from user's message."""
-    _ea_lines = [f"{i+1}. {q}" for i, q in enumerate(questions)]
-    prompt = (
-        f"Given these questions:\n" + "\n".join(_ea_lines) + "\n\n"
-        f"And this user response: '{user_message}'\n\n"
-        "Extract the answers to each question from the user's response. "
-        "Respond strictly in JSON format:\n"
-        "{\n"
-        '  "answers": {"1": "answer to question 1 or empty string if not answered", "2": "...", "3": "..."},\n'
-        '  "has_sufficient_info": true/false\n'
-        "}\n"
-        "If the user's message doesn't answer a question, use an empty string for that answer. "
-        "Set has_sufficient_info to false if critical information is still missing."
-    )
-    try:
-        response = client.chats.create(model=config.CLARIFIER_MODEL).send_message(prompt)
-        text = response.text.strip()
-        parsed = extract_json_object(text)
-        if parsed:
-            return {
-                "answers": parsed.get("answers", {}),
-                "has_sufficient_info": parsed.get("has_sufficient_info", False)
-            }
-    except Exception:
-        pass
-    return {"answers": {}, "has_sufficient_info": False}
 
 
 def filter_redundant_questions(questions, analysis):

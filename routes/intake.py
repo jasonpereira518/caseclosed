@@ -1,9 +1,11 @@
 from flask import Blueprint, request, jsonify
 from flask_login import current_user, login_required
-import traceback
 
-from models.context import get_context as get_stored_context, get_or_create_context, save_context
-from services.llm import extract_structured_analysis, extract_timeline, extract_statutes, extract_case_strength
+from models.context import get_or_create_context
+from services.jobs import create_job, update_job
+from services.request_context import resolve_matter_id
+from services.task_queue import enqueue_job
+from services.tenancy import AuthorizationError
 
 intake_bp = Blueprint("intake", __name__)
 
@@ -11,27 +13,29 @@ intake_bp = Blueprint("intake", __name__)
 @login_required
 def process_intake():
     payload = request.json or {}
-    context_id = payload.get("context_id")
+    context_id = resolve_matter_id(payload)
     if not context_id:
         return jsonify({"error": "No context_id provided"}), 400
 
-    uid = current_user.id
+    uid = str(current_user.get_id())
     ctx = get_or_create_context(context_id, uid)
     if ctx is None:
         return jsonify({"error": "forbidden"}), 403
 
-    case_title = payload.get("case_title", "").strip()
-    legal_category = payload.get("legal_category", "").strip()
-    jurisdiction = payload.get("jurisdiction", "").strip()
-    court_level = payload.get("court_level", "").strip()
-    user_role = payload.get("user_role", "").strip()
-    description = payload.get("description", "").strip()
+    case_title = str(payload.get("case_title") or "").strip()
+    legal_category = str(payload.get("legal_category") or "").strip()
+    jurisdiction = str(payload.get("jurisdiction") or "").strip()
+    court_level = str(payload.get("court_level") or "").strip()
+    user_role = str(payload.get("user_role") or "").strip()
+    description = str(payload.get("description") or "").strip()
     key_dates = payload.get("key_dates", [])
-    prior_legal_actions = payload.get("prior_legal_actions", "").strip()
-    opposing_party = payload.get("opposing_party", "").strip()
+    if not isinstance(key_dates, list) or any(not isinstance(item, dict) for item in key_dates):
+        return jsonify({"error": "key_dates must be an array of objects"}), 400
+    prior_legal_actions = str(payload.get("prior_legal_actions") or "").strip()
+    opposing_party = str(payload.get("opposing_party") or "").strip()
 
     ctx["intake"] = payload
-    
+
     if ctx["title"] in ("New Session", "") and case_title:
         ctx["title"] = case_title
 
@@ -55,37 +59,31 @@ Description:
 
     if opposing_party:
         formatted += f"\n\nOpposing Party: {opposing_party}"
-        
+
     ctx["description"] = (ctx["description"] + "\n\n" + formatted).strip()
-    
-    ctx["messages"].append({
+
+    messages = list(ctx.get("messages") or [])
+    messages.append({
         "role": "user",
         "content": formatted
     })
+    ctx["messages"] = messages
 
+    # The structured-analysis chain runs in a "matter_analysis" job against
+    # the description just persisted above; the payload is empty so the job
+    # body falls back to the matter's stored description.
     try:
-        analysis = extract_structured_analysis(ctx["description"])
-        timeline = extract_timeline(ctx["description"])
-        statutes = extract_statutes(ctx["description"], analysis)
-        strength = extract_case_strength(ctx["description"], analysis, statutes, ctx.get("cases", []))
-
-        ctx["analysis"] = analysis
-        ctx["timeline"] = timeline
-        ctx["statutes"] = statutes
-        ctx["strength"] = strength
-        
-        save_context(context_id, ctx)
-        
-        return jsonify({
-            "status": "success", 
-            "analysis": analysis, 
-            "timeline": timeline, 
-            "statutes": statutes, 
-            "strength": strength, 
-            "context_id": context_id,
-            "title": ctx["title"],
-            "messages": ctx["messages"]
-        })
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        job, created = create_job(context_id, uid, "matter_analysis", {})
+        if created:
+            enqueue_job(context_id, job["job_id"])
+    except AuthorizationError:
+        return jsonify({"error": "forbidden"}), 403
+    except Exception as exc:
+        if "job" in locals():
+            update_job(context_id, job["job_id"], status="failed", stage="enqueue_failed",
+                       error={"code": "enqueue_failed", "message": str(exc)[:300]})
+        return jsonify({"error": "unable to queue analysis"}), 503
+    job["status_url"] = f"/api/matters/{context_id}/jobs/{job['job_id']}"
+    job["context_id"] = context_id
+    job["title"] = ctx["title"]
+    return jsonify(job), 202
