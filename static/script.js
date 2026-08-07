@@ -398,6 +398,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadContext();
     await loadSessionHistory();
     setupSidebar();
+    initWorkspaceSwitcher();
 
     // Setup tab switching
     setupTabs();
@@ -897,6 +898,51 @@ function setupSidebar() {
                 hideDeleteModal();
             }
         });
+    }
+}
+
+/** Shows a workspace switcher in the sidebar when the signed-in user belongs
+ *  to more than one workspace (GET /api/bootstrap). Team-workspace switching
+ *  previously only existed on the separate /account page; most users only
+ *  have their personal workspace, so this stays hidden until there's
+ *  actually something to switch between. Not available in the demo sandbox,
+ *  which has no account/workspace endpoints to call. */
+async function initWorkspaceSwitcher() {
+    if (document.querySelector('.app')?.dataset.demo === '1') return;
+    const container = document.getElementById('workspace-switcher');
+    const select = document.getElementById('workspace-select');
+    if (!container || !select) return;
+
+    try {
+        const res = await fetch('/api/bootstrap');
+        if (!res.ok) return;
+        const data = await res.json();
+        const workspaces = data.workspaces || [];
+        if (workspaces.length < 2) return;
+
+        select.innerHTML = workspaces.map(workspace => {
+            const label = `${workspace.name || 'Workspace'} (${workspace.type === 'team' ? 'Team' : 'Personal'})`;
+            const selected = workspace.workspace_id === data.active_workspace_id ? ' selected' : '';
+            return `<option value="${escapeHtml(workspace.workspace_id)}"${selected}>${escapeHtml(label)}</option>`;
+        }).join('');
+        container.hidden = false;
+
+        select.addEventListener('change', async () => {
+            const workspaceId = select.value;
+            select.disabled = true;
+            try {
+                const activateRes = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/activate`,
+                    { method: 'POST' });
+                const activateData = await activateRes.json();
+                if (!activateRes.ok) throw new Error(activateData.error || 'Unable to switch workspace');
+                window.location.reload();
+            } catch (err) {
+                showToast(err.message || 'Unable to switch workspace', 'error');
+                select.disabled = false;
+            }
+        });
+    } catch (err) {
+        console.error('Workspace switcher failed to load:', err);
     }
 }
 
@@ -2857,7 +2903,7 @@ function renderCasesList(cases) {
                 </div>
                 ${c.relevance_reason ? `<div class="relevance-reason">${escapeHtml(c.relevance_reason)}</div>` : ''}
                 ${c.snippet ? `<div class="case-snippet">${escapeHtml(c.snippet.substring(0, 200))}...</div>` : ''}
-                ${c.pdf_link ? `<a href="${c.pdf_link}" target="_blank" class="case-link">View case</a>` : ''}
+                ${c.pdf_link && c.pdf_link !== '#' ? `<a href="${c.pdf_link}" target="_blank" class="case-link">View case</a>` : ''}
             </div>
         `;
     });

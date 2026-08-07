@@ -16,6 +16,13 @@
       <span class="brand-name">Case Closed</span>
     </div>
 
+    {# Hidden until initWorkspaceSwitcher() finds more than one workspace to
+       switch between (script.js) -- most users only have their personal one. #}
+    <div class="sidebar-workspace" id="workspace-switcher" hidden>
+      <label class="sr-only" for="workspace-select">Workspace</label>
+      <select class="select" id="workspace-select"></select>
+    </div>
+
     <div class="sidebar-head">
       <h2 class="sidebar-heading">Matters</h2>
       <button id="new-session-btn" class="btn btn--ghost btn--sm" type="button" title="New matter">

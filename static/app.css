@@ -201,6 +201,7 @@ textarea.input { resize: vertical; line-height: var(--leading-normal); }
 .radio-group { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); }
 .radio { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); cursor: pointer; }
 .radio input { accent-color: var(--accent-active); width: 1rem; height: 1rem; }
+input[type="checkbox"] { accent-color: var(--accent-active); }
 
 .badge {
   display: inline-flex;
@@ -278,6 +279,10 @@ textarea.input { resize: vertical; line-height: var(--leading-normal); }
   font-weight: var(--weight-semibold);
   color: var(--text-strong);
   letter-spacing: var(--tracking-snug);
+}
+
+.sidebar-workspace {
+  padding: var(--space-3) var(--space-4) 0;
 }
 
 .sidebar-head {
@@ -1641,6 +1646,8 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 .account-form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .account-form label, .account-panel label { display: grid; gap: 6px; font-weight: 600; }
 .account-form input, .account-form textarea, .account-inline input { width: 100%; padding: 10px; border: 1px solid var(--border-control); border-radius: 4px; }
+.account-form input[type="checkbox"] { width: 1rem; height: 1rem; padding: 0; border: 0; }
+.account-form label:has(input[type="checkbox"]) { grid-auto-flow: column; justify-content: start; align-items: center; gap: 8px; }
 .account-form__wide { grid-column: 1 / -1; }
 .workspace-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
 .workspace-entry { border-bottom: 1px solid var(--border); }
