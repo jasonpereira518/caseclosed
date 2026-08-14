@@ -54,7 +54,10 @@ class LandingRouteTests(unittest.TestCase):
             response = self.client.get("/auth/login")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'id="clerk-sign-in"', response.data)
+        self.assertIn(b'id="auth-root"', response.data)
+        self.assertIn(b'id="auth-google"', response.data)
+        self.assertIn(b"Continue with Google", response.data)
+        self.assertIn(b'data-sso-callback="/auth/sso-callback', response.data)
         self.assertIn(b"Use your Google account to sign in or create your account.", response.data)
         self.assertNotIn(b'type="password"', response.data)
         self.assertNotIn(b"magic link", response.data)
@@ -69,6 +72,35 @@ class LandingRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Join your team workspace", response.data)
         self.assertIn(b"/auth/complete", response.data)
+        self.assertIn(b"invite=workspace-token", response.data)
+
+    def test_sso_callback_renders_and_round_trips_next_and_invite(self):
+        with patch("routes.auth.config.AUTH_PROVIDER", "clerk"):
+            response = self.client.get("/auth/sso-callback?next=%2Fapp&invite=workspace-token")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'id="auth-callback-root"', response.data)
+        self.assertIn(b'data-next="/app"', response.data)
+        self.assertIn(b'data-invite="workspace-token"', response.data)
+        self.assertIn(b"invite=workspace-token", response.data)
+
+    def test_sso_callback_redirects_when_not_using_clerk(self):
+        with patch("routes.auth.config.AUTH_PROVIDER", "firebase"):
+            response = self.client.get("/auth/sso-callback")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/auth/login"))
+
+    @patch("models.user.load_user")
+    def test_sso_callback_redirects_already_authenticated_users_to_complete(self, load_user):
+        load_user.return_value = self.user
+        self._sign_in()
+
+        with patch("routes.auth.config.AUTH_PROVIDER", "clerk"):
+            response = self.client.get("/auth/sso-callback?next=%2Fapp")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/auth/complete", response.headers["Location"])
 
     def test_api_requires_authentication_as_json(self):
         response = self.client.get("/api/account")

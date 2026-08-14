@@ -1,13 +1,10 @@
-import os
 import logging
 
 import config
 
-if config.OAUTH_REDIRECT_URI.startswith(("http://localhost", "http://127.0.0.1")):
-    os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
-
 from flask import Flask, jsonify, redirect, request, url_for
 from flask_login import LoginManager
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from routes import register_blueprints
 
@@ -94,10 +91,92 @@ app.secret_key = config.SECRET_KEY
 app.config["UPLOAD_FOLDER"] = config.UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH
 
+# Cloud Run terminates TLS at Google's front end and speaks plain HTTP to this
+# container. Without this, url_for(..., _external=True) emits http:// on the
+# public domain (og:url, canonical) and request.is_secure is always False.
+# x_host=0 is deliberate: Cloud Run does not set X-Forwarded-Host, it passes the
+# real Host through untouched -- so trusting the header would let any client
+# forge our hostname.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=0, x_port=0, x_prefix=0)
+
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=config.AUTH_COOKIE_SECURE,
+    # Lax, not Strict: Clerk's Google sign-in is redirect-based
+    # (static/auth.js authenticateWithRedirect), and Strict would also drop the
+    # session on any inbound link from email or search.
+    SESSION_COOKIE_SAMESITE="Lax",
+)
+
+# Report-only by design. Clerk's documented policy requires script-src and
+# style-src 'unsafe-inline' because its components inject both at runtime, so an
+# enforcing policy buys little -- while a wrong clerk_frontend_api_url (which is
+# derived at runtime from the publishable key) would block clerk.browser.js and
+# make sign-in impossible with no recovery short of a redeploy. Collect
+# violations against the real domain first, then promote to enforcing.
+CSP_REPORT_ONLY = "; ".join([
+    "default-src 'self'",
+    f"script-src 'self' 'unsafe-inline' {config.CLERK_FRONTEND_API_URL} "
+    "https://challenges.cloudflare.com https://*.protect.clerk.com https://www.gstatic.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    f"connect-src 'self' {config.CLERK_FRONTEND_API_URL} https://*.protect.clerk.com "
+    "https://clerk-telemetry.com https://identitytoolkit.googleapis.com",
+    "img-src 'self' data: https://img.clerk.com https://*.googleusercontent.com",
+    "frame-src 'self' https://challenges.cloudflare.com https://*.protect.clerk.com",
+    "worker-src 'self' blob:",
+    "frame-ancestors 'self'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+])
+
+
+@app.before_request
+def redirect_to_https():
+    """Cloud Run domain mappings serve plain HTTP without redirecting to HTTPS.
+
+    Only act when the front end explicitly reported an http:// arrival. An
+    absent X-Forwarded-Proto means a direct container hit -- Cloud Run's startup
+    and liveness probes -- and 301ing those fails the health check.
+    """
+    if config.ENVIRONMENT != "production":
+        return None
+    if request.headers.get("X-Forwarded-Proto") != "http":
+        return None
+    if request.method not in ("GET", "HEAD"):
+        return None
+    return redirect(request.url.replace("http://", "https://", 1), code=301)
+
+
+@app.after_request
+def set_security_headers(response):
+    """Baseline security headers on every response.
+
+    setdefault, not assignment: /demo sets its own framing and cache headers
+    (routes/demo.py) and tests/test_demo_route.py asserts them. setdefault runs
+    after the route's own headers are merged, so it neither clobbers nor
+    duplicates them.
+    """
+    headers = response.headers
+    headers.setdefault("X-Content-Type-Options", "nosniff")
+    headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    headers.setdefault("Content-Security-Policy", "frame-ancestors 'self'")
+    headers.setdefault("Content-Security-Policy-Report-Only", CSP_REPORT_ONLY)
+    headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if request.is_secure:
+        headers.setdefault(
+            "Strict-Transport-Security",
+            f"max-age={config.HSTS_MAX_AGE}; includeSubDomains",
+        )
+    return response
+
 
 @app.context_processor
 def identity_template_context():
     return {
+        "max_upload_bytes": config.MAX_CONTENT_LENGTH,
         "auth_provider": config.AUTH_PROVIDER,
         "clerk_enabled": config.AUTH_PROVIDER == "clerk" and bool(
             config.CLERK_PUBLISHABLE_KEY

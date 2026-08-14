@@ -58,12 +58,16 @@ def migrate(apply=False):
                     {"reason": "missing user_id", "source_collection": config.FIRESTORE_COLLECTION,
                      "quarantined_at": datetime.now(timezone.utc)})
             continue
+        # Check the destination before requiring a still-active Firebase Auth
+        # identity. Firebase accounts may already have been removed after an
+        # identity-provider migration, while their normalized matter remains
+        # valid and complete in Firestore.
+        if locate_matter(snap.id)[0]:
+            report["skipped"].append({"context_id": snap.id, "reason": "already migrated"})
+            continue
         claims = users.get(legacy_uid)
         if not claims:
             report["quarantined"].append({"context_id": snap.id, "reason": "no matching Firebase verified email"})
-            continue
-        if locate_matter(snap.id)[0]:
-            report["skipped"].append({"context_id": snap.id, "reason": "already migrated"})
             continue
         if apply:
             create_matter(personal_workspace_id(claims["uid"]), claims["uid"], matter_id=snap.id, initial=data)

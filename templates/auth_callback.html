@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Completing sign-in — Case Closed{% endblock %}
+{% block body_attrs %} class="auth-body"{% endblock %}
+{% block content %}
+<main class="auth-layout" id="main">
+  <section class="auth-brand-panel" aria-labelledby="auth-product-title">
+    <a class="auth-brand" href="{{ url_for('main.index') }}" aria-label="Case Closed home">
+      <svg class="icon icon-lg" aria-hidden="true"><use href="#i-briefcase"></use></svg>
+      <span>Case Closed</span>
+    </a>
+
+    <div class="auth-promise">
+      <h1 id="auth-product-title">One matter.<br>Continuous context.</h1>
+      <p>Organize the record, research relevant authority, and prepare a review-ready first draft without starting over.</p>
+    </div>
+
+    <p class="auth-review-note">AI-assisted legal work remains subject to lawyer review.</p>
+  </section>
+
+  <section class="auth-access-panel" aria-labelledby="callback-title">
+    <div class="auth-access-panel__inner" id="auth-callback-root"
+         data-complete="{{ complete_url }}" data-next="{{ next_url }}" data-invite="{{ invite_token }}">
+      <h2 id="callback-title">Completing sign-in…</h2>
+      <p class="auth-access-copy">Finishing your Google sign-in. This should only take a moment.</p>
+      <svg class="icon auth-callback-spinner" aria-hidden="true"><use href="#i-spinner"></use></svg>
+      <p id="auth-status" class="auth-status" role="status" aria-live="polite"></p>
+      <noscript>
+        <p class="auth-status auth-status--error">JavaScript is required to complete sign-in. <a href="{{ url_for('auth.login') }}">Return to sign-in</a>.</p>
+      </noscript>
+    </div>
+  </section>
+</main>
+{% endblock %}
+{% block page_scripts %}
+<script defer src="{{ url_for('static', filename='auth_callback.js') }}"></script>
+{% endblock %}

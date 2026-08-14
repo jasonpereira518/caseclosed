@@ -1,79 +1,48 @@
 (function () {
-  const root = document.getElementById('clerk-sign-in');
-  const status = document.getElementById('auth-status');
-  if (!root) return;
+  const root = document.getElementById('auth-root');
+  const button = document.getElementById('auth-google');
+  if (!root || !button) return;
 
-  function report(message) {
+  const buttonLabel = document.getElementById('auth-google-label');
+  const spinner = document.getElementById('auth-google-spinner');
+  const status = document.getElementById('auth-status');
+  const completeUrl = root.dataset.complete || '/auth/complete';
+  const ssoCallbackUrl = root.dataset.ssoCallback || '/auth/sso-callback';
+
+  function report(message, error = false) {
     status.textContent = message;
-    status.classList.toggle('auth-status--error', Boolean(message));
+    status.classList.toggle('auth-status--error', error);
+  }
+
+  function setLoading(loading, label) {
+    button.disabled = loading;
+    button.setAttribute('aria-busy', String(loading));
+    buttonLabel.textContent = label;
+    // SVG elements don't reliably reflect the `hidden` IDL property, so toggle
+    // the attribute directly rather than assigning `spinner.hidden`.
+    if (loading) spinner.removeAttribute('hidden');
+    else spinner.setAttribute('hidden', '');
   }
 
   window.caseClosedClerkReady
     .then(clerk => {
-      const completeUrl = root.dataset.complete || '/auth/complete';
-      root.replaceChildren();
-      clerk.mountSignIn(root, {
-        forceRedirectUrl: completeUrl,
-        fallbackRedirectUrl: completeUrl,
-        signUpForceRedirectUrl: completeUrl,
-        signUpFallbackRedirectUrl: completeUrl,
-        withSignUp: true,
-        oauthFlow: 'auto',
-        appearance: {
-          variables: {
-            colorPrimary: '#4a3228',
-            colorForeground: '#3a2a1a',
-            colorMutedForeground: '#6b5744',
-            colorBackground: '#fdfcfa',
-            colorInput: '#ffffff',
-            colorInputForeground: '#3e2f24',
-            colorDanger: '#a8261d',
-            fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-            fontFamilyButtons: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-            fontSize: '0.9375rem',
-            borderRadius: '5px',
-            spacing: '1rem',
-          },
-          options: {
-            socialButtonsPlacement: 'top',
-            socialButtonsVariant: 'blockButton',
-            showOptionalFields: false,
-          },
-          elements: {
-            rootBox: {width: '100%'},
-            cardBox: {width: '100%', boxShadow: 'none'},
-            card: {width: '100%', padding: '0', background: 'transparent', boxShadow: 'none'},
-            header: {display: 'none'},
-            footer: {display: 'none'},
-            socialButtonsBlockButton: {
-              minHeight: '48px',
-              background: '#ffffff',
-              color: '#3a2a1a',
-              border: '1px solid #928779',
-              boxShadow: 'none',
-              fontWeight: '500',
-            },
-            dividerLine: {background: '#e0d5c8'},
-            dividerText: {color: '#72665b'},
-            formFieldInput: {
-              minHeight: '44px',
-              background: '#ffffff',
-              color: '#3e2f24',
-              border: '1px solid #928779',
-              boxShadow: 'none',
-            },
-            formButtonPrimary: {
-              minHeight: '44px',
-              background: '#4a3228',
-              color: '#ffffff',
-              boxShadow: 'none',
-            },
-          },
-        },
+      setLoading(false, 'Continue with Google');
+      button.addEventListener('click', async () => {
+        report('');
+        setLoading(true, 'Connecting to Google…');
+        try {
+          await clerk.client.signIn.authenticateWithRedirect({
+            strategy: 'oauth_google',
+            redirectUrl: ssoCallbackUrl,
+            redirectUrlComplete: completeUrl,
+          });
+        } catch (error) {
+          report('We could not connect to Google. Please try again.', true);
+          setLoading(false, 'Continue with Google');
+        }
       });
     })
     .catch(() => {
-      root.replaceChildren();
-      report('Sign-in could not be loaded. Refresh the page and try again.');
+      report('Sign-in could not be loaded. Refresh the page and try again.', true);
     });
 })();

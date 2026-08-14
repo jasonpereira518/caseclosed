@@ -107,7 +107,10 @@ if [[ "$ENABLE_LEGAL_CORPUS_SYNC" == "true" ]]; then
 fi
 
 runtime_roles=(roles/datastore.user roles/cloudtasks.enqueuer
-  roles/documentai.apiUser roles/aiplatform.user)
+  roles/documentai.apiUser roles/aiplatform.user
+  # Secrets are delivered as Cloud Run secret env vars, read by the runtime
+  # identity at instance start.
+  roles/secretmanager.secretAccessor)
 if [[ "$ENABLE_VECTOR_SEARCH" == "true" ]]; then
   runtime_roles+=(roles/vectorsearch.dataObjectWriter)
 fi
@@ -120,6 +123,17 @@ run gcloud storage buckets add-iam-policy-binding "gs://${STORAGE_BUCKET}" \
 run gcloud iam service-accounts add-iam-policy-binding "$TASKS_SERVICE_ACCOUNT" \
   --project "$GCP_PROJECT_ID" --member "serviceAccount:${APP_SERVICE_ACCOUNT}" \
   --role roles/iam.serviceAccountUser
+
+# The runtime service account must be able to sign blobs AS ITSELF. On Cloud Run
+# the ADC credentials come from the metadata server and carry no private key, so
+# generate_signed_url() (services/storage.py) falls back to the IAM signBlob API,
+# which requires this binding. Without it, document downloads, account exports,
+# and user avatars all fail -- and the avatar failure is swallowed
+# (services/tenancy.py returns "" on RuntimeError), so it shows up as a silently
+# missing image on ordinary page loads rather than a visible error.
+run gcloud iam service-accounts add-iam-policy-binding "$APP_SERVICE_ACCOUNT" \
+  --project "$GCP_PROJECT_ID" --member "serviceAccount:${APP_SERVICE_ACCOUNT}" \
+  --role roles/iam.serviceAccountTokenCreator
 
 callers=("$TASKS_SERVICE_ACCOUNT")
 if [[ "$ENABLE_LEGAL_CORPUS_SYNC" == "true" ]]; then

@@ -972,7 +972,7 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 /* Statutes --------------------------------------------------------------- */
 
 .statutes-section { margin-bottom: var(--space-5); }
-.statutes-disclaimer, .strength-disclaimer {
+.statutes-disclaimer {
   margin-bottom: var(--space-3);
   padding: var(--space-2) var(--space-3);
   background: var(--caution-surface);
@@ -997,23 +997,6 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 .statute-description { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); }
 .statute-relevance { margin-top: var(--space-2); font-size: var(--text-xs); color: var(--text-muted); }
 .statute-jurisdiction { margin-top: var(--space-1); font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: var(--tracking-wide); color: var(--text-muted); }
-
-/* Strength (in-panel legacy render) -------------------------------------- */
-
-.strength-section { margin-bottom: var(--space-5); }
-.strength-header-wrap { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
-.strength-label { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--text-strong); }
-.strength-bar-track {
-  height: 6px; border-radius: var(--radius-full);
-  background: var(--surface-active); overflow: hidden;
-}
-.strength-bar-fill {
-  display: block; height: 100%; width: 100%;
-  transform-origin: left center;
-  background: var(--accent);
-  transition: transform var(--duration-slow) var(--ease-out);
-}
-.strength-explanation { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); }
 
 /* Draft ------------------------------------------------------------------ */
 
@@ -1572,11 +1555,23 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 .auth-google-button:disabled { color: var(--text-muted); cursor: wait; }
 .auth-google-button__mark { width: 1.125rem; height: 1.125rem; }
 .auth-google-button__spinner { color: var(--text-muted); animation: auth-spin var(--duration-slow) linear infinite; }
+/* Browsers don't reliably apply the UA [hidden] { display: none } rule to
+   SVG elements, so state it explicitly for this one rather than relying on it. */
+.auth-google-button__spinner[hidden] { display: none; }
+
+.auth-callback-spinner {
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: var(--space-6);
+  color: var(--text-muted);
+  animation: auth-spin var(--duration-slow) linear infinite;
+}
 
 @keyframes auth-spin { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .auth-google-button__spinner { animation: none; }
+  .auth-google-button__spinner,
+  .auth-callback-spinner { animation: none; }
 }
 
 .auth-account-note {
@@ -1593,8 +1588,8 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 .auth-status--error { color: var(--negative); }
 
 .auth-workflow {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  justify-content: space-between;
   gap: var(--space-4);
   margin-top: var(--space-7);
   padding-top: var(--space-5);
@@ -1603,8 +1598,6 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
 }
-.auth-workflow span:not(:first-child) { text-align: center; }
-.auth-workflow span:last-child { text-align: right; }
 
 .auth-configuration-error {
   display: grid;

@@ -1,0 +1,81 @@
+# Cloud Run literal env vars -- PROFILE: runapp (deploy #1)
+#
+# Ships the new code to the *.run.app URL using the Clerk DEVELOPMENT instance,
+# before the custom domain is cut over. Clerk production keys cannot be used
+# here: a production instance serves its Frontend API from
+# clerk.caseclosed.jasonpereira.live and sets its session cookie there, so
+# loading pk_live_ from a *.run.app origin makes that cookie third-party and the
+# handshake fails. Development instances are built for arbitrary origins.
+#
+# This file contains NO secrets. Secrets are wired separately via --set-secrets;
+# see scripts/deploy_cloud_run.sh.
+#
+# Every value must be a quoted YAML string -- gcloud rejects bare ints/bools.
+#
+# NOTE: --env-vars-file REPLACES the entire literal env set. Variables that are
+# deliberately absent (and why) are listed at the bottom of this file.
+
+PROJECT_ID: "case-closed-491121"
+GOOGLE_CLOUD_LOCATION: "us-central1"
+GEMINI_LOCATION: "global"
+
+ENVIRONMENT: "production"
+FLASK_DEBUG: "false"
+AUTH_COOKIE_SECURE: "true"
+AUTH_PROVIDER: "clerk"
+
+APP_BASE_URL: "https://caseclosed-vz6mirfkqa-uc.a.run.app"
+
+# TODO(deploy): paste the Clerk DEVELOPMENT publishable key (pk_test_...).
+# Publishable keys are public by design -- base.html emits this into the HTML.
+CLERK_PUBLISHABLE_KEY: "REPLACE_WITH_pk_test_KEY"
+# Normally derived from the publishable key; pinned here so a bad decode is loud.
+CLERK_FRONTEND_API_URL: "https://usable-man-52.clerk.accounts.dev"
+# Exact-string matched against the JWT azp claim. BOTH run.app hostnames serve
+# this service, so a bookmark on either one produces a different azp. A miss is
+# a silent auth failure: an infinite redirect to /auth/login with no error.
+CLERK_AUTHORIZED_PARTIES: "https://caseclosed-vz6mirfkqa-uc.a.run.app,https://caseclosed-698590765131.us-central1.run.app"
+
+FIRESTORE_COLLECTION: "user_contexts"
+FIRESTORE_USERS_COLLECTION: "users"
+FIREBASE_STORAGE_BUCKET: "case-closed-491121-private"
+
+# Background jobs stay pinned to the run.app hostname permanently, in both
+# profiles. This is machine-to-machine traffic; routing it through the custom
+# domain would put Squarespace DNS and a second managed cert on the critical
+# path of every job for zero benefit, and Cloud Tasks retries 5x over an hour,
+# so a DNS hiccup means silently dead jobs rather than a visible error.
+TASKS_MODE: "cloud"
+TASKS_PROJECT_ID: "case-closed-491121"
+TASKS_LOCATION: "us-central1"
+TASKS_QUEUE: "caseclosed-jobs"
+TASKS_WORKER_URL: "https://caseclosed-698590765131.us-central1.run.app/internal/jobs/run"
+TASKS_WORKER_AUDIENCE: "https://caseclosed-698590765131.us-central1.run.app"
+TASKS_SERVICE_ACCOUNT: "caseclosed-tasks@case-closed-491121.iam.gserviceaccount.com"
+JOB_MAX_ATTEMPTS: "3"
+
+# Free retrieval posture: falls back to the tenant-filtered Firestore lexical
+# path. Setting this to "true" provisions billed always-on index replicas and
+# also requires provision_gcp.sh --apply with ENABLE_VECTOR_SEARCH=true.
+VECTOR_SEARCH_ENABLED: "false"
+RETRIEVAL_TOP_K: "8"
+
+DOCUMENT_AI_LOCATION: "us"
+
+# --- Deliberately absent -----------------------------------------------------
+# DOCUMENT_AI_PROCESSOR_ID  Document AI OCR bills ~$1.50/1000 pages with no free
+#                           tier. Omitting it downgrades to native pdfminer
+#                           extraction (digital PDFs fine, scanned PDFs fail with
+#                           a runtime_config warning). One-line re-enable:
+#                           DOCUMENT_AI_PROCESSOR_ID: "fee9d59d552f9f1c"
+# OAUTH_REDIRECT_URI        dead code, removed from config.py
+# GOOGLE_OAUTH_CLIENT_SECRETS  dead code; also drops the /secrets volume mount
+# FIREBASE_WEB_CONFIG       only used by the Firebase rollback auth path
+# LEGAL_CORPUS_SYNC_AUDIENCE  feature disabled; falls back to its default
+# FLASK_SECRET_KEY          SECRET_KEY wins in config.py; one less secret read
+# PORT                      Cloud Run injects it and rejects overrides
+# GOOGLE_APPLICATION_CREDENTIALS / FIREBASE_CREDENTIALS
+#                           must stay unset so ADC resolves via the metadata
+#                           server to the runtime service account. Setting either
+#                           to a path that is not in the image permanently
+#                           poisons the Firestore client on that instance.

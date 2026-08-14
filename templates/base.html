@@ -37,7 +37,7 @@
     <a class="skip-link" href="#main">Skip to main content</a>
     {% block content %}{% endblock %}
     <div class="toast-region" id="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
-    {% if clerk_enabled and (current_user.is_authenticated or request.endpoint in ('auth.login', 'auth.logout')) %}
+    {% if clerk_enabled and (current_user.is_authenticated or request.endpoint in ('auth.login', 'auth.logout', 'auth.sso_callback')) %}
     <script defer crossorigin="anonymous" src="{{ clerk_frontend_api_url }}/npm/@clerk/ui@1/dist/ui.browser.js"></script>
     <script defer crossorigin="anonymous" data-clerk-publishable-key="{{ clerk_publishable_key }}" src="{{ clerk_frontend_api_url }}/npm/@clerk/clerk-js@6/dist/clerk.browser.js"></script>
     <script defer src="{{ url_for('static', filename='clerk.js') }}"></script>

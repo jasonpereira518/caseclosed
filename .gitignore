@@ -20,6 +20,7 @@ key.json
 *.json
 !package.json
 !package-lock.json
+!firebase.json
 !firebase.deploy.json
 !infra/*.json
 

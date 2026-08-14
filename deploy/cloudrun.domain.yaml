@@ -1,0 +1,60 @@
+# Cloud Run literal env vars -- PROFILE: domain (deploy #2, the cutover)
+#
+# Identical to cloudrun.runapp.yaml except for the four identity/origin values
+# marked below. Do not deploy this profile until ALL of these are true:
+#
+#   curl -sI https://caseclosed.jasonpereira.live/livez            -> 200
+#   dig +short clerk.caseclosed.jasonpereira.live                  -> resolves
+#   gcloud beta run domain-mappings describe --domain caseclosed.jasonpereira.live \
+#     --region us-central1  -> CertificateProvisioned=True, Ready=True
+#   Clerk dashboard shows the production instance healthy
+#
+# This file contains NO secrets. See scripts/deploy_cloud_run.sh.
+# Every value must be a quoted YAML string -- gcloud rejects bare ints/bools.
+
+PROJECT_ID: "case-closed-491121"
+GOOGLE_CLOUD_LOCATION: "us-central1"
+GEMINI_LOCATION: "global"
+
+ENVIRONMENT: "production"
+FLASK_DEBUG: "false"
+AUTH_COOKIE_SECURE: "true"
+AUTH_PROVIDER: "clerk"
+
+# CHANGED vs runapp profile: the public origin.
+APP_BASE_URL: "https://caseclosed.jasonpereira.live"
+
+# CHANGED: Clerk PRODUCTION instance keys.
+# TODO(deploy): paste the production publishable key (pk_live_...).
+CLERK_PUBLISHABLE_KEY: "REPLACE_WITH_pk_live_KEY"
+# CHANGED: a production instance serves its Frontend API from the custom domain.
+CLERK_FRONTEND_API_URL: "https://clerk.caseclosed.jasonpereira.live"
+# CHANGED: the custom domain is prepended. All three origins are kept forever --
+# they are all ours, there is no security cost, and it makes the silent
+# azp-mismatch redirect loop impossible for anyone on an old bookmark.
+CLERK_AUTHORIZED_PARTIES: "https://caseclosed.jasonpereira.live,https://caseclosed-vz6mirfkqa-uc.a.run.app,https://caseclosed-698590765131.us-central1.run.app"
+
+FIRESTORE_COLLECTION: "user_contexts"
+FIRESTORE_USERS_COLLECTION: "users"
+FIREBASE_STORAGE_BUCKET: "case-closed-491121-private"
+
+# UNCHANGED and intentionally so -- see the note in cloudrun.runapp.yaml.
+# Background jobs never follow the custom domain.
+TASKS_MODE: "cloud"
+TASKS_PROJECT_ID: "case-closed-491121"
+TASKS_LOCATION: "us-central1"
+TASKS_QUEUE: "caseclosed-jobs"
+TASKS_WORKER_URL: "https://caseclosed-698590765131.us-central1.run.app/internal/jobs/run"
+TASKS_WORKER_AUDIENCE: "https://caseclosed-698590765131.us-central1.run.app"
+TASKS_SERVICE_ACCOUNT: "caseclosed-tasks@case-closed-491121.iam.gserviceaccount.com"
+JOB_MAX_ATTEMPTS: "3"
+
+VECTOR_SEARCH_ENABLED: "false"
+RETRIEVAL_TOP_K: "8"
+
+DOCUMENT_AI_LOCATION: "us"
+
+# --- Deliberately absent -----------------------------------------------------
+# Same list as cloudrun.runapp.yaml. Most importantly:
+# DOCUMENT_AI_PROCESSOR_ID  omitted so OCR does not bill. One-line re-enable:
+#                           DOCUMENT_AI_PROCESSOR_ID: "fee9d59d552f9f1c"

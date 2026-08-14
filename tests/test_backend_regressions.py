@@ -57,6 +57,12 @@ class BackendRouteRegressionTests(unittest.TestCase):
         self.assertFalse(allowed_file("legacy.doc"))
         self.assertTrue(allowed_file("current.docx"))
 
+    def test_upload_limit_stays_under_the_cloud_run_request_cap(self):
+        """Cloud Run rejects HTTP/1 requests over 32 MiB at its front end with an
+        opaque error, before Flask ever sees them. A higher app-level limit means
+        the 32-50 MB band fails with no usable message."""
+        self.assertLessEqual(app.config["MAX_CONTENT_LENGTH"], 32 * 1024 * 1024)
+
 
 class VectorCleanupRegressionTests(unittest.TestCase):
     @patch("services.retrieval.chunk_text", return_value=[])

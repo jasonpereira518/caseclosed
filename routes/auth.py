@@ -12,9 +12,29 @@ from services.tenancy import ensure_user
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 
+# Browsers strip ASCII tab/CR/LF before parsing a URL, so "/<TAB>\evil.com"
+# must be normalized before it is inspected rather than after.
+_URL_STRIPPED_CHARS = str.maketrans("", "", "\t\r\n")
+
+
 def _safe_next(value):
-    parsed = urlparse(value or "")
-    return value if not parsed.netloc and not parsed.scheme and (value or "").startswith("/") else url_for("main.workspace")
+    """Accept only same-origin, path-relative destinations.
+
+    urlparse on its own is not enough: browsers normalize "\\" to "/" inside a
+    special scheme, so "/\\evil.com" -- which urlparse reports as a relative
+    path with no netloc -- resolves to https://evil.com. That matters because
+    the value is reflected raw into data-next (templates/login.html) and handed
+    to window.location.assign() by static/firebase_auth.js, which applies
+    exactly that normalization.
+    """
+    candidate = (value or "").translate(_URL_STRIPPED_CHARS).strip()
+    parsed = urlparse(candidate)
+    if (candidate.startswith("/")
+            and not candidate.startswith(("//", "/\\"))
+            and not parsed.scheme
+            and not parsed.netloc):
+        return candidate
+    return url_for("main.workspace")
 
 
 @auth_bp.route("/login")
@@ -26,13 +46,33 @@ def login():
             return redirect(url_for("auth.complete_login", next=next_url, invite=invite_token))
         return redirect(next_url)
     complete_url = url_for("auth.complete_login", next=next_url, invite=invite_token)
+    sso_callback_url = url_for("auth.sso_callback", next=next_url, invite=invite_token)
     return render_template(
         "login.html",
         firebase_config=config.FIREBASE_WEB_CONFIG,
         next_url=next_url,
         invite_token=invite_token,
         complete_url=complete_url,
+        sso_callback_url=sso_callback_url,
         error=request.args.get("error", ""),
+    )
+
+
+@auth_bp.route("/sso-callback")
+def sso_callback():
+    """Land here after Google redirects back mid-OAuth; finish the Clerk handshake client-side."""
+    if config.AUTH_PROVIDER != "clerk":
+        return redirect(url_for("auth.login"))
+    next_url = _safe_next(request.args.get("next"))
+    invite_token = request.args.get("invite", "")
+    complete_url = url_for("auth.complete_login", next=next_url, invite=invite_token)
+    if current_user.is_authenticated:
+        return redirect(complete_url)
+    return render_template(
+        "auth_callback.html",
+        next_url=next_url,
+        invite_token=invite_token,
+        complete_url=complete_url,
     )
 
 

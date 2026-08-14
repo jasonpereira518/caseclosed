@@ -1302,33 +1302,24 @@ async function confirmDeleteSession() {
     }
 }
 
-function updateRoleSelector(role) {
-    if (!role) return;
-    const normalized = String(role).toLowerCase();
-    selectedRole = normalized;
-
-    if (roleOptionsEls && roleOptionsEls.length) {
-        roleOptionsEls.forEach((opt) => {
-            const val = String(opt.dataset.value || '').toLowerCase();
-            opt.classList.toggle('active', val === normalized);
-        });
-    }
-
-    if (roleSelectedTextEl) {
-        const match = Array.from(roleOptionsEls || []).find((opt) => String(opt.dataset.value || '').toLowerCase() === normalized);
-        if (match) roleSelectedTextEl.textContent = (match.textContent || '').trim();
-    }
-
-    roleMenuEl?.classList.remove('show');
-}
-
 // =====================================================
 // PDF UPLOAD
 // =====================================================
 async function handleFileUpload(event) {
     const files = event.target.files;
     if (!files.length) return;
-    
+
+    // Cloud Run rejects requests over 32 MiB at its front end, before the app
+    // sees them, so an oversized file can only be reported clearly from here.
+    const maxBytes = Number(event.target.dataset.maxBytes) || 0;
+    const oversized = maxBytes ? Array.from(files).filter(f => f.size > maxBytes) : [];
+    if (oversized.length) {
+        const limitMb = Math.floor(maxBytes / (1024 * 1024));
+        showToast(`${oversized[0].name} is larger than the ${limitMb} MB limit.`, 'error');
+        event.target.value = '';
+        return;
+    }
+
     const existingNames = currentUploadedDocs ? currentUploadedDocs.map(d => d.filename) : [];
     const formData = new FormData();
     
@@ -1357,8 +1348,19 @@ async function handleFileUpload(event) {
             credentials: 'same-origin',
             body: formData
         });
+        // Error responses here are HTML, not JSON (Flask's 413 page, Cloud Run's
+        // own 413). Calling res.json() on those throws and lands in the catch
+        // below, which reports every failure as a network error.
+        if (res.status === 413) {
+            showToast('That file is too large to upload. Try a smaller file.', 'error');
+            return;
+        }
+        if (!res.ok) {
+            showToast(`Upload failed (${res.status}).`, 'error');
+            return;
+        }
         const data = await res.json();
-        
+
         if (data.status === 'queued') {
             showToast(`${data.jobs.length} file(s) queued for extraction`, 'info');
             const completed = await Promise.all(data.jobs.map(job =>
@@ -1376,9 +1378,12 @@ async function handleFileUpload(event) {
     } catch (err) {
         showToast(err.message || 'Upload failed due to network error.', 'error');
         console.error(err);
+    } finally {
+        // finally, not a trailing statement: the early returns above for 413 and
+        // other non-OK responses would otherwise leave the file selected, and
+        // re-picking the same file would not fire another change event.
+        event.target.value = ''; // reset input
     }
-
-    event.target.value = ''; // reset input
 }
 
 // Prevent browser from opening dropped files
@@ -2070,35 +2075,6 @@ function renderStatutes(statutes) {
     
     html += '</div>';
     return html;
-}
-
-function renderStrengthMeter(strength) {
-    if (!strength || !strength.rating) return '';
-    
-    const ratingKey = strength.rating.toLowerCase().replace(/\s+/g, '-');
-    
-    const fillWidths = {
-        'strong': '100%',
-        'moderate': '60%',
-        'weak': '25%',
-        'insufficient-information': '5%'
-    };
-    
-    const fillWidth = fillWidths[ratingKey] || '5%';
-    
-    return `
-        <div class="strength-section">
-            <div class="strength-header-wrap">
-                <span class="strength-label">Case Strength</span>
-                <span class="strength-badge badge-${ratingKey}">${strength.rating}</span>
-            </div>
-            <div class="strength-bar-track">
-                <div class="strength-bar-fill fill-${ratingKey}" style="width: ${fillWidth}"></div>
-            </div>
-            <p class="strength-explanation">${strength.explanation || ''}</p>
-            <p class="strength-disclaimer">AI assessment — not legal advice.</p>
-        </div>
-    `;
 }
 
 function toggleAnalysisList(btn) {

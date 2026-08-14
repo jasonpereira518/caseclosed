@@ -11,11 +11,16 @@ load_dotenv()
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-secret")
 SECRET_KEY = os.getenv("SECRET_KEY", FLASK_SECRET_KEY)
 UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", tempfile.gettempdir())
-MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 50 * 1024 * 1024))
+# Cloud Run rejects HTTP/1 requests over 32 MiB at the front end, before Flask
+# ever sees them, with an opaque error. Stay under it with multipart headroom.
+MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 30 * 1024 * 1024))
 PORT = int(os.getenv("PORT", 5050))
 DEBUG = os.getenv("FLASK_DEBUG", "false").lower() == "true"
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production" if os.getenv("K_SERVICE") else "development").lower()
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:5050").rstrip("/")
+# HSTS is the one header you cannot take back. Keep it dialable so the first
+# days on a new domain can run at a short max-age before committing to a year.
+HSTS_MAX_AGE = int(os.getenv("HSTS_MAX_AGE", 31536000))
 
 # File handling
 ALLOWED_EXTENSIONS = {"pdf"}
@@ -131,10 +136,6 @@ SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 SMTP_FROM = os.getenv("SMTP_FROM")
 INVITATION_TTL_DAYS = int(os.getenv("INVITATION_TTL_DAYS", "7"))
-
-# Google OAuth (backend)
-GOOGLE_OAUTH_CLIENT_SECRETS = os.getenv("GOOGLE_OAUTH_CLIENT_SECRETS", "client_secret.json")
-OAUTH_REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI", "http://localhost:5050/auth/callback")
 
 # Model configuration
 CHAT_FAST_MODEL = os.getenv("CHAT_FAST_MODEL", "gemini-3.5-flash-lite")
