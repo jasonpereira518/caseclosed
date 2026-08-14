@@ -27,6 +27,12 @@ pip install -r requirements.txt
 # Preflight-check env vars for production without touching cloud resources
 python scripts/preflight.py --production
 
+# Deploy (no traffic) -> verify the tagged URL -> promote. Never edit the
+# service's env in the console; it comes from deploy/cloudrun.*.yaml.
+./scripts/deploy_cloud_run.sh --profile domain
+./scripts/deploy_cloud_run.sh --profile domain --promote
+./scripts/deploy_cloud_run.sh --rollback <revision>
+
 # Firestore migration (legacy -> normalized workspace model)
 python scripts/migrate_firestore_v2.py --report migration-report.json
 python scripts/migrate_firestore_v2.py --apply --report migration-report-applied.json
@@ -82,6 +88,16 @@ Chat answers are grounded: retrieval happens separately for private matter evide
 ### Routes vs. services
 
 `routes/` are thin Flask blueprints (registered in `routes/__init__.py`) handling HTTP concerns, auth, and job creation. Business logic lives in `services/` (one module per concern — `matters.py`, `tenancy.py`, `jobs.py`, `worker.py`, `retrieval.py`, `llm.py`, `courtlistener.py`, `document_ingestion.py`, etc.). `models/context.py` is a compatibility aggregate over the normalized matter records for older call sites.
+
+### Deployment
+
+Production is Cloud Run (`us-central1`, project `case-closed-491121`), fronted by a free Cloud Run **domain mapping** — not a load balancer, which would bill a forwarding rule even at zero traffic.
+
+The thing that trips people up: `config.py` flips `ENVIRONMENT` to `production` whenever `K_SERVICE` is set, which is always true on Cloud Run, and `app.py` then runs `require_runtime_config(production=True)` **at import time**. So a missing env var doesn't degrade a request — it kills the gunicorn worker before it binds a port, and the deploy fails with "container failed to start and listen on port". `scripts/deploy_cloud_run.sh` preflights the rendered profile locally to catch this before a build is spent.
+
+Env lives in two committed, secret-free profiles under `deploy/`: `cloudrun.runapp.yaml` (the `*.run.app` URL, Clerk *development* keys) and `cloudrun.domain.yaml` (the public domain, Clerk *production* keys). The split is not cosmetic — a Clerk production instance serves its Frontend API from `clerk.<domain>` and sets its cookie there, so a `pk_live_` key loaded from a `*.run.app` origin yields a third-party cookie and sign-in fails.
+
+Cost posture is deliberate and worth preserving: `min-instances=0` with CPU throttling (Cloud Run free tier), `VECTOR_SEARCH_ENABLED=false` (Firestore lexical fallback instead of billed always-on index replicas), and `DOCUMENT_AI_PROCESSOR_ID` omitted (OCR bills per page with no free tier). Each has a one-line switch documented in the profile.
 
 ## Key docs in this repo
 

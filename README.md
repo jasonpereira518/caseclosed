@@ -184,6 +184,44 @@ The default deployment avoids always-on vector replicas and an empty daily sync 
 
 After deployment, run `scripts/verify_gcp.sh`. Document AI processor creation remains a separate explicit step with `python scripts/create_document_ai_processor.py --apply`.
 
+### Deploying to Cloud Run
+
+`scripts/deploy_cloud_run.sh` is the only supported way to ship. It deploys with `--no-traffic` behind a revision tag, health-gates that tag's own URL, and requires a separate `--promote` to move traffic — so live traffic never lands on a revision nobody has checked.
+
+```bash
+./scripts/deploy_cloud_run.sh --profile domain              # build + deploy, no traffic
+./scripts/deploy_cloud_run.sh --profile domain --promote    # shift traffic once verified
+./scripts/deploy_cloud_run.sh --rollback caseclosed-00012-abc
+```
+
+Environment comes from two committed profiles in `deploy/`: `cloudrun.runapp.yaml` (the `*.run.app` URL with Clerk **development** keys) and `cloudrun.domain.yaml` (the public domain with Clerk **production** keys). Neither contains secrets; those are wired from Secret Manager by the script. `--env-vars-file` replaces the entire literal env set, so deleting a variable from a profile removes it from the service.
+
+Two things worth knowing before your first deploy:
+
+- **A missing variable fails the deploy, not the request.** `ENVIRONMENT` auto-becomes `production` on Cloud Run (`K_SERVICE` is always set), so `app.py` runs `require_runtime_config(production=True)` at import time. One absent value kills the gunicorn worker before it binds a port and the deploy fails with the opaque "container failed to start and listen on port". The script's preflight catches this locally first — and it renders the profile into a clean `git archive` tree, because `load_dotenv()` walks up from `config.py`'s own directory and would otherwise fill the gaps from your local `.env`.
+- **Clerk production keys only work on the production domain.** A production Clerk instance serves its Frontend API from `clerk.<your-domain>` and sets its session cookie there, so loading a `pk_live_` key from a `*.run.app` origin makes that cookie third-party and sign-in fails. That is why the `runapp` profile exists: it proves boot, Cloud Tasks, Firestore, storage, and signed URLs without any DNS dependency.
+
+The custom domain uses a **Cloud Run domain mapping**, not a load balancer — the mapping and its managed certificate are free, while a global external Application Load Balancer bills a forwarding rule (~$18/month) even at zero traffic. Avoid the Cloud Run console's "Custom domain" wizard, whose default path provisions exactly that.
+
+```bash
+gcloud domains verify example.com          # verify the PARENT domain, not the subdomain:
+                                           # a CNAME must be the only record at its name
+gcloud beta run domain-mappings create --service caseclosed \
+  --domain app.example.com --region us-central1
+# then add the CNAME the command prints (normally -> ghs.googlehosted.com)
+```
+
+### Deploying security rules
+
+```bash
+npx -y firebase-tools@latest deploy --only firestore:rules \
+  --project YOUR_PROJECT_ID --config firebase.deploy.json
+```
+
+Use `firebase.deploy.json`, not `firebase.json` — the latter is excluded by `.dockerignore`/`.gcloudignore`.
+
+Storage rules are deliberately **not** deployed. There is no Firebase-linked default bucket; the private bucket is locked down by IAM instead (uniform bucket-level access, public access prevention enforced, object access granted to the runtime service account alone). That is strictly stronger than a rules file, which would not apply to a non-Firebase bucket anyway. Do not "fix" this by linking the bucket to Firebase — it would weaken the current posture.
+
 ### Database migration
 
 Back up Firestore, then inspect a dry-run report before applying the legacy migration:
