@@ -16,9 +16,20 @@ from __future__ import annotations
 from services.jobs import update_job
 from services.llm import (
     draft_legal_document, extract_case_strength, extract_statutes,
-    extract_structured_analysis, extract_timeline,
+    extract_structured_analysis, extract_timeline, sort_timeline,
 )
 from services.matters import load_matter, patch_matter, replace_matter_records, save_matter
+
+
+def merge_timeline(existing: list, extracted: list) -> list:
+    """Fresh extraction replaces machine events; manual events always survive.
+
+    The same rule the authority list follows (Cycle 7): a rebuild never
+    destroys what the lawyer entered by hand.
+    """
+    manual = [event for event in (existing or [])
+              if isinstance(event, dict) and event.get("source") == "manual"]
+    return sort_timeline(list(extracted or []) + manual)
 
 
 def process_analysis_job(matter_id: str, job_id: str, data: dict) -> dict:
@@ -35,7 +46,8 @@ def process_analysis_job(matter_id: str, job_id: str, data: dict) -> dict:
 
     update_job(matter_id, job_id, progress=45, stage="building_timeline")
     timeline = extract_timeline(text)
-    timeline = timeline if isinstance(timeline, list) else []
+    timeline = merge_timeline(matter.get("timeline"),
+                              timeline if isinstance(timeline, list) else [])
 
     update_job(matter_id, job_id, progress=65, stage="checking_statutes")
     statutes = extract_statutes(text, analysis)

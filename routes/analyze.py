@@ -50,8 +50,8 @@ def add_timeline_event():
     uid = str(current_user.get_id())
     ctx = get_stored_context(context_id, uid)
     if not ctx:
-        return jsonify({"error": "forbidden or not found"}), 403
-        
+        return jsonify({"error": "matter not found"}), 404
+
     date_val = str(payload.get("date") or "").strip()
     desc_val = str(payload.get("description") or "").strip()
     cat_val = str(payload.get("category") or "other").strip()
@@ -74,6 +74,44 @@ def add_timeline_event():
         
     current_timeline.append(new_event)
     current_timeline = sort_timeline(current_timeline)
-    
+
     ctx["timeline"] = current_timeline
     return jsonify({"status": "success", "timeline": current_timeline})
+
+
+@analyze_bp.route("/timeline/delete", methods=["POST"])
+@login_required
+def delete_timeline_event():
+    """Remove one event (manual or extracted) — the lawyer curates the record.
+
+    The client sends the event's index plus its date and description; a
+    mismatch means the timeline changed under it (concurrent rebuild), so we
+    409 rather than delete the wrong event.
+    """
+    payload = request.json or {}
+    context_id = resolve_matter_id(payload)
+    if not context_id:
+        return jsonify({"error": "Missing context_id"}), 400
+
+    uid = str(current_user.get_id())
+    ctx = get_stored_context(context_id, uid)
+    if not ctx:
+        return jsonify({"error": "matter not found"}), 404
+
+    timeline = ctx.get("timeline", [])
+    if not isinstance(timeline, list):
+        timeline = []
+    try:
+        index = int(payload.get("index"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "index is required"}), 400
+    if index < 0 or index >= len(timeline):
+        return jsonify({"error": "index out of range"}), 400
+    event = timeline[index] if isinstance(timeline[index], dict) else {}
+    if (str(event.get("date") or "") != str(payload.get("date") or "")
+            or str(event.get("description") or "") != str(payload.get("description") or "")):
+        return jsonify({"error": "timeline changed — reload the matter and try again"}), 409
+
+    updated = [item for position, item in enumerate(timeline) if position != index]
+    ctx["timeline"] = updated
+    return jsonify({"status": "success", "timeline": updated})

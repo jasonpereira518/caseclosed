@@ -1694,3 +1694,7 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 /* Cycle 7: case description in the Authority detail view. */
 .cases-detail-card-description { font-size: 13px; line-height: 1.5; margin-top: 8px; color: var(--text-muted, inherit); }
 .cases-detail-card-description:empty { display: none; }
+
+/* Cycle 8: timeline event removal (functional; visual pass owns finish). */
+.timeline-remove-btn { font: inherit; font-size: 14px; line-height: 1; padding: 0 6px; border: none; background: none; cursor: pointer; color: #9E8E7E; float: right; }
+.timeline-remove-btn:hover { color: #8d2926; }

@@ -1735,7 +1735,10 @@ function renderTimeline(events) {
 
         const categoryClass = `tag-${rawCat}`;
         const categoryLabel = rawCat === 'incident' ? 'Incident' : 'Event';
-        const dateDisplay = event.date || 'Date Unknown';
+        // escapeHtml on date and description: both are user/model-controlled
+        // and this lands in innerHTML — unescaped they were a stored XSS.
+        const dateDisplay = escapeHtml(event.date || 'Date Unknown');
+        const descriptionSafe = escapeHtml(event.description || '');
         const isManual = event.source === 'manual' ? '<span class="timeline-manual-tag">Manual</span>' : '';
 
         html += `
@@ -1746,7 +1749,9 @@ function renderTimeline(events) {
                     <div class="timeline-details">
                         <span class="timeline-tag ${categoryClass}">${categoryLabel}</span>
                         ${isManual}
-                        <p class="timeline-description">${event.description || ''}</p>
+                        <p class="timeline-description">${descriptionSafe}</p>
+                        <button type="button" class="timeline-remove-btn" title="Remove this event"
+                            onclick="deleteTimelineEvent(${index})">×</button>
                     </div>
                 </div>
             </div>
@@ -1764,6 +1769,36 @@ function renderTimeline(events) {
     `;
 
     return html;
+}
+
+/** Remove one timeline event (manual or extracted). The server verifies the
+ *  event's content still matches this index and 409s if the timeline moved. */
+async function deleteTimelineEvent(index) {
+    const event = (currentTimeline || [])[index];
+    if (!event) return;
+    try {
+        const res = await fetch('/timeline/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                context_id: contextId,
+                index,
+                date: event.date || '',
+                description: event.description || '',
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showToast(data.error || 'Unable to remove the event', 'error');
+            if (res.status === 409) await loadContext();
+            return;
+        }
+        currentTimeline = data.timeline || [];
+        updateTimelineInPanel(currentTimeline);
+    } catch (err) {
+        showToast(err.message || 'Unable to remove the event', 'error');
+    }
 }
 
 function submitManualTimelineEvent() {

@@ -195,8 +195,11 @@ def _research(matter_id: str, job_id: str, uid: str, message: str, matter: dict)
                                      [_compact_case(item) for item in results])
 
     update_job(matter_id, job_id, progress=75, stage="building_matter_analysis")
+    from services.analysis_orchestrator import merge_timeline
+
     timeline = extract_timeline(description)
-    timeline = timeline if isinstance(timeline, list) else []
+    timeline = merge_timeline(matter.get("timeline"),
+                              timeline if isinstance(timeline, list) else [])
     legal_sources = retrieve(matter_id, uid, summary,
                              jurisdiction=_jurisdiction(analysis, matter.get("intake") or {}),
                              top_k=12)

@@ -157,6 +157,13 @@
       events.sort((a, b) => String(a.date).localeCompare(String(b.date)));
       return ok({ timeline: events });
     },
+    '/timeline/delete': (body) => {
+      const events = clone(FIXTURE.timeline);
+      if (Number.isInteger(body.index) && body.index >= 0 && body.index < events.length) {
+        events.splice(body.index, 1);
+      }
+      return ok({ timeline: events });
+    },
 
     '/analyze': () => {
       const jobId = createDemoJob({

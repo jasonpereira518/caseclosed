@@ -25,6 +25,7 @@ PROTECTED_JSON_PATHS = frozenset(
         "/case/bookmark",
         "/session/track-time",
         "/timeline/add",
+        "/timeline/delete",
         "/intake",
         "/documents/toggle",
         "/documents/delete",
