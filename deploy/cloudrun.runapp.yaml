@@ -26,6 +26,9 @@ AUTH_PROVIDER: "clerk"
 
 APP_BASE_URL: "https://caseclosed-vz6mirfkqa-uc.a.run.app"
 
+# Who can open /admin/access and approve early-access requests.
+ADMIN_EMAILS: "jasonpereira518@gmail.com"
+
 # TODO(deploy): paste the Clerk DEVELOPMENT publishable key (pk_test_...).
 # Publishable keys are public by design -- base.html emits this into the HTML.
 CLERK_PUBLISHABLE_KEY: "REPLACE_WITH_pk_test_KEY"

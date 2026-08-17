@@ -2739,3 +2739,9 @@ html {
 @media (max-width: 820px) {
     .hero-product-chrome { display: none; }
 }
+
+/* Cycle 1: public legal pages (privacy, terms). Functional styling only. */
+.legal-page { max-width: 720px; margin: 0 auto; }
+.legal-article h1 { margin-bottom: 4px; }
+.legal-article h2 { margin-top: 32px; }
+.legal-article li { margin-bottom: 8px; }

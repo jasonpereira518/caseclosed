@@ -18,6 +18,13 @@ PORT = int(os.getenv("PORT", 5050))
 DEBUG = os.getenv("FLASK_DEBUG", "false").lower() == "true"
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production" if os.getenv("K_SERVICE") else "development").lower()
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:5050").rstrip("/")
+# Emails allowed to use the /admin surface (access-request approval). Empty
+# means no admins: the admin routes 404 for everyone.
+ADMIN_EMAILS = frozenset(
+    email.strip().lower()
+    for email in os.getenv("ADMIN_EMAILS", "").split(",")
+    if email.strip()
+)
 # HSTS is the one header you cannot take back. Keep it dialable so the first
 # days on a new domain can run at a short max-age before committing to a year.
 HSTS_MAX_AGE = int(os.getenv("HSTS_MAX_AGE", 31536000))

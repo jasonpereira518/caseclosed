@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}You're on the list — Case Closed{% endblock %}
+
+{% block content %}
+<main class="waitlist-page" id="main">
+    <section class="waitlist-card" aria-labelledby="waitlist-title">
+        <h1 id="waitlist-title">You're on the list</h1>
+        <p>
+            Thanks{% if user_name %}, {{ user_name }}{% endif %} — your request for
+            early access is in. We review requests by hand and will email
+            <strong>{{ user_email }}</strong> as soon as your workspace is ready.
+        </p>
+        <p>
+            In the meantime you can <a href="{{ url_for('demo.demo_workspace') }}">explore the
+            live demo</a> on a fictional matter.
+        </p>
+        <p class="waitlist-signout">
+            Signed in as {{ user_email }} · <a href="{{ url_for('auth.logout') }}" data-clerk-sign-out>Sign out</a>
+        </p>
+    </section>
+</main>
+{% endblock %}
+
+{% block page_scripts %}{% endblock %}

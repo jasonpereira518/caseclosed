@@ -216,16 +216,18 @@
             <h2 id="outcome-title">Turn a working file into a working case picture.</h2>
             <p>Rivera v. Northline Logistics is a fictional example showing how matter context develops across the workspace.</p>
         </div>
+        {# These numbers are the fixture's actual counts — tests/test_landing_fixture_alignment.py
+           fails the build if they drift from static/demo-fixture.json. #}
         <div class="outcome-row reveal" data-delay="1">
-            <div><strong data-count="4">4</strong><span>matter documents</span></div>
+            <div><strong data-count="5">5</strong><span>matter documents</span></div>
             <span class="outcome-arrow" aria-hidden="true">→</span>
-            <div><strong data-count="14">14</strong><span>key events</span></div>
+            <div><strong data-count="7">7</strong><span>key events</span></div>
             <span class="outcome-arrow" aria-hidden="true">→</span>
-            <div><strong data-count="4">4</strong><span>legal issues</span></div>
+            <div><strong data-count="5">5</strong><span>legal issues</span></div>
             <span class="outcome-arrow" aria-hidden="true">→</span>
-            <div><strong data-count="9">9</strong><span>relevant authorities</span></div>
+            <div><strong data-count="5">5</strong><span>relevant authorities</span></div>
             <span class="outcome-arrow" aria-hidden="true">→</span>
-            <div><strong data-count="1">1</strong><span>memo outline</span></div>
+            <div><strong data-count="1">1</strong><span>memo draft</span></div>
         </div>
         <p class="outcome-note">Illustrative workflow only. Results depend on the matter, source material, and lawyer review.</p>
     </section>
@@ -311,7 +313,7 @@
         </div>
     </div>
     <div class="footer-bottom">
-        <p>© {{ current_year }} Case Closed. All rights reserved.</p>
+        <p>© {{ current_year }} Case Closed. All rights reserved. · <a href="{{ url_for('main.privacy') }}">Privacy Policy</a> · <a href="{{ url_for('main.terms') }}">Terms of Service</a></p>
         <p>Case Closed does not provide legal advice. All output should be reviewed by a qualified attorney before use.</p>
     </div>
 </footer>

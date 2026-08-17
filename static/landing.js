@@ -123,64 +123,68 @@
     let featureIndex = 0;
     let userSelectedFeature = false;
 
+    /* Preview content is the Rivera v. Northline matter from
+       static/demo-fixture.json — the same synthetic matter the hero iframe
+       runs on. Every case name is fictional by design; never add a real one
+       (tests/test_landing_fixture_alignment.py enforces both). */
     const featureContent = {
         record: {
             status: "Record organized",
             eyebrow: "MATTER RECORD",
-            title: "Four documents, one working record",
+            title: "Five documents, one working record",
             className: "",
             rows: [
-                ["PDF", "Complaint.pdf", "42 pages · Analyzed", "✓"],
-                ["PDF", "Incident report.pdf", "8 pages · Analyzed", "✓"],
-                ["DOC", "Witness statement.docx", "6 pages · Analyzed", "✓"],
-                ["TXT", "Client notes.txt", "Updated today", "✓"]
+                ["PDF", "Complaint.pdf", "Filed Jul 15 · Analyzed", "✓"],
+                ["PDF", "Incident_Report.pdf", "Clear conditions recorded · Analyzed", "✓"],
+                ["DOC", "Rivera_Statement.docx", "Client statement · Analyzed", "✓"],
+                ["TXT", "Dispatch_Log.txt", "Telemetry after clock-out · Analyzed", "✓"]
             ]
         },
         timeline: {
-            status: "14 events connected",
+            status: "7 events connected",
             eyebrow: "CHRONOLOGY",
             title: "The facts, arranged in time",
             className: "timeline-state",
             rows: [
-                ["MAR 03", "Safety concern raised", "Client email to supervisor", ""],
-                ["MAR 18", "Written complaint submitted", "Regional management notified", ""],
-                ["MAR 24", "Performance warning issued", "First warning in personnel file", ""],
-                ["APR 05", "Employment terminated", "18 days after complaint", ""]
+                ["MAR 14", "Collision at Kellner & 7th", "Marked crossing, approx. 07:52", ""],
+                ["MAR 14", "Vehicle transmits location at 08:33", "41 minutes after recorded clock-out", ""],
+                ["JUN 28", "Northline denies liability", "Asserts driver had ended his shift", ""],
+                ["JUL 15", "Complaint filed", "Franklin County Court of Common Pleas", ""]
             ]
         },
         issues: {
-            status: "4 issues identified",
+            status: "5 issues identified",
             eyebrow: "STRUCTURED ANALYSIS",
             title: "Legal questions connected to the facts",
             className: "issue-state",
             rows: [
-                ["01", "Protected activity", "Internal safety complaint", "Open"],
-                ["02", "Employer notice", "Written escalation received", "Review"],
-                ["03", "Adverse action", "Termination and warning", "Clear"],
-                ["04", "Causation", "Temporal proximity", "Open"]
+                ["01", "Scope of employment", "Route completion after clock-out", "Open"],
+                ["02", "Telemetry vs. timekeeping", "Dispatch log contradicts records", "Review"],
+                ["03", "Comparative fault", "Entry as the signal changed", "Open"],
+                ["04", "Negligent supervision", "Independent count against Northline", "Open"]
             ]
         },
         authority: {
-            status: "9 authorities ranked",
+            status: "5 authorities ranked",
             eyebrow: "CASE RESEARCH",
             title: "Authority ranked by matter fit",
             className: "authority-state",
             rows: [
-                ["92", "Kwan v. Andalex Group LLC", "2d Cir. · Temporal proximity", "View"],
-                ["88", "Zann Kwan v. Andalex", "Retaliation framework", "View"],
-                ["84", "Gorman-Bakos v. Cornell", "Causation analysis", "View"],
-                ["79", "Summa v. Hofstra University", "Protected activity", "View"]
+                ["91", "Alvarado v. Crestmoor Freight Co.", "Fict. 2019 · Scope of employment", "View"],
+                ["84", "Petrakis v. Halvern Distribution", "Fict. 2022 · Negligent supervision", "View"],
+                ["77", "Okonkwo v. Bayline Transit", "Fict. 2016 · Comparative fault", "View"],
+                ["61", "Denholm v. Riverbend Carriers", "Fict. 2008 · Adverse authority", "View"]
             ]
         },
         draft: {
-            status: "Outline ready",
+            status: "Draft ready",
             eyebrow: "LEGAL MEMORANDUM",
             title: "A first draft grounded in this matter",
             className: "draft-state",
             rows: [
-                ["", "Question Presented", "Whether Rivera can establish a prima facie retaliation claim based on the written safety complaint and termination eighteen days later.", ""],
-                ["", "Short Answer", "The current record supports a plausible claim, subject to further review of the employer's stated reason and comparator evidence.", ""],
-                ["", "Analysis", "The memorandum connects the protected activity, notice, adverse action, and causation authorities collected in this matter.", ""]
+                ["", "Question Presented", "Whether Northline is vicariously liable where its dispatch telemetry places the vehicle on its assigned route forty-one minutes after the operator's recorded clock-out.", ""],
+                ["", "Brief Answer", "Probably yes, on the present record. The telemetry contradicts the employer's own timekeeping; the principal risk is comparative fault.", ""],
+                ["", "Analysis", "The memorandum connects the dispatch log, the scope-of-employment authorities, and the comparative-fault exposure collected in this matter.", ""]
             ]
         }
     };

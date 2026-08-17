@@ -1,0 +1,54 @@
+{% extends "legal_base.html" %}
+
+{% block title %}Privacy Policy | Case Closed{% endblock %}
+{% block description %}How Case Closed collects, uses, and protects your information.{% endblock %}
+
+{% block legal_content %}
+<h1>Privacy Policy</h1>
+<p><em>Effective date: August 16, 2026</em></p>
+
+<p>Case Closed ("we", "us") is an AI-assisted litigation workspace. This policy describes what information we collect, how we use it, and the choices you have. It is written to be read, not skimmed past.</p>
+
+<h2>Information we collect</h2>
+<ul>
+    <li><strong>Account information.</strong> Sign-in is provided by Clerk using your Google account. We receive and store your name, email address, and profile picture. We never see your Google password.</li>
+    <li><strong>Profile information you add.</strong> Optional details you enter in the account center, such as job title, organization, bar number, jurisdictions, and practice areas.</li>
+    <li><strong>Matter content.</strong> The documents you upload, the descriptions and messages you write, and the analyses, timelines, research results, notes, and drafts generated in your workspace.</li>
+    <li><strong>Usage records.</strong> Session time you choose to track, and operational logs needed to run and secure the service.</li>
+</ul>
+
+<h2>How we use it</h2>
+<ul>
+    <li>To provide the product: storing your matters, running document analysis, research, and drafting on your instruction, and restoring your workspace on any device.</li>
+    <li>To operate AI features. Matter content is processed by Google's Gemini models via Vertex AI when you request analysis, chat, research, or drafting. Search queries derived from your matter may be sent to CourtListener to find case law. <strong>We do not train AI models on your content.</strong></li>
+    <li>To email you: workspace invitations, access approval, and notifications you enable.</li>
+</ul>
+
+<h2>What we do not do</h2>
+<ul>
+    <li>We do not sell your information.</li>
+    <li>We do not show advertising or use advertising trackers.</li>
+    <li>We do not train machine-learning models on your matter content.</li>
+</ul>
+
+<h2>Where your data lives</h2>
+<p>Matter data is stored in Google Cloud (Firestore and Cloud Storage) in the United States. Uploaded documents live in a private bucket that is not publicly accessible; browsers never talk to the database or storage directly — every request goes through our authenticated backend, which enforces workspace membership before returning anything.</p>
+
+<h2>Cookies</h2>
+<p>We use session cookies to keep you signed in (ours and Clerk's). No advertising or cross-site tracking cookies.</p>
+
+<h2>Your choices</h2>
+<ul>
+    <li><strong>Export.</strong> The account center can produce a complete ZIP export of your account and matters at any time.</li>
+    <li><strong>Deletion.</strong> Deleting your account from the account center removes your personal workspaces, their matters and documents, and your sign-in identity. Content you contributed to a team workspace is disassociated from you and remains with the team that owns it.</li>
+</ul>
+
+<h2>Retention</h2>
+<p>We keep your data for as long as your account exists. When you delete your account, deletion of your personal data begins immediately.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes materially, we will note the new effective date here and, where appropriate, email account holders.</p>
+
+<h2>Contact</h2>
+<p>Questions about this policy: <a href="mailto:jasonpereira518@gmail.com">jasonpereira518@gmail.com</a>.</p>
+{% endblock %}

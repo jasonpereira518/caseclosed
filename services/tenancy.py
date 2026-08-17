@@ -130,6 +130,9 @@ def ensure_user(claims: dict) -> dict:
             identity[field] = claims[field]
     if not snap.exists:
         identity["created_at"] = timestamp
+        # Sign-in is the access request: new accounts wait for admin approval.
+        # Documents that predate the gate have no access_status and pass it.
+        identity["access_status"] = "pending"
     wid = personal_workspace_id(uid)
     identity["personal_workspace_id"] = wid
     identity["workspace_ids"] = gc_firestore.ArrayUnion([wid])
@@ -157,6 +160,52 @@ def update_profile(uid: str, payload: dict) -> dict:
     ref = get_firestore_client().collection(config.FIRESTORE_USERS_COLLECTION).document(str(uid))
     ref.set(updates, merge=True)
     return public_profile(ref.get().to_dict() or {})
+
+
+ACCESS_STATUSES = frozenset({"pending", "approved", "revoked"})
+
+
+def list_access_requests() -> list[dict]:
+    """Every gated account (pending first). Pre-gate accounts have no
+    access_status field and deliberately never appear here."""
+    stream = (
+        get_firestore_client()
+        .collection(config.FIRESTORE_USERS_COLLECTION)
+        .where(filter=gc_firestore.FieldFilter("access_status", "in", sorted(ACCESS_STATUSES)))
+        .stream()
+    )
+    records = []
+    for snap in stream:
+        data = snap.to_dict() or {}
+        records.append({
+            "uid": snap.id,
+            "email": data.get("email"),
+            "display_name": data.get("display_name") or "",
+            "access_status": data.get("access_status"),
+            "created_at": data.get("created_at"),
+            "access_updated_at": data.get("access_updated_at"),
+        })
+    records.sort(key=lambda r: (r["access_status"] != "pending", str(r.get("created_at") or "")))
+    return records
+
+
+def set_access_status(uid: str, status: str) -> dict:
+    if status not in ACCESS_STATUSES:
+        raise ValidationError("invalid access status")
+    ref = get_firestore_client().collection(config.FIRESTORE_USERS_COLLECTION).document(str(uid))
+    snap = ref.get()
+    if not snap.exists:
+        raise ValidationError("unknown user")
+    timestamp = now()
+    ref.set({"access_status": status, "access_updated_at": timestamp,
+             "updated_at": timestamp}, merge=True)
+    data = ref.get().to_dict() or {}
+    return {
+        "uid": str(uid),
+        "email": data.get("email"),
+        "display_name": data.get("display_name") or "",
+        "access_status": data.get("access_status"),
+    }
 
 
 def membership(workspace_id: str, uid: str) -> dict | None:

@@ -17,22 +17,10 @@ class User(UserMixin):
         self.profile_pic = profile_pic
         self.profile = profile
 
-
-def save_user(user_data):
-    """
-    Save or merge a user document in Firestore.
-    user_data: dict with keys id (Google sub), email, name, profile_pic (optional picture URL).
-    """
-    uid = str(user_data["id"])
-    doc = {
-        "email": user_data.get("email"),
-        "name": user_data.get("name"),
-        "profile_pic": user_data.get("profile_pic") or user_data.get("picture"),
-        "display_name": user_data.get("display_name") or user_data.get("name"),
-        "avatar_url": user_data.get("avatar_url") or user_data.get("profile_pic") or user_data.get("picture"),
-    }
-    db = get_firestore_client()
-    db.collection(config.FIRESTORE_USERS_COLLECTION).document(uid).set(doc, merge=True)
+    @property
+    def access_status(self):
+        """None (pre-gate account, treated as approved), pending, approved, or revoked."""
+        return self.profile.get("access_status")
 
 
 def load_user(user_id):

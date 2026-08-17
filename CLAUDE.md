@@ -89,6 +89,8 @@ Chat answers are grounded: retrieval happens separately for private matter evide
 
 `routes/` are thin Flask blueprints (registered in `routes/__init__.py`) handling HTTP concerns, auth, and job creation. Business logic lives in `services/` (one module per concern — `matters.py`, `tenancy.py`, `jobs.py`, `worker.py`, `retrieval.py`, `llm.py`, `courtlistener.py`, `document_ingestion.py`, etc.). `models/context.py` is a compatibility aggregate over the normalized matter records for older call sites.
 
+One exception: `routes/demo.py` (the public, unauthenticated `/demo` sandbox behind the landing page) imports no service layer at all — no `services.llm`, `services.firestore`, or `models` — so it structurally cannot reach Gemini, CourtListener, or Firestore. It's served entirely from a static fixture, with `static/demo.js` stubbing `window.fetch` client-side. `tests/test_demo_route.py` AST-parses the module's imports to keep this from regressing quietly; don't add a service import there to fix something, even temporarily.
+
 ### Deployment
 
 Production is Cloud Run (`us-central1`, project `case-closed-491121`), fronted by a free Cloud Run **domain mapping** — not a load balancer, which would bill a forwarding rule even at zero traffic.

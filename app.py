@@ -3,7 +3,7 @@ import logging
 import config
 
 from flask import Flask, jsonify, redirect, request, url_for
-from flask_login import LoginManager
+from flask_login import LoginManager, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from routes import register_blueprints
@@ -147,6 +147,34 @@ def redirect_to_https():
     if request.method not in ("GET", "HEAD"):
         return None
     return redirect(request.url.replace("http://", "https://", 1), code=301)
+
+
+# The access gate: sign-in is the request for early access. Accounts created
+# after the gate carry access_status="pending" until an admin approves them
+# (routes/admin.py); accounts predating the gate have no access_status field
+# and pass. Only the paths a gated user still needs are exempt — the public
+# surface, auth (so they can sign out), machine endpoints, and the admin
+# surface itself (which does its own, stricter check and 404s non-admins).
+GATE_EXEMPT_PATHS = frozenset({
+    "/", "/demo", "/demo/fixture", "/waitlist", "/privacy", "/terms",
+    "/healthz", "/livez", "/readyz", "/favicon.ico",
+})
+GATE_EXEMPT_PREFIXES = ("/static/", "/auth/", "/webhooks/", "/internal/",
+                        "/admin/", "/api/admin/")
+
+
+@app.before_request
+def enforce_access_gate():
+    path = request.path
+    if path in GATE_EXEMPT_PATHS or path.startswith(GATE_EXEMPT_PREFIXES):
+        return None
+    if not current_user.is_authenticated:
+        return None  # 401/redirect handling stays with login_required
+    if current_user.access_status in (None, "", "approved"):
+        return None
+    if _is_protected_json_path(path):
+        return jsonify({"error": "access_pending"}), 403
+    return redirect(url_for("main.waitlist"))
 
 
 @app.after_request

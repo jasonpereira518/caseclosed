@@ -48,9 +48,14 @@
           <svg class="icon icon-sm"><use href="#i-user"></use></svg>
         </span>
         {% endif %}
+        {% if demo_mode %}
+        <span class="account-name">{{ user_name or user_email or 'Account' }}</span>
+        {% else %}
         <a class="account-name" href="{{ url_for('main.account_center') }}">{{ user_name or user_email or 'Account' }}</a>
+        {% endif %}
         {% if demo_mode %}
         <span class="badge badge--caution">Demo</span>
+        <a class="demo-start-cta" href="{{ url_for('auth.login') }}" target="_top">Start your own matter</a>
         {% else %}
         <a href="{{ url_for('auth.logout') }}" class="account-signout" data-clerk-sign-out>Sign out</a>
         {% endif %}
@@ -67,6 +72,7 @@
     <p class="demo-notice" role="note">
       <strong>Demonstration.</strong> Every matter, party, document and authority shown here is
       synthetic. Case names are invented so that none can be mistaken for real authority.
+      <button type="button" id="demo-tour-start" class="demo-tour-start">Take the tour</button>
     </p>
     {% endif %}
 
@@ -511,4 +517,8 @@
 {% endif %}
 <script src="{{ url_for('static', filename='job-poller.js') }}"></script>
 <script src="{{ url_for('static', filename='script.js') }}"></script>
+{% if demo_mode %}
+{# After script.js: the tour points at a fully initialised workspace. #}
+<script src="{{ url_for('static', filename='demo-tour.js') }}"></script>
+{% endif %}
 {% endblock %}

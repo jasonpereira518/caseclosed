@@ -170,12 +170,13 @@
       // Matches the real POST /chat contract: acknowledge immediately with a
       // job_id + status_url, never the answer itself. script.js always polls
       // status_url now (routes/chat.py, services/task_queue.py).
+      const seed = matchSeededQuestion(body.message || '');
       const jobId = createDemoJob({
         status: 'answer',
         intent: 'legal_research',
-        message: DEMO_REPLY,
-        grounded: true,
-        citations: DEMO_CITATIONS,
+        message: seed ? seed.answer : offscriptAnswer(),
+        grounded: !!seed,
+        citations: seed ? clone(seed.citations || []) : [],
         context_id: FIXTURE.context_id,
         matter_id: FIXTURE.context_id,
         title: FIXTURE.title,
@@ -244,44 +245,67 @@
     });
   }
 
-  const DEMO_REPLY =
-    'Comparative fault is the real exposure here, and it is bounded rather than fatal.\n\n' +
-    'R.C. 2315.33 reduces recovery in proportion to the claimant\'s share of fault and only bars ' +
-    'it entirely if her share exceeds everyone else\'s combined. On these facts that threshold is ' +
-    'unlikely to be met: the signal was functioning, conditions were clear, and R.C. 4511.46 put ' +
-    'the duty to yield on the driver.\n\n' +
-    'The closest guidance in the retrieved authority assigned twenty percent to a pedestrian who ' +
-    'entered on a changing signal, and reduced rather than barred recovery.\n\n' +
-    'The gap worth closing is the municipal signal-timing record. It would move her entry from ' +
-    'contested to documented. I have added it to the open items in the draft.\n\n' +
-    'This is AI-assisted analysis and needs your review.';
-
   const DEMO_FOLLOW_UP =
     'The court treated the functioning signal as established and confined its analysis to the ' +
     'timing of entry, which is the same posture as this matter. It does not reach the question ' +
     'of a malfunctioning signal.';
 
-  // Real citation shape (BACKEND_ARCHITECTURE.md "Chat contract"): source_id,
-  // source_type, title, locator, url, quote. url is empty for these — like
-  // the rest of the fixture, every source here is fictional, not a live link.
-  const DEMO_CITATIONS = [
-    {
-      source_id: 'statute-rc-2315-33', source_type: 'statute',
-      title: 'R.C. 2315.33 — Comparative negligence', locator: 'Ohio Rev. Code', url: '',
-      quote: 'Bars recovery where the claimant’s contributory fault exceeds the combined fault of all other parties; otherwise damages are reduced in proportion.',
-    },
-    {
-      source_id: 'statute-rc-4511-46', source_type: 'statute',
-      title: 'R.C. 4511.46 — Right of way of pedestrian in crosswalk', locator: 'Ohio Rev. Code', url: '',
-      quote: 'Requires a driver to yield to a pedestrian lawfully within a marked crosswalk on the driver’s half of the roadway.',
-    },
-    {
-      source_id: 'case-okonkwo-bayline', source_type: 'case_law',
-      title: 'Okonkwo v. Bayline Municipal Transit Authority',
-      locator: '171 Ohio App. 3d 690 (Fict. 2016)', url: '',
-      quote: 'Pedestrian who entered a marked crossing on a changing signal was assigned twenty percent comparative fault; recovery reduced accordingly rather than barred.',
-    },
-  ];
+  /* ------------------------------------------------- seeded questions
+     The fixture carries a small set of curated question/answer pairs
+     (seeded_chat) with real-shape citations. A typed question is matched by
+     keyword overlap; anything off-script gets the fixture's offscript_answer
+     so the demo never fabricates analysis for an arbitrary question. */
+
+  function matchSeededQuestion(message) {
+    const seeds = FIXTURE.seeded_chat || [];
+    const text = String(message).toLowerCase();
+    if (!text.trim()) return null;
+    let best = null;
+    let bestScore = 0;
+    for (const seed of seeds) {
+      if (text === String(seed.question || '').toLowerCase()) return seed;
+      let score = 0;
+      for (const keyword of seed.keywords || []) {
+        if (text.includes(String(keyword).toLowerCase())) score += 1;
+      }
+      if (score > bestScore) { best = seed; bestScore = score; }
+    }
+    return bestScore >= 2 ? best : (bestScore === 1 && text.split(/\s+/).length <= 8 ? best : null);
+  }
+
+  function offscriptAnswer() {
+    return FIXTURE.offscript_answer ||
+      'In the live product I would research that against this matter’s record. ' +
+      'The demo answers a fixed set of questions — try one of the suggested questions.';
+  }
+
+  /* Suggested-question chips, injected above the composer so visitors ask
+     questions the demo can actually answer. */
+  function renderSeedChips() {
+    const form = document.getElementById('chat-form');
+    const input = document.getElementById('chat-input');
+    const seeds = (FIXTURE.seeded_chat || []).filter((seed) => seed.question);
+    if (!form || !input || !seeds.length) return;
+    if (document.getElementById('demo-seed-chips')) return;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'demo-seed-chips';
+    wrap.className = 'demo-seed-chips';
+    wrap.setAttribute('aria-label', 'Suggested questions');
+    for (const seed of seeds) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'demo-seed-chip';
+      chip.textContent = seed.question;
+      chip.addEventListener('click', () => {
+        input.value = seed.question;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        form.requestSubmit();
+      });
+      wrap.appendChild(chip);
+    }
+    form.parentNode.insertBefore(wrap, form);
+  }
 
   /** Cross-matter search, run against the single fixture matter. */
   function localSearch(query) {
@@ -362,6 +386,14 @@
     .then((r) => r.json())
     .then((data) => { FIXTURE = data; })
     .catch(() => { FIXTURE = { cases: [], messages: [], analysis: {}, timeline: [], statutes: [] }; });
+
+  ready.then(() => {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', renderSeedChips, { once: true });
+    } else {
+      renderSeedChips();
+    }
+  });
 
   window.__demoReady = ready;
 })();

@@ -4,7 +4,7 @@
 # marked below. Do not deploy this profile until ALL of these are true:
 #
 #   curl -sI https://caseclosed.jasonpereira.live/livez            -> 200
-#   dig +short clerk.caseclosed.jasonpereira.live                  -> resolves
+#   dig +short clerk.jasonpereira.live                              -> resolves
 #   gcloud beta run domain-mappings describe --domain caseclosed.jasonpereira.live \
 #     --region us-central1  -> CertificateProvisioned=True, Ready=True
 #   Clerk dashboard shows the production instance healthy
@@ -24,9 +24,13 @@ AUTH_PROVIDER: "clerk"
 # CHANGED vs runapp profile: the public origin.
 APP_BASE_URL: "https://caseclosed.jasonpereira.live"
 
+# Who can open /admin/access and approve early-access requests. Empty would
+# mean nobody can approve anyone in production.
+ADMIN_EMAILS: "jasonpereira518@gmail.com"
+
 # CHANGED: Clerk PRODUCTION instance keys.
 # TODO(deploy): paste the production publishable key (pk_live_...).
-CLERK_PUBLISHABLE_KEY: "REPLACE_WITH_pk_live_KEY"
+CLERK_PUBLISHABLE_KEY: "pk_live_Y2xlcmsuamFzb25wZXJlaXJhLmxpdmUk"
 # CHANGED: a production instance serves its Frontend API from the custom domain.
 CLERK_FRONTEND_API_URL: "https://clerk.caseclosed.jasonpereira.live"
 # CHANGED: the custom domain is prepended. All three origins are kept forever --

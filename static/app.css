@@ -1654,3 +1654,21 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 .matter-assignment label { display: flex; grid-auto-flow: column; align-items: center; gap: 6px; font-weight: 400; }
 .account-panel--danger { border-color: var(--negative-border); }
 @media (max-width: 640px) { .account-form { grid-template-columns: 1fr; } .account-form__wide { grid-column: auto; } }
+
+/* ------------------------------------------------------------------ */
+/* Cycle 1 additions: demo sandbox + access gate surfaces. Functional  */
+/* styling only — the visual pass owns the final treatment.            */
+.demo-seed-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 8px; }
+.demo-seed-chip { font: inherit; font-size: 12px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); cursor: pointer; }
+.demo-seed-chip:hover { background: var(--surface-hover); }
+.demo-start-cta { font-size: 12px; white-space: nowrap; }
+.demo-tour-start { font: inherit; background: none; border: none; padding: 0; margin-left: 6px; text-decoration: underline; cursor: pointer; }
+.waitlist-page { display: grid; place-items: start center; min-height: 100vh; padding: 12vh 16px 0; background: var(--surface-page); }
+.waitlist-card { max-width: 560px; padding: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.waitlist-card h1 { margin-top: 0; }
+.waitlist-signout { font-size: 13px; }
+.admin-access-page { max-width: 960px; margin: 0 auto; padding: 32px 16px; }
+.admin-access-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+.admin-access-table th, .admin-access-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.admin-access-table button { font: inherit; font-size: 13px; padding: 4px 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); cursor: pointer; }
+.admin-access-note { min-height: 1.4em; }

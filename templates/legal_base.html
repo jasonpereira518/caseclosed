@@ -1,0 +1,28 @@
+{% extends "landing_base.html" %}
+
+{% block content %}
+<header class="landing-header" data-header>
+    <nav class="landing-nav" aria-label="Primary navigation">
+        <a class="brand" href="{{ url_for('main.index') }}" aria-label="Case Closed home">
+            <img src="{{ url_for('static', filename='briefcase.png') }}" alt="" width="34" height="34">
+            <span>Case Closed</span>
+        </a>
+    </nav>
+</header>
+
+<main id="main-content" class="legal-page section-pad">
+    <article class="legal-article">
+        {% block legal_content %}{% endblock %}
+    </article>
+</main>
+
+<footer class="landing-footer">
+    <div class="footer-bottom">
+        <p>© {{ current_year }} Case Closed. All rights reserved.</p>
+        <p>
+            <a href="{{ url_for('main.privacy') }}">Privacy Policy</a> ·
+            <a href="{{ url_for('main.terms') }}">Terms of Service</a>
+        </p>
+    </div>
+</footer>
+{% endblock %}

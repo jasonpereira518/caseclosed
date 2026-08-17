@@ -132,6 +132,7 @@ All values are read from the environment (and optionally `.env` via `python-dote
 | `CLERK_JWT_KEY` | Optional PEM public key for networkless Clerk session verification. |
 | `CLERK_AUTHORIZED_PARTIES` | Comma-separated trusted origins checked against Clerk's `azp` claim. |
 | `CLERK_WEBHOOK_SIGNING_SECRET` | Svix signing secret for `/webhooks/clerk`. |
+| `ADMIN_EMAILS` | Comma-separated emails allowed to open `/admin/access` and approve early-access requests. New accounts start waitlisted (`access_status: pending`); accounts predating the gate pass automatically. Empty means the admin surface 404s for everyone. |
 | `UPLOAD_FOLDER` | Directory where uploaded PDFs are written temporarily (defaults to the system temp directory). |
 | `MAX_CONTENT_LENGTH` | Maximum upload size in bytes (default aligns with prior app limit). |
 | `PORT` | HTTP port for `python app.py` (default **5050**). |

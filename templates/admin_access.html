@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Access requests — Case Closed{% endblock %}
+
+{% block content %}
+<main class="admin-access-page" id="main">
+    <section aria-labelledby="admin-access-title">
+        <h1 id="admin-access-title">Access requests</h1>
+        <p>Approving sends the person a sign-in email. Revoking locks the account back to the waitlist.</p>
+        {% if not requests %}
+        <p class="admin-access-empty">No gated accounts yet. Accounts created before the gate never appear here.</p>
+        {% else %}
+        <table class="admin-access-table">
+            <thead>
+                <tr><th>Email</th><th>Name</th><th>Status</th><th>Requested</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+                {% for r in requests %}
+                <tr data-uid="{{ r.uid }}">
+                    <td>{{ r.email or "—" }}</td>
+                    <td>{{ r.display_name or "—" }}</td>
+                    <td class="admin-access-status">{{ r.access_status }}</td>
+                    <td>{{ r.created_at or "—" }}</td>
+                    <td>
+                        {% if r.access_status != "approved" %}
+                        <button type="button" data-action="approve">Approve</button>
+                        {% endif %}
+                        {% if r.access_status != "revoked" %}
+                        <button type="button" data-action="revoke">Revoke</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+        <p class="admin-access-note" id="admin-access-note" role="status"></p>
+    </section>
+</main>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+(function () {
+    "use strict";
+    var note = document.getElementById("admin-access-note");
+    document.querySelectorAll(".admin-access-table [data-action]").forEach(function (button) {
+        button.addEventListener("click", function () {
+            var row = button.closest("tr");
+            var uid = row.dataset.uid;
+            button.disabled = true;
+            fetch("/api/admin/access/" + encodeURIComponent(uid), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: button.dataset.action }),
+            }).then(function (response) {
+                return response.json().then(function (body) {
+                    if (!response.ok) throw new Error(body.error || "request failed");
+                    row.querySelector(".admin-access-status").textContent = body.access_status;
+                    note.textContent = body.access_status === "approved"
+                        ? (body.mail_sent
+                            ? "Approved — notification email sent to " + (body.email || "the user") + "."
+                            : "Approved, but the notification email FAILED to send — let " + (body.email || "the user") + " know by hand.")
+                        : "Access revoked for " + (body.email || uid) + ".";
+                });
+            }).catch(function (error) {
+                note.textContent = "Error: " + error.message;
+            }).finally(function () {
+                button.disabled = false;
+            });
+        });
+    });
+})();
+</script>
+{% endblock %}
