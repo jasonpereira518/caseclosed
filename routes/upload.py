@@ -5,7 +5,7 @@ from werkzeug.utils import secure_filename
 
 from models.context import get_context, get_context_id, get_or_create_context
 import config
-from services.jobs import create_job, update_job
+from services.jobs import create_job, deterministic_job_id, get_job, update_job
 from services.matters import delete_document as delete_document_record
 from services.matters import patch_document, patch_matter, require_matter, upsert_document
 from services.pdf import allowed_file, secure_save_document
@@ -65,6 +65,7 @@ def upload():
             if created:
                 enqueue_job(context_id, job["job_id"])
             job["status_url"] = f"/api/matters/{context_id}/jobs/{job['job_id']}"
+            job["document_id"] = document_id
             jobs.append(job)
         except Exception as exc:
             if job:
@@ -109,15 +110,15 @@ def toggle_document():
     document_id = str(doc.get("record_id") or "")
     if not document_id:
         return jsonify({"error": "document record is invalid"}), 409
-    text_block = f"\n\n[Document: {doc['filename']}]\n{doc.get('text', '')}"
+    # Include is retrieval-only (Cycle 5): the flag drives the retrieval
+    # filter, and document text no longer rides inside the description. Any
+    # block spliced there by the pre-Cycle-5 code is healed on touch.
     description = context.get("description", "")
-    if included and text_block not in description:
-        description += text_block
-    elif not included:
-        description = description.replace(text_block, "")
+    cleaned = _strip_document_block(description, doc["filename"], doc.get("text", ""))
     patch_document(context_id, str(current_user.get_id()), document_id,
                    {"included": included})
-    patch_matter(context_id, str(current_user.get_id()), root={"description": description})
+    if cleaned != description:
+        patch_matter(context_id, str(current_user.get_id()), root={"description": cleaned})
     set_matter_document_included(context_id, str(current_user.get_id()), document_id, included)
 
     return jsonify({"status": "ok", "included": included})
@@ -146,15 +147,51 @@ def delete_document():
     if not document_id:
         return jsonify({"error": "document record is invalid"}), 409
     description = context.get("description", "")
-    if doc.get("included"):
-        text_block = f"\n\n[Document: {doc['filename']}]\n{doc.get('text', '')}"
-        description = description.replace(text_block, "")
+    cleaned = _strip_document_block(description, doc["filename"], doc.get("text", ""))
     delete_matter_document_index(context_id, str(current_user.get_id()), document_id)
     delete_path(doc.get("storage_path"))
     delete_document_record(context_id, str(current_user.get_id()), document_id)
-    patch_matter(context_id, str(current_user.get_id()), root={"description": description})
+    patch_matter(context_id, str(current_user.get_id()), root={"description": cleaned})
 
     return jsonify({"status": "ok"})
+
+
+def _strip_document_block(description: str, filename: str, text: str) -> str:
+    """Remove the exact text block the pre-Cycle-5 toggle spliced into the
+    description. Reader only — nothing writes these blocks anymore."""
+    return description.replace(f"\n\n[Document: {filename}]\n{text}", "")
+
+
+@upload_bp.route("/api/matters/<matter_id>/documents/<document_id>/retry", methods=["POST"])
+@login_required
+def retry_document(matter_id, document_id):
+    """Requeue a failed ingestion when the original is durably stored.
+
+    The generic job-retry endpoint refuses document_ingest because retry-only
+    sources (local temp files, staging objects) are cleaned up after terminal
+    failure; this route makes the durability check explicit instead.
+    """
+    try:
+        _, matter_ref, _ = require_matter(matter_id, str(current_user.get_id()))
+    except AuthorizationError:
+        return jsonify({"error": "forbidden"}), 403
+    snap = matter_ref.collection("documents").document(str(document_id)).get()
+    record = snap.to_dict() if snap.exists else None
+    if not record:
+        return jsonify({"error": "document not found"}), 404
+    if not record.get("storage_path"):
+        return jsonify({"error": "the original file is no longer available — upload it again"}), 409
+    job_id = deterministic_job_id(str(matter_id), "document_ingest", str(document_id))
+    job = get_job(matter_id, job_id, str(current_user.get_id()))
+    if not job or job.get("status") not in {"failed", "cancelled"}:
+        return jsonify({"error": "document is not in a retryable state"}), 409
+    patch_document(matter_id, str(current_user.get_id()), str(document_id),
+                   {"status": "processing", "error": None})
+    update_job(matter_id, job_id, status="queued", progress=0, stage="queued",
+               error=None, result=None, cancel_requested=False, attempts=0)
+    enqueue_job(matter_id, job_id)
+    return jsonify({"job_id": job_id, "document_id": document_id, "status": "queued",
+                    "status_url": f"/api/matters/{matter_id}/jobs/{job_id}"}), 202
 
 
 @upload_bp.route("/api/matters/<matter_id>/documents/<document_id>/download")

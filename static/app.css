@@ -1683,3 +1683,10 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 
 /* Cycle 4: intake role-validation error (replaces inline JS styling). */
 .intake-radio-group.intake-role-error { border: 1px solid var(--negative-border, #8d2926); padding: 4px; border-radius: 8px; }
+
+/* Cycle 5: document status chips + retry (functional; visual pass owns finish). */
+.doc-status { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); text-transform: capitalize; }
+.doc-status--failed { color: #8d2926; border-color: #8d2926; }
+.doc-status--processing, .doc-status--retrying { color: #6f5d52; }
+.doc-error { font-size: 11px; color: #8d2926; margin-left: 20px; }
+.doc-retry-btn { font: inherit; font-size: 12px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); cursor: pointer; }

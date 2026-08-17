@@ -873,8 +873,10 @@ function showDraftSkeleton() {
 // =====================================================
 // PDF UPLOAD
 // =====================================================
+const SUPPORTED_UPLOAD_EXTENSIONS = ['pdf', 'docx', 'txt'];
+
 async function handleFileUpload(event) {
-    const files = event.target.files;
+    let files = event.target.files;
     if (!files.length) return;
 
     // Cloud Run rejects requests over 32 MiB at its front end, before the app
@@ -888,9 +890,22 @@ async function handleFileUpload(event) {
         return;
     }
 
+    // Report unsupported files by name (drag-and-drop bypasses the picker's
+    // accept filter); supported files in the same batch still upload.
+    const unsupported = Array.from(files).filter(f =>
+        !SUPPORTED_UPLOAD_EXTENSIONS.includes((f.name.split('.').pop() || '').toLowerCase()));
+    if (unsupported.length) {
+        showToast(`Skipped (PDF, DOCX, or TXT only): ${unsupported.map(f => f.name).join(', ')}`, 'error');
+    }
+    files = Array.from(files).filter(f => !unsupported.includes(f));
+    if (!files.length) {
+        event.target.value = '';
+        return;
+    }
+
     const existingNames = currentUploadedDocs ? currentUploadedDocs.map(d => d.filename) : [];
     const formData = new FormData();
-    
+
     for (let f of files) {
         let name = f.name;
         if (existingNames.includes(name)) {
@@ -931,15 +946,22 @@ async function handleFileUpload(event) {
 
         if (data.status === 'queued') {
             showToast(`${data.jobs.length} file(s) queued for extraction`, 'info');
-            const completed = await Promise.all(data.jobs.map(job =>
-                pollJob(job.status_url, { deadlineMs: 120000 })));
-            const succeeded = completed.filter(job => job.status === 'succeeded').length;
-            const failed = completed.length - succeeded;
+            // Open the manager immediately: rows show "processing" and each
+            // updates as its own job finishes, not after all of them.
             await loadContext();
+            openDocManager();
+            const refreshRows = async () => {
+                await loadContext();
+                renderDocList();
+            };
+            const settled = await Promise.allSettled(data.jobs.map(job =>
+                pollJob(job.status_url, { deadlineMs: 120000 }).finally(refreshRows)));
+            const completed = settled.filter(s => s.status === 'fulfilled').map(s => s.value);
+            const succeeded = completed.filter(job => job.status === 'succeeded').length;
+            const failed = data.jobs.length - succeeded;
             await loadSessionHistory();
             showToast(failed ? `${succeeded} processed; ${failed} failed` : `${succeeded} file(s) processed`,
                       failed ? 'error' : 'success');
-            openDocManager();
         } else if (data.error) {
             showToast(`Upload failed: ${data.error}`, 'error');
         }
@@ -1018,18 +1040,29 @@ function renderDocList() {
         if (!doc.uploaded_at) doc.uploaded_at = todayStr;
     });
     
-    list.innerHTML = docs.map((doc, i) => `
+    list.innerHTML = docs.map((doc, i) => {
+        const status = doc.status || 'ready';
+        const statusChip = status !== 'ready'
+            ? `<span class="doc-status doc-status--${escapeHtml(status)}">${escapeHtml(status)}</span>` : '';
+        const failureReason = status === 'failed' && doc.error
+            ? `<span class="doc-error" title="${escapeHtml(String(doc.error))}">${escapeHtml(String(doc.error).slice(0, 90))}</span>` : '';
+        const retryButton = status === 'failed' && doc.record_id
+            ? `<button class="doc-retry-btn" onclick="retryDocumentIngest('${escapeHtml(doc.record_id)}')">Retry</button>` : '';
+        return `
         <div class="doc-item" onmousemove="showDocTooltip(event, this)" onmouseleave="hideDocTooltip()" data-preview="${escapeHtml(doc.text?.substring(0, 400) || '')}">
             <div class="doc-info" style="display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0;">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span class="doc-number" style="color: #9E8E7E; font-size: 13px; font-weight: 500;">${i + 1}.</span>
                     <span class="doc-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${doc.filename}</span>
+                    ${statusChip}
                 </div>
                 <span style="font-size: 11px; color: #9E8E7E; margin-left: 20px;">Uploaded by ${doc.uploaded_by} • ${doc.uploaded_at}</span>
+                ${failureReason}
             </div>
             <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
+                ${retryButton}
                 <label class="doc-toggle">
-                    <input type="checkbox" class="modern-toggle" ${doc.included ? 'checked' : ''} 
+                    <input type="checkbox" class="modern-toggle" ${doc.included ? 'checked' : ''}
                         onchange="toggleDocument(${i}, this.checked)" />
                     <span class="toggle-slider"></span>
                     <span class="toggle-label">Include</span>
@@ -1039,7 +1072,32 @@ function renderDocList() {
                 </button>
             </div>
         </div>
-    `).join('') || '<p class="doc-empty">No documents uploaded yet.</p>';
+        `;
+    }).join('') || '<p class="doc-empty">No documents uploaded yet.</p>';
+}
+
+/** Requeue a failed ingestion; only durable originals are retryable. */
+async function retryDocumentIngest(documentId) {
+    try {
+        const res = await fetch(
+            `/api/matters/${encodeURIComponent(contextId)}/documents/${encodeURIComponent(documentId)}/retry`,
+            { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) {
+            showToast(data.error || 'Unable to retry this document', 'error');
+            return;
+        }
+        showToast('Reprocessing document…', 'info');
+        await loadContext();
+        renderDocList();
+        try {
+            await pollJob(data.status_url, { deadlineMs: 120000 });
+        } catch (_err) { /* row refresh below shows the stored outcome */ }
+        await loadContext();
+        renderDocList();
+    } catch (err) {
+        showToast(err.message || 'Unable to retry this document', 'error');
+    }
 }
 
 function escapeHtml(unsafe) {

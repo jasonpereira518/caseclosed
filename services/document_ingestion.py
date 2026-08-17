@@ -47,7 +47,9 @@ def ingest_document_job(matter_id: str, job_id: str, data: dict) -> dict:
         if cancellation_requested(matter_id, job_id):
             raise JobCancelled()
         metadata = {
-            "filename": filename, "included": False, "status": "ready",
+            # Uploading was the deliberate act: a document that extracts
+            # successfully participates in retrieval immediately (Cycle 5).
+            "filename": filename, "included": True, "status": "ready",
             "error": None,
             "uploaded_by": payload.get("uploaded_by") or "Unknown User",
             "uploaded_at": now(), "sha256": digest,
@@ -56,7 +58,8 @@ def ingest_document_job(matter_id: str, job_id: str, data: dict) -> dict:
             "storage_path": storage_path if storage_path and not staging_path else None,
         }
         upsert_document(matter_id, uid, document_id, metadata, text)
-        chunks = index_matter_document(matter_id, uid, document_id, filename, text)
+        chunks = index_matter_document(matter_id, uid, document_id, filename, text,
+                                       included=True)
         return {"status": "document_ready", "document": {
             "record_id": document_id, **metadata, "uploaded_at": metadata["uploaded_at"].isoformat(),
             "chunk_count": chunks,

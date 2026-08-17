@@ -133,7 +133,8 @@
             <svg class="icon icon-sm" aria-hidden="true"><use href="#i-upload"></use></svg>
             <span class="btn-text">Upload</span>
           </button>
-          <input type="file" id="file-upload-input" multiple accept=".pdf,.docx,.doc,.txt"
+          {# .doc removed in Cycle 5: the server never supported it. #}
+          <input type="file" id="file-upload-input" multiple accept=".pdf,.docx,.txt"
                  data-max-bytes="{{ max_upload_bytes }}" hidden>
           <button type="button" class="toolbar-btn" id="analyze-btn" title="Analyze matter">
             <svg class="icon icon-sm" aria-hidden="true"><use href="#i-analyze"></use></svg>
