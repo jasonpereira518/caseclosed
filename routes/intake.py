@@ -1,3 +1,5 @@
+import re
+
 from flask import Blueprint, request, jsonify
 from flask_login import current_user, login_required
 
@@ -8,6 +10,13 @@ from services.task_queue import enqueue_job
 from services.tenancy import AuthorizationError
 
 intake_bp = Blueprint("intake", __name__)
+
+# The intake block in the description is marker-delimited so a resubmission
+# replaces it in place instead of stacking duplicates. Legacy descriptions
+# with an unmarked block keep it as history; the marked block is appended.
+INTAKE_START = "===== CASE INTAKE ====="
+INTAKE_END = "===== END CASE INTAKE ====="
+_INTAKE_BLOCK = re.compile(re.escape(INTAKE_START) + r".*?" + re.escape(INTAKE_END), re.DOTALL)
 
 @intake_bp.route("/intake", methods=["POST"])
 @login_required
@@ -34,10 +43,17 @@ def process_intake():
     prior_legal_actions = str(payload.get("prior_legal_actions") or "").strip()
     opposing_party = str(payload.get("opposing_party") or "").strip()
 
+    previous_intake = dict(ctx.get("intake") or {})
     ctx["intake"] = payload
 
-    if ctx["title"] in ("New Session", "") and case_title:
+    # The intake title tracks the matter title until the user manually
+    # renames; a rename is never overwritten by a later intake edit.
+    previous_case_title = str(previous_intake.get("case_title") or "").strip()
+    if case_title and ctx["title"] in ("New Session", "", previous_case_title):
         ctx["title"] = case_title
+
+    if user_role:
+        ctx["role"] = user_role.strip().lower()
 
     formatted = f"""CASE INTAKE
 Title: {case_title}
@@ -60,12 +76,18 @@ Description:
     if opposing_party:
         formatted += f"\n\nOpposing Party: {opposing_party}"
 
-    ctx["description"] = (ctx["description"] + "\n\n" + formatted).strip()
+    block = f"{INTAKE_START}\n{formatted}\n{INTAKE_END}"
+    existing_description = str(ctx.get("description") or "")
+    updating = INTAKE_START in existing_description
+    if updating:
+        ctx["description"] = _INTAKE_BLOCK.sub(block, existing_description, count=1).strip()
+    else:
+        ctx["description"] = (existing_description + "\n\n" + block).strip()
 
     messages = list(ctx.get("messages") or [])
     messages.append({
         "role": "user",
-        "content": formatted
+        "content": formatted.replace("CASE INTAKE", "CASE INTAKE (UPDATED)", 1) if updating else formatted,
     })
     ctx["messages"] = messages
 

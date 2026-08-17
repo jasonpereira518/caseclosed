@@ -144,6 +144,7 @@
     '/draft/export':    () => demoBlocked('Exporting to Word'),
 
     '/documents/toggle': (body) => ok({ status: 'ok', included: !!body.included }),
+    '/matter/role': (body) => ok({ status: 'ok', role: String(body.role || '') }),
     '/session/track-time': () => ok({ status: 'ok', total_seconds: FIXTURE.total_seconds }),
     '/timeline/add': (body) => {
       const events = clone(FIXTURE.timeline);

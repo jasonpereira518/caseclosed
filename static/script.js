@@ -568,15 +568,11 @@ function setupEventListeners() {
     // Auto-resize textarea
     chatInput.addEventListener('input', autoResizeTextarea);
 
-    // Role dropdown (custom, replaces native <select>)
+    // Role dropdown (custom, replaces native <select>). loadContext() ran
+    // before this in the init sequence, so selectedRole already reflects the
+    // stored matter role — re-apply it rather than resetting to the default.
     if (roleToggleBtn && roleMenuEl && roleSelectedTextEl && roleOptionsEls) {
-        // Default selection: Defendant
-        roleOptionsEls.forEach((opt) => {
-            const isDefendant = String(opt.dataset.value || '').toLowerCase() === 'defendant';
-            opt.classList.toggle('active', isDefendant);
-        });
-        roleSelectedTextEl.textContent = 'Defendant';
-        selectedRole = 'defendant';
+        syncRoleSelector(selectedRole);
 
         roleToggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -584,16 +580,25 @@ function setupEventListeners() {
         });
 
         roleOptionsEls.forEach((opt) => {
-            opt.addEventListener('click', (e) => {
+            opt.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const val = String(opt.dataset.value || '').toLowerCase();
-                selectedRole = val;
-                roleOptionsEls.forEach((o) => {
-                    const ov = String(o.dataset.value || '').toLowerCase();
-                    o.classList.toggle('active', ov === val);
-                });
-                roleSelectedTextEl.textContent = (opt.textContent || '').trim() || 'Defendant';
+                syncRoleSelector(val);
                 roleMenuEl.classList.remove('show');
+                // Persist: chat answers and drafts argue from this side.
+                try {
+                    const res = await fetch('/matter/role', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ context_id: contextId, role: val }),
+                    });
+                    if (!res.ok) {
+                        const data = await res.json();
+                        showToast(data.error || 'Unable to save the role', 'error');
+                    }
+                } catch (err) {
+                    console.error('Error saving role:', err);
+                }
             });
         });
 
@@ -601,6 +606,22 @@ function setupEventListeners() {
             roleMenuEl.classList.remove('show');
         });
     }
+}
+
+/** Reflect state.role in the header dropdown. Empty role keeps the visual
+ *  default (Defendant) without persisting anything. */
+function syncRoleSelector(value) {
+    if (!roleSelectedTextEl || !roleOptionsEls) return;
+    const val = String(value || '').toLowerCase() || 'defendant';
+    selectedRole = val;
+    let label = 'Defendant';
+    roleOptionsEls.forEach((opt) => {
+        const ov = String(opt.dataset.value || '').toLowerCase();
+        const active = ov === val;
+        opt.classList.toggle('active', active);
+        if (active) label = (opt.textContent || '').trim() || label;
+    });
+    roleSelectedTextEl.textContent = label;
 }
 
 function setupIntakeModal() {
@@ -612,34 +633,41 @@ function setupIntakeModal() {
     const addDateBtn = document.getElementById('intake-add-date');
     const datesContainer = document.getElementById('intake-dates-container');
 
-    function resetIntakeForm() {
-        document.getElementById('intake-case-title').value = '';
-        document.getElementById('intake-legal-category').value = '';
-        document.getElementById('intake-jurisdiction').value = '';
-        document.getElementById('intake-court-level').value = '';
-        const roleRadios = document.querySelectorAll('input[name="intake-role"]');
-        roleRadios.forEach(r => r.checked = false);
-        document.getElementById('intake-description').value = '';
-        document.getElementById('intake-prior-actions').value = '';
-        document.getElementById('intake-opposing-party').value = '';
-        datesContainer.innerHTML = `
+    function dateRowHtml(date, label) {
+        return `
             <div class="intake-date-row">
-                <input type="date" class="intake-date-input" />
-                <input type="text" class="intake-date-label" placeholder="What happened on this date?" />
+                <input type="date" class="intake-date-input" value="${escapeHtml(date || '')}" />
+                <input type="text" class="intake-date-label" placeholder="What happened on this date?" value="${escapeHtml(label || '')}" />
             </div>
         `;
-        // Clear errors
-        const fields = document.querySelectorAll('.intake-error');
-        fields.forEach(f => f.classList.remove('intake-error'));
+    }
+
+    /** Prefill from the matter's stored intake (empty object = blank form).
+     *  Intake is editable: resubmitting replaces the previous block. */
+    function populateIntakeForm(intake) {
+        const data = intake || {};
+        document.getElementById('intake-case-title').value = data.case_title || '';
+        document.getElementById('intake-legal-category').value = data.legal_category || '';
+        document.getElementById('intake-jurisdiction').value = data.jurisdiction || '';
+        document.getElementById('intake-court-level').value = data.court_level || '';
+        const roleRadios = document.querySelectorAll('input[name="intake-role"]');
+        roleRadios.forEach(r => { r.checked = r.value === (data.user_role || ''); });
+        document.getElementById('intake-description').value = data.description || '';
+        document.getElementById('intake-prior-actions').value = data.prior_legal_actions || '';
+        document.getElementById('intake-opposing-party').value = data.opposing_party || '';
+        const keyDates = Array.isArray(data.key_dates) && data.key_dates.length
+            ? data.key_dates : [{}];
+        datesContainer.innerHTML = keyDates.map(d => dateRowHtml(d.date, d.label)).join('');
+        document.querySelectorAll('.intake-error').forEach(f => f.classList.remove('intake-error'));
+        const roleGroup = document.querySelector('.intake-radio-group');
+        if (roleGroup) roleGroup.classList.remove('intake-role-error');
         submitBtn.disabled = false;
         submitBtn.textContent = 'Submit & Analyze';
     }
 
     if (intakeBtn) {
         intakeBtn.addEventListener('click', () => {
-             if (!contextId) {
-                 resetIntakeForm();
-             }
+             populateIntakeForm(currentIntake);
              openModal(modal);
         });
     }
@@ -680,13 +708,10 @@ function setupIntakeModal() {
              });
 
              if (!role) {
-                 roleRadiosGrp.style.border = '1px solid #CC0000';
-                 roleRadiosGrp.style.padding = '4px';
-                 roleRadiosGrp.style.borderRadius = '8px';
+                 roleRadiosGrp.classList.add('intake-role-error');
                  hasError = true;
              } else {
-                 roleRadiosGrp.style.border = 'none';
-                 roleRadiosGrp.style.padding = '0';
+                 roleRadiosGrp.classList.remove('intake-role-error');
              }
 
              if (hasError) return;
@@ -744,7 +769,7 @@ function setupIntakeModal() {
                 closeModal(modal);
                 showToast('Case intake submitted and analyzed', 'success');
              } catch (err) {
-                 alert('Error processing intake: ' + err.message);
+                 showToast('Error processing intake: ' + err.message, 'error');
                  submitBtn.disabled = false;
                  submitBtn.textContent = 'Submit & Analyze';
              } finally {

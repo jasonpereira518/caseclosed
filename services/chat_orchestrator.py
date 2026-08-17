@@ -76,7 +76,9 @@ def _update_matter(matter_id: str, job_id: str, uid: str, message: str, matter: 
 def _answer(matter_id: str, job_id: str, uid: str, message: str,
             matter: dict, intent: str) -> dict:
     update_job(matter_id, job_id, progress=35, stage="retrieving_sources")
-    sources = retrieve(matter_id, uid, message, jurisdiction=_jurisdiction(matter.get("analysis") or {}))
+    sources = retrieve(matter_id, uid, message,
+                       jurisdiction=_jurisdiction(matter.get("analysis") or {},
+                                                  matter.get("intake") or {}))
     description = str(matter.get("description") or "").strip()
     if description:
         sources.append({"source_id": "matter-narrative", "source_type": "matter",
@@ -85,7 +87,8 @@ def _answer(matter_id: str, job_id: str, uid: str, message: str,
     if cancellation_requested(matter_id, job_id):
         raise JobCancelled()
     update_job(matter_id, job_id, progress=65, stage="drafting_answer")
-    grounded = answer_from_sources(message, sources)
+    grounded = answer_from_sources(message, sources,
+                                   client_role=str(matter.get("role") or "").strip() or None)
     return {"status": "answer", "intent": intent, "message": grounded["answer"],
             "citations": grounded["citations"], "grounded": grounded["grounded"]}
 
@@ -147,7 +150,8 @@ def _research(matter_id: str, job_id: str, uid: str, message: str, matter: dict)
     timeline = extract_timeline(description)
     timeline = timeline if isinstance(timeline, list) else []
     legal_sources = retrieve(matter_id, uid, summary,
-                             jurisdiction=_jurisdiction(analysis), top_k=12)
+                             jurisdiction=_jurisdiction(analysis, matter.get("intake") or {}),
+                             top_k=12)
     statutes = [_statute_from_source(source) for source in legal_sources
                 if source.get("source_type") in {"statute", "regulation", "rule"}]
     strength = extract_case_strength(description, analysis, statutes, results)
@@ -170,7 +174,11 @@ def _research(matter_id: str, job_id: str, uid: str, message: str, matter: dict)
             "query": "\n\n".join(queries), "citations": citations}
 
 
-def _jurisdiction(analysis: dict) -> str | None:
+def _jurisdiction(analysis: dict, intake: dict | None = None) -> str | None:
+    """Intake's explicitly selected jurisdiction outranks model extraction."""
+    declared = str((intake or {}).get("jurisdiction") or "").strip()
+    if declared:
+        return declared
     value = analysis.get("jurisdiction") or analysis.get("jurisdictions")
     if isinstance(value, list):
         return str(value[0]) if value else None

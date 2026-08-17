@@ -112,9 +112,12 @@
               <span id="role-selected-text">Defendant</span>
               <svg class="icon icon-sm" aria-hidden="true"><use href="#i-chevron-down"></use></svg>
             </button>
+            {# Same vocabulary as the intake role radio; both read/write state.role. #}
             <div class="role-dropdown-menu" id="role-menu" role="listbox">
+              <div class="role-option" data-value="plaintiff" role="option" tabindex="0" aria-selected="false">Plaintiff</div>
               <div class="role-option active" data-value="defendant" role="option" tabindex="0" aria-selected="true">Defendant</div>
-              <div class="role-option" data-value="prosecutor" role="option" tabindex="0" aria-selected="false">Prosecutor</div>
+              <div class="role-option" data-value="third party" role="option" tabindex="0" aria-selected="false">Third party</div>
+              <div class="role-option" data-value="witness" role="option" tabindex="0" aria-selected="false">Witness</div>
             </div>
           </div>
         </div>

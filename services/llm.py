@@ -623,8 +623,15 @@ def draft_legal_document(context: dict, doc_type: str = "memo") -> str:
     ]
     relevant_cases = "\n\n".join(_rc_blocks)
 
+    client_role = str(context.get("role") or "").strip()
+    role_line = (
+        f"The drafting lawyer represents the {client_role}; argue from that side's perspective "
+        "while treating adverse authority honestly.\n\n"
+        if client_role else ""
+    )
     prompt = (
         f"Generate a professional legal {doc_type} with the following structure:\n\n"
+        f"{role_line}"
         f"**FACTS**\n{facts if facts else summary}\n\n"
         f"**PARTIES**\n{parties if parties else 'To be determined'}\n\n"
         f"**JURISDICTION**\n{jurisdictions if jurisdictions else 'To be determined'}\n\n"

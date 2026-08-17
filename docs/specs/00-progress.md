@@ -7,7 +7,7 @@ Process defined in the approved refresh plan: per cycle — present current beha
 | 1 | Landing page & demo sandbox | **Done** (2026-08-16) | [01-landing-demo.md](01-landing-demo.md) |
 | 2 | Auth & identity | **Done** (2026-08-16) | [02-auth-identity.md](02-auth-identity.md) |
 | 3 | Workspaces & matters | **Done** (2026-08-16) | [03-workspaces-matters.md](03-workspaces-matters.md) |
-| 4 | Client intake | Not started | — |
+| 4 | Client intake | **Done** (2026-08-17) | [04-client-intake.md](04-client-intake.md) |
 | 5 | Documents | Not started | — |
 | 6 | Chat core | Not started | — |
 | 7 | Legal research & authorities | Not started | — |

@@ -13,8 +13,11 @@ from models.context import (
     rename_context,
 )
 from services.tenancy import active_matter, active_workspace, set_active_matter
-from services.matters import append_time_entry
+from services.matters import append_time_entry, patch_matter
 from services.request_context import resolve_matter_id
+
+# Which side the lawyer represents; mirrors the intake form's role radio.
+ALLOWED_MATTER_ROLES = frozenset({"plaintiff", "defendant", "third party", "witness"})
 
 
 context_bp = Blueprint("context", __name__)
@@ -231,6 +234,25 @@ def delete_context_route():
     if session.get("context_id") == context_id:
         return jsonify(_activate_next_matter(user_id))
     return jsonify({"status": "ok", "switched_to": session.get("context_id")})
+
+
+@context_bp.route("/matter/role", methods=["POST"])
+@login_required
+def set_matter_role():
+    """Persist which side the lawyer represents (state.role). Chat answers
+    and drafts argue from this perspective when it is set."""
+    payload = request.get_json(silent=True) or {}
+    context_id = resolve_matter_id(payload) or ""
+    role = str(payload.get("role") or "").strip().lower()
+    user_id = str(current_user.get_id())
+    if not context_id:
+        return jsonify({"error": "context_id is required"}), 400
+    if role not in ALLOWED_MATTER_ROLES:
+        return jsonify({"error": "role must be plaintiff, defendant, third party, or witness"}), 400
+    if not context_belongs_to_user(context_id, user_id):
+        return _not_found()
+    patch_matter(context_id, user_id, state={"role": role})
+    return jsonify({"status": "ok", "role": role})
 
 
 @context_bp.route("/session/track-time", methods=["POST"])

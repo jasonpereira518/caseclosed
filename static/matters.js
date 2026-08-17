@@ -12,6 +12,10 @@
 // Archived matters (Cycle 3): loaded alongside the active list, rendered in
 // their own collapsible sidebar section.
 let archivedHistory = [];
+
+// Stored intake for the active matter (Cycle 4): the intake modal prefills
+// from this so intake is editable rather than append-only.
+let currentIntake = {};
 // =====================================================
 // CONTEXT MANAGEMENT
 // =====================================================
@@ -199,6 +203,10 @@ function applyContextToUI(nextContextId, context) {
     contextId = nextContextId || contextId;
     const safeContext = context || {};
     currentUploadedDocs = safeContext.uploaded_documents || [];
+    currentIntake = safeContext.intake || {};
+    if (typeof syncRoleSelector === 'function') {
+        syncRoleSelector(safeContext.role || '');
+    }
     startSessionTimer(safeContext.total_seconds || 0);
     currentAnalysis = safeContext.analysis || {};
     currentTimeline = safeContext.timeline || [];

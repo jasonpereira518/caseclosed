@@ -1680,3 +1680,6 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 .archived-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .archived-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .archived-actions button { font: inherit; font-size: 11px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); cursor: pointer; }
+
+/* Cycle 4: intake role-validation error (replaces inline JS styling). */
+.intake-radio-group.intake-role-error { border: 1px solid var(--negative-border, #8d2926); padding: 4px; border-radius: 8px; }

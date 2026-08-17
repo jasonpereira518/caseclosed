@@ -29,6 +29,7 @@ PROTECTED_JSON_PATHS = frozenset(
         "/documents/toggle",
         "/documents/delete",
         "/case/notes",
+        "/matter/role",
         "/search",
     }
 )
