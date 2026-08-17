@@ -12,11 +12,10 @@ from services.matters import (
     load_matter,
     locate_matter,
     patch_matter,
+    require_matter,
     save_matter,
 )
 from services.tenancy import active_workspace, personal_workspace_id
-import config
-from services.firestore import get_firestore_client, load_context as load_legacy_context
 
 
 class FirestoreBackedDict(dict):
@@ -102,16 +101,14 @@ def get_context_id(session_obj):
 def get_context(context_id, user_id=None):
     if not context_id or not user_id:
         return {}
-    loaded = load_matter(str(context_id), str(user_id)) or _migrate_legacy_context(
-        str(context_id), str(user_id))
+    loaded = load_matter(str(context_id), str(user_id))
     return FirestoreBackedDict(context_id, user_id, _ensure_metadata(loaded)) if loaded else {}
 
 
 def get_context_or_default(context_id, user_id=None):
     if not user_id:
         return default_context()
-    loaded = load_matter(str(context_id), str(user_id)) or _migrate_legacy_context(
-        str(context_id), str(user_id))
+    loaded = load_matter(str(context_id), str(user_id))
     if loaded:
         return FirestoreBackedDict(context_id, user_id, _ensure_metadata(loaded))
     _, ctx = create_new_context(str(user_id), context_id=str(context_id))
@@ -121,8 +118,7 @@ def get_context_or_default(context_id, user_id=None):
 def get_or_create_context(context_id, user_id=None):
     if not user_id:
         return None
-    loaded = load_matter(str(context_id), str(user_id)) or _migrate_legacy_context(
-        str(context_id), str(user_id))
+    loaded = load_matter(str(context_id), str(user_id))
     if loaded:
         return FirestoreBackedDict(context_id, user_id, _ensure_metadata(loaded))
     # A missing indexed matter is new. A matter that exists but is inaccessible
@@ -142,50 +138,48 @@ def save_context(context_id, data):
     save_matter(str(context_id), dict(data))
 
 
-def list_user_contexts(user_id, workspace_id=None):
+def list_user_contexts(user_id, workspace_id=None, include_archived=False):
+    """Matters in the workspace; archived ones only when explicitly requested.
+
+    The lazy user_contexts migration that used to run here was retired in
+    Cycle 3 — scripts/migrate_firestore_v2.py is the explicit tool.
+    """
     if not user_id:
         return []
     wid = workspace_id or active_workspace(str(user_id))
-    _migrate_legacy_for_user(str(user_id), wid)
-    return list_matters(wid, str(user_id))
-
-
-def _migrate_legacy_context(context_id: str, user_id: str, workspace_id=None):
-    """Lazily adopt only legacy records with an exact owner identity match."""
-    existing_workspace, _ = locate_matter(context_id)
-    if existing_workspace:
-        return load_matter(context_id, user_id)
-    legacy = load_legacy_context(context_id)
-    if not legacy or str(legacy.get("user_id") or "") != str(user_id):
-        return None
-    wid = workspace_id or active_workspace(user_id) or personal_workspace_id(user_id)
-    _, loaded = create_matter(wid, user_id, matter_id=context_id, initial=legacy)
-    get_firestore_client().collection(config.FIRESTORE_COLLECTION).document(context_id).set({
-        "migration_status": "migrated", "migrated_uid": user_id,
-    }, merge=True)
-    return loaded
-
-
-def _migrate_legacy_for_user(user_id: str, workspace_id: str):
-    if not workspace_id:
-        return
-    collection = get_firestore_client().collection(config.FIRESTORE_COLLECTION)
-    for snap in collection.where("user_id", "==", user_id).stream():
-        data = snap.to_dict() or {}
-        if data.get("migration_status") == "migrated" or locate_matter(snap.id)[0]:
-            continue
-        _migrate_legacy_context(snap.id, user_id, workspace_id)
+    matters = list_matters(wid, str(user_id))
+    if include_archived:
+        return matters
+    return [m for m in matters if m.get("status") != "archived"]
 
 
 def context_belongs_to_user(context_id, user_id):
-    return bool(user_id and get_context(str(context_id), str(user_id)))
+    """Locator + membership check only — never loads matter subcollections."""
+    if not context_id or not user_id:
+        return False
+    try:
+        require_matter(str(context_id), str(user_id))
+    except (PermissionError, ValueError):
+        return False
+    return True
 
 
 def rename_context(context_id, user_id, title):
-    context = get_context(context_id, user_id)
-    if not context:
+    cleaned = (title or "").strip()[:120] or "New Session"
+    try:
+        patch_matter(str(context_id), str(user_id), root={"title": cleaned})
+    except (PermissionError, ValueError):
         return False
-    context["title"] = (title or "").strip()[:120] or "New Session"
+    return True
+
+
+def archive_context(context_id, user_id, archived):
+    """Flip a matter between active and archived without touching its data."""
+    try:
+        patch_matter(str(context_id), str(user_id),
+                     root={"status": "archived" if archived else "active"})
+    except (PermissionError, ValueError):
+        return False
     return True
 
 

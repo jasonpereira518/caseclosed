@@ -1672,3 +1672,11 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 .admin-access-table th, .admin-access-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .admin-access-table button { font: inherit; font-size: 13px; padding: 4px 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); cursor: pointer; }
 .admin-access-note { min-height: 1.4em; }
+
+/* Cycle 3: archived matters section (functional; visual pass owns the finish). */
+.sidebar-archived { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.archived-toggle { font: inherit; font-size: 12px; width: 100%; text-align: left; padding: 6px 8px; background: none; border: none; cursor: pointer; color: inherit; }
+.archived-card { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; font-size: 12px; }
+.archived-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.archived-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.archived-actions button { font: inherit; font-size: 11px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); cursor: pointer; }

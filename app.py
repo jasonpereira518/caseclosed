@@ -39,7 +39,7 @@ PROTECTED_JSON_PATHS = frozenset(
 def _is_protected_json_path(path: str) -> bool:
     """Match PROTECTED_JSON_PATHS even when the client uses a trailing slash."""
     key = path.rstrip("/") or "/"
-    return key in PROTECTED_JSON_PATHS or key.startswith("/api/") or key in {"/contexts", "/contexts/new", "/contexts/switch", "/contexts/rename", "/contexts/delete"}
+    return key in PROTECTED_JSON_PATHS or key.startswith("/api/") or key in {"/contexts", "/contexts/new", "/contexts/switch", "/contexts/rename", "/contexts/archive", "/contexts/unarchive", "/contexts/delete"}
 
 login_manager = LoginManager()
 

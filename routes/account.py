@@ -118,7 +118,8 @@ def activate_workspace(workspace_id):
     try:
         set_active_workspace(_uid(), workspace_id)
         session["workspace_id"] = workspace_id
-        matters = list_matters(workspace_id, _uid())
+        matters = [m for m in list_matters(workspace_id, _uid())
+                   if m.get("status") != "archived"]
         session["context_id"] = matters[0]["matter_id"] if matters else create_matter(
             workspace_id, _uid(), initial=default_context())[0]
         set_active_matter(_uid(), session["context_id"])

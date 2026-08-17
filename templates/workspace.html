@@ -39,6 +39,15 @@
 
     <div class="sidebar-sessions" id="session-list"></div>
 
+    {# Archived matters (Cycle 3): closed is not gone. Hidden until at least
+       one matter is archived; rendered by static/matters.js. #}
+    <div class="sidebar-archived" id="archived-section" hidden>
+      <button type="button" class="archived-toggle" id="archived-toggle" aria-expanded="false">
+        Archived (<span id="archived-count">0</span>)
+      </button>
+      <div class="archived-list" id="archived-list" hidden></div>
+    </div>
+
     <div class="sidebar-foot">
       <div class="account">
         {% if user_profile_pic %}
@@ -516,6 +525,8 @@
 <script src="{{ url_for('static', filename='demo.js') }}"></script>
 {% endif %}
 <script src="{{ url_for('static', filename='job-poller.js') }}"></script>
+{# matters.js shares script.js's globals and must load first (see its header). #}
+<script src="{{ url_for('static', filename='matters.js') }}"></script>
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 {% if demo_mode %}
 {# After script.js: the tour points at a fully initialised workspace. #}

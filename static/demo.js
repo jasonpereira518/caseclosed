@@ -135,6 +135,8 @@
     // to the same matter, which is the point of a demo.
     '/contexts/new':    () => demoBlocked('Creating a new matter'),
     '/contexts/rename': () => demoBlocked('Renaming'),
+    '/contexts/archive':   () => demoBlocked('Archiving'),
+    '/contexts/unarchive': () => demoBlocked('Reopening'),
     '/contexts/delete': () => demoBlocked('Deleting'),
     '/upload':          () => demoBlocked('Uploading documents'),
     '/documents/delete':() => demoBlocked('Deleting documents'),
