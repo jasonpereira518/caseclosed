@@ -9,7 +9,7 @@ class SafeNextTests(unittest.TestCase):
 
     urlparse reports '/\\evil.com' as a relative path with no netloc, but
     browsers normalize the backslash and land on https://evil.com. The value
-    reaches window.location.assign() via static/firebase_auth.js.
+    is reflected into data-next and can reach window.location.assign().
     """
 
     CROSS_ORIGIN_PROBES = [

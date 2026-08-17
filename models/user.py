@@ -35,6 +35,10 @@ def load_user(user_id):
     if not snap.exists:
         return None
     d = snap.to_dict() or {}
+    # Set by the Clerk user.deleted webhook. Clerk already refuses to mint
+    # tokens for deleted users; this is the local half of that guarantee.
+    if d.get("auth_status") == "deleted":
+        return None
     profile_pic = d.get("avatar_url") or d.get("profile_pic")
     if d.get("avatar_storage_path"):
         try:

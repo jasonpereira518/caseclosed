@@ -91,9 +91,8 @@ try:
 except json.JSONDecodeError:
     LEGAL_SOURCE_REGISTRY = []
 
-# Identity. Clerk is the active provider; Firebase remains available as a
-# single-provider rollback during the migration window.
-AUTH_PROVIDER = os.getenv("AUTH_PROVIDER", "clerk").strip().lower()
+# Identity. Clerk is the only provider (the Firebase Authentication rollback
+# path was retired in Cycle 2; rollback story is git revert + redeploy).
 CLERK_PUBLISHABLE_KEY = os.getenv("CLERK_PUBLISHABLE_KEY", "").strip()
 CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY", "").strip()
 CLERK_JWT_KEY = os.getenv("CLERK_JWT_KEY", "").replace("\\n", "\n").strip()
@@ -123,14 +122,6 @@ CLERK_FRONTEND_API_URL = os.getenv(
     "CLERK_FRONTEND_API_URL", _clerk_frontend_api_url(CLERK_PUBLISHABLE_KEY)
 ).rstrip("/")
 
-# Firebase Authentication rollback configuration. FIREBASE_WEB_CONFIG is the
-# intentionally public browser configuration object.
-try:
-    FIREBASE_WEB_CONFIG = json.loads(os.getenv("FIREBASE_WEB_CONFIG", "{}"))
-except json.JSONDecodeError:
-    FIREBASE_WEB_CONFIG = {}
-AUTH_SESSION_COOKIE = os.getenv("AUTH_SESSION_COOKIE", "__session")
-AUTH_SESSION_DAYS = int(os.getenv("AUTH_SESSION_DAYS", "5"))
 AUTH_COOKIE_SECURE = os.getenv(
     "AUTH_COOKIE_SECURE", "true" if os.getenv("APP_BASE_URL", "").startswith("https://") else "false"
 ).lower() == "true"

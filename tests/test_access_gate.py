@@ -88,8 +88,7 @@ class AccessGateTests(unittest.TestCase):
 
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/demo").status_code, 200)
-        with patch("routes.auth.config.AUTH_PROVIDER", "firebase"):
-            self.assertEqual(self.client.get("/auth/logout").status_code, 302)
+        self.assertEqual(self.client.get("/auth/logout").status_code, 200)
 
 
 class WaitlistPageTests(unittest.TestCase):

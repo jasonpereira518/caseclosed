@@ -100,6 +100,33 @@ def ensure_personal_workspace(uid: str) -> str:
     return wid
 
 
+def _notify_admins_of_access_request(email: str) -> None:
+    """Best-effort, non-blocking heads-up that someone joined the waitlist.
+
+    Runs the SMTP sends on a daemon thread so first sign-in never waits on
+    mail; every failure is logged and swallowed — sign-up must not depend on
+    the mailer being reachable.
+    """
+    import logging
+    import threading
+
+    recipients = sorted(config.ADMIN_EMAILS)
+    if not recipients or not email:
+        return
+
+    def deliver():
+        from services.mailer import send_access_request_notification
+
+        for recipient in recipients:
+            try:
+                send_access_request_notification(recipient, email)
+            except Exception as exc:
+                logging.warning("Access-request notification to %s failed: %s",
+                                recipient, exc.__class__.__name__)
+
+    threading.Thread(target=deliver, daemon=True).start()
+
+
 def ensure_user(claims: dict) -> dict:
     """Upsert identity fields and create the user's private workspace."""
     uid = str(claims.get("uid") or claims.get("sub") or "").strip()
@@ -133,6 +160,7 @@ def ensure_user(claims: dict) -> dict:
         # Sign-in is the access request: new accounts wait for admin approval.
         # Documents that predate the gate have no access_status and pass it.
         identity["access_status"] = "pending"
+        _notify_admins_of_access_request(identity.get("email") or "")
     wid = personal_workspace_id(uid)
     identity["personal_workspace_id"] = wid
     identity["workspace_ids"] = gc_firestore.ArrayUnion([wid])
@@ -398,8 +426,15 @@ def accept_invitation(uid: str, email: str, token: str) -> str:
         "uid": str(uid), "role": invitation["role"], "status": "active",
         "joined_at": timestamp, "updated_at": timestamp,
     })
-    db.collection(config.FIRESTORE_USERS_COLLECTION).document(str(uid)).set(
-        {"workspace_ids": gc_firestore.ArrayUnion([wid]), "updated_at": timestamp}, merge=True)
+    user_ref = db.collection(config.FIRESTORE_USERS_COLLECTION).document(str(uid))
+    user_updates = {"workspace_ids": gc_firestore.ArrayUnion([wid]), "updated_at": timestamp}
+    # An explicit member invitation is a stronger admission signal than admin
+    # review, so redemption lifts a waitlisted account past the access gate.
+    # A revoked account stays revoked: only an admin undoes an admin action.
+    if (user_ref.get().to_dict() or {}).get("access_status") == "pending":
+        user_updates["access_status"] = "approved"
+        user_updates["access_updated_at"] = timestamp
+    user_ref.set(user_updates, merge=True)
     snap.reference.set({"status": "accepted", "accepted_by": str(uid), "accepted_at": timestamp}, merge=True)
     audit(wid, uid, "invitation.accepted", {"invitation_id": snap.id})
     return wid

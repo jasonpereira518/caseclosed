@@ -321,24 +321,18 @@ def delete_account():
     if current_user.email:
         for invite in db.collection(config.FIRESTORE_INVITATIONS_COLLECTION).where("email", "==", current_user.email.lower()).stream():
             invite.reference.set({"status": "revoked", "email": None, "updated_at": now()}, merge=True)
-    if config.AUTH_PROVIDER == "clerk":
-        from services.clerk_auth import delete_clerk_identity
+    from services.clerk_auth import delete_clerk_identity
 
-        clerk_user_id = user_record.get("clerk_user_id")
-        if not clerk_user_id:
-            user_ref.set({"account_deletion_error": "missing Clerk user id", "updated_at": now()}, merge=True)
-            return jsonify({"error": "identity record is incomplete; contact support"}), 409
-        try:
-            delete_clerk_identity(clerk_user_id)
-        except Exception:
-            user_ref.set({"account_deletion_error": "Clerk identity deletion failed", "updated_at": now()}, merge=True)
-            return jsonify({"error": "account data was removed, but identity deletion must be retried"}), 502
-    else:
-        from firebase_admin import auth as firebase_auth
-
-        firebase_auth.delete_user(uid)
+    clerk_user_id = user_record.get("clerk_user_id")
+    if not clerk_user_id:
+        user_ref.set({"account_deletion_error": "missing Clerk user id", "updated_at": now()}, merge=True)
+        return jsonify({"error": "identity record is incomplete; contact support"}), 409
+    try:
+        delete_clerk_identity(clerk_user_id)
+    except Exception:
+        user_ref.set({"account_deletion_error": "Clerk identity deletion failed", "updated_at": now()}, merge=True)
+        return jsonify({"error": "account data was removed, but identity deletion must be retried"}), 502
     user_ref.delete()
     response = jsonify({"status": "deleted"})
-    response.delete_cookie(config.AUTH_SESSION_COOKIE, path="/")
     session.clear()
     return response

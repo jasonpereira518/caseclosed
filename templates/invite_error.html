@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Invitation problem — Case Closed{% endblock %}
+
+{% block content %}
+<main class="waitlist-page" id="main">
+    <section class="waitlist-card" aria-labelledby="invite-error-title">
+        <h1 id="invite-error-title">That invitation didn't work</h1>
+        <p>{{ error }}</p>
+        <p>
+            You're signed in, but you haven't joined the team workspace. Ask the person who
+            invited you to send a new invitation — the link is single-use and expires.
+        </p>
+        <p><a href="{{ next_url or '/app' }}">Continue to your workspace</a></p>
+    </section>
+</main>
+{% endblock %}
+
+{% block page_scripts %}{% endblock %}

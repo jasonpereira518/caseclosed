@@ -5,7 +5,7 @@ Process defined in the approved refresh plan: per cycle — present current beha
 | # | Cycle | Status | Spec |
 |---|-------|--------|------|
 | 1 | Landing page & demo sandbox | **Done** (2026-08-16) | [01-landing-demo.md](01-landing-demo.md) |
-| 2 | Auth & identity | Not started | — |
+| 2 | Auth & identity | **Done** (2026-08-16) | [02-auth-identity.md](02-auth-identity.md) |
 | 3 | Workspaces & matters | Not started | — |
 | 4 | Client intake | Not started | — |
 | 5 | Documents | Not started | — |
@@ -20,5 +20,5 @@ Process defined in the approved refresh plan: per cycle — present current beha
 
 ## Deferred / parked items
 
-- **Cycle 2 (Auth):** The access-gate introduced in Cycle 1 touches the auth flow (pending users after sign-in). Cycle 2 should revisit the gate's interaction with invite redemption (`/auth/complete`) — a team-invited user should probably bypass the waitlist since a member explicitly invited them.
-- **Visual pass:** demo tour styling, waitlist/admin page styling, legal-page typography all kept deliberately plain.
+- ~~**Cycle 2 (Auth):** invite bypass of the waitlist~~ — done in Cycle 2 (`accept_invitation` approves pending accounts).
+- **Visual pass:** demo tour styling, waitlist/admin/invite-error page styling, legal-page typography all kept deliberately plain.

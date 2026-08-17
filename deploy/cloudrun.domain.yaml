@@ -19,7 +19,6 @@ GEMINI_LOCATION: "global"
 ENVIRONMENT: "production"
 FLASK_DEBUG: "false"
 AUTH_COOKIE_SECURE: "true"
-AUTH_PROVIDER: "clerk"
 
 # CHANGED vs runapp profile: the public origin.
 APP_BASE_URL: "https://caseclosed.jasonpereira.live"
@@ -32,7 +31,7 @@ ADMIN_EMAILS: "jasonpereira518@gmail.com"
 # TODO(deploy): paste the production publishable key (pk_live_...).
 CLERK_PUBLISHABLE_KEY: "pk_live_Y2xlcmsuamFzb25wZXJlaXJhLmxpdmUk"
 # CHANGED: a production instance serves its Frontend API from the custom domain.
-CLERK_FRONTEND_API_URL: "https://clerk.caseclosed.jasonpereira.live"
+CLERK_FRONTEND_API_URL: "https://clerk.jasonpereira.live"
 # CHANGED: the custom domain is prepended. All three origins are kept forever --
 # they are all ours, there is no security cost, and it makes the silent
 # azp-mismatch redirect loop impossible for anyone on an old bookmark.

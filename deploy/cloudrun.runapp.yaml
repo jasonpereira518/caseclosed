@@ -22,7 +22,6 @@ GEMINI_LOCATION: "global"
 ENVIRONMENT: "production"
 FLASK_DEBUG: "false"
 AUTH_COOKIE_SECURE: "true"
-AUTH_PROVIDER: "clerk"
 
 APP_BASE_URL: "https://caseclosed-vz6mirfkqa-uc.a.run.app"
 
@@ -73,7 +72,6 @@ DOCUMENT_AI_LOCATION: "us"
 #                           DOCUMENT_AI_PROCESSOR_ID: "fee9d59d552f9f1c"
 # OAUTH_REDIRECT_URI        dead code, removed from config.py
 # GOOGLE_OAUTH_CLIENT_SECRETS  dead code; also drops the /secrets volume mount
-# FIREBASE_WEB_CONFIG       only used by the Firebase rollback auth path
 # LEGAL_CORPUS_SYNC_AUDIENCE  feature disabled; falls back to its default
 # FLASK_SECRET_KEY          SECRET_KEY wins in config.py; one less secret read
 # PORT                      Cloud Run injects it and rejects overrides

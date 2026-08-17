@@ -12,22 +12,16 @@ def validate_runtime_config(*, production: bool = False) -> dict:
 
     if config.ENVIRONMENT not in {"development", "test", "production"}:
         errors.append("ENVIRONMENT must be development, test, or production")
-    if config.AUTH_PROVIDER not in {"clerk", "firebase"}:
-        errors.append("AUTH_PROVIDER must be clerk or firebase")
-    if config.AUTH_PROVIDER == "clerk":
-        required = {
-            "CLERK_PUBLISHABLE_KEY": config.CLERK_PUBLISHABLE_KEY,
-            "CLERK_SECRET_KEY": config.CLERK_SECRET_KEY,
-            "CLERK_FRONTEND_API_URL": config.CLERK_FRONTEND_API_URL,
-        }
-        errors.extend(f"{name} is required when AUTH_PROVIDER=clerk"
-                      for name, value in required.items() if not value)
-        if not config.CLERK_AUTHORIZED_PARTIES:
-            errors.append("CLERK_AUTHORIZED_PARTIES must include at least one trusted origin")
-        if production and not config.CLERK_WEBHOOK_SIGNING_SECRET:
-            errors.append("CLERK_WEBHOOK_SIGNING_SECRET is required in production")
-    elif production and not config.FIREBASE_WEB_CONFIG:
-        errors.append("FIREBASE_WEB_CONFIG is required when AUTH_PROVIDER=firebase")
+    required = {
+        "CLERK_PUBLISHABLE_KEY": config.CLERK_PUBLISHABLE_KEY,
+        "CLERK_SECRET_KEY": config.CLERK_SECRET_KEY,
+        "CLERK_FRONTEND_API_URL": config.CLERK_FRONTEND_API_URL,
+    }
+    errors.extend(f"{name} is required" for name, value in required.items() if not value)
+    if not config.CLERK_AUTHORIZED_PARTIES:
+        errors.append("CLERK_AUTHORIZED_PARTIES must include at least one trusted origin")
+    if production and not config.CLERK_WEBHOOK_SIGNING_SECRET:
+        errors.append("CLERK_WEBHOOK_SIGNING_SECRET is required in production")
 
     if not config.PROJECT_ID:
         errors.append("PROJECT_ID is required")

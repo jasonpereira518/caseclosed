@@ -1,13 +1,10 @@
-"""Clerk authentication flows with a temporary Firebase rollback path."""
-from datetime import timedelta
+"""Clerk authentication flows. Clerk is the only identity provider; the
+Firebase Authentication rollback path was retired in Cycle 2 (rollback story:
+git revert + redeploy)."""
 from urllib.parse import urlparse
 
-from flask import Blueprint, jsonify, make_response, redirect, render_template, request, session, url_for
-from flask_login import current_user, login_required, logout_user
-
-import config
-from services.firestore import get_firestore_client
-from services.tenancy import ensure_user
+from flask import Blueprint, redirect, render_template, request, session, url_for
+from flask_login import current_user, login_required
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -23,9 +20,8 @@ def _safe_next(value):
     urlparse on its own is not enough: browsers normalize "\\" to "/" inside a
     special scheme, so "/\\evil.com" -- which urlparse reports as a relative
     path with no netloc -- resolves to https://evil.com. That matters because
-    the value is reflected raw into data-next (templates/login.html) and handed
-    to window.location.assign() by static/firebase_auth.js, which applies
-    exactly that normalization.
+    the value is reflected raw into data-next (templates/login.html) and can
+    reach window.location.assign().
     """
     candidate = (value or "").translate(_URL_STRIPPED_CHARS).strip()
     parsed = urlparse(candidate)
@@ -49,7 +45,6 @@ def login():
     sso_callback_url = url_for("auth.sso_callback", next=next_url, invite=invite_token)
     return render_template(
         "login.html",
-        firebase_config=config.FIREBASE_WEB_CONFIG,
         next_url=next_url,
         invite_token=invite_token,
         complete_url=complete_url,
@@ -61,8 +56,6 @@ def login():
 @auth_bp.route("/sso-callback")
 def sso_callback():
     """Land here after Google redirects back mid-OAuth; finish the Clerk handshake client-side."""
-    if config.AUTH_PROVIDER != "clerk":
-        return redirect(url_for("auth.login"))
     next_url = _safe_next(request.args.get("next"))
     invite_token = request.args.get("invite", "")
     complete_url = url_for("auth.complete_login", next=next_url, invite=invite_token)
@@ -74,40 +67,6 @@ def sso_callback():
         invite_token=invite_token,
         complete_url=complete_url,
     )
-
-
-@auth_bp.route("/session", methods=["POST"])
-def create_session():
-    if config.AUTH_PROVIDER != "firebase":
-        return jsonify({"error": "Firebase session exchange is disabled"}), 404
-    from firebase_admin import auth as firebase_auth
-
-    data = request.get_json(silent=True) or {}
-    id_token = data.get("id_token")
-    if not id_token:
-        return jsonify({"error": "id_token is required"}), 400
-    origin = request.headers.get("Origin")
-    expected_origin = (config.APP_BASE_URL if config.ENVIRONMENT == "production"
-                       else request.host_url).rstrip("/")
-    if origin and origin.rstrip("/") != expected_origin:
-        return jsonify({"error": "invalid origin"}), 403
-    try:
-        get_firestore_client()
-        claims = firebase_auth.verify_id_token(id_token, check_revoked=True)
-        provider = (claims.get("firebase") or {}).get("sign_in_provider")
-        if provider == "password" and not claims.get("email_verified"):
-            return jsonify({"error": "verify your email address before signing in"}), 403
-        profile = ensure_user(claims)
-        expires = timedelta(days=config.AUTH_SESSION_DAYS)
-        cookie = firebase_auth.create_session_cookie(id_token, expires_in=expires)
-    except Exception:
-        return jsonify({"error": "authentication failed"}), 401
-    response = make_response(jsonify({"status": "ok", "profile": profile}))
-    response.set_cookie(config.AUTH_SESSION_COOKIE, cookie,
-                        max_age=int(expires.total_seconds()), httponly=True,
-                        secure=config.AUTH_COOKIE_SECURE, samesite="Lax", path="/")
-    session.clear()
-    return response
 
 
 @auth_bp.route("/complete")
@@ -122,28 +81,16 @@ def complete_login():
         try:
             accept_invitation(str(current_user.get_id()), current_user.email, invite_token)
         except (AuthorizationError, ValidationError) as exc:
-            return redirect(url_for("auth.login", next=next_url, error=str(exc)))
+            # The user is signed in either way; a redirect would silently
+            # swallow the failure (the login page bounces authenticated
+            # visitors). Show the problem, then let them continue.
+            session.clear()
+            return render_template("invite_error.html", error=str(exc), next_url=next_url)
     session.clear()
     return redirect(next_url)
 
 
 @auth_bp.route("/logout", methods=["GET", "POST"])
 def logout():
-    if config.AUTH_PROVIDER == "clerk":
-        session.clear()
-        return render_template("logout.html", redirect_url=url_for("main.index"))
-    from firebase_admin import auth as firebase_auth
-
-    cookie = request.cookies.get(config.AUTH_SESSION_COOKIE)
-    if cookie:
-        try:
-            get_firestore_client()
-            claims = firebase_auth.verify_session_cookie(cookie)
-            firebase_auth.revoke_refresh_tokens(claims["uid"])
-        except Exception:
-            pass
-    logout_user()
     session.clear()
-    response = make_response(redirect(url_for("main.index")))
-    response.delete_cookie(config.AUTH_SESSION_COOKIE, path="/")
-    return response
+    return render_template("logout.html", redirect_url=url_for("main.index"))

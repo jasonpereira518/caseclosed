@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Case Closed: an AI legal research assistant. Flask backend, server-rendered Jinja templates + vanilla JS/CSS frontend, Firestore as system of record, Gemini (Vertex AI) for model calls, CourtListener for case search, Document AI for OCR, Cloud Tasks for background jobs, Google Cloud Vector Search for semantic retrieval. Clerk handles identity (Google-only sign-in); Firebase Authentication is a temporary rollback path being phased out.
+Case Closed: an AI legal research assistant. Flask backend, server-rendered Jinja templates + vanilla JS/CSS frontend, Firestore as system of record, Gemini (Vertex AI) for model calls, CourtListener for case search, Document AI for OCR, Cloud Tasks for background jobs, Google Cloud Vector Search for semantic retrieval. Clerk handles identity (Google-only sign-in, the sole provider).
 
 The `clerk-nextjs/` directory is a separate scaffolded Next.js experiment, not part of the running application — don't treat it as part of the Flask app's architecture.
 
@@ -77,7 +77,7 @@ workspaces/{workspace_id}
 
 ### Identity
 
-`config.AUTH_PROVIDER` selects `clerk` (default) or `firebase` (temporary rollback). `app.py`'s `login_manager.request_loader` branches on this at request time — Clerk session tokens are verified via `services/clerk_auth.py`, Firebase session cookies via `firebase_admin`. Migrated Firebase users carry their old UID as the Clerk `external_id`; the custom Clerk session claim `userId: {{user.external_id || user.id}}` is what makes the stable application user ID.
+Clerk is the only identity provider (the Firebase Authentication rollback path was retired in Cycle 2 of the functional refresh; rollback story is `git revert` + redeploy). `app.py`'s `login_manager.request_loader` verifies Clerk session tokens via `services/clerk_auth.py`. Migrated Firebase users carry their old UID as the Clerk `external_id`; the custom Clerk session claim `userId: {{user.external_id || user.id}}` is what makes the stable application user ID. New accounts are created `access_status: pending` (early-access gate); accepting a team invitation approves them, and admins listed in `ADMIN_EMAILS` manage the rest at `/admin/access`.
 
 `PROTECTED_JSON_PATHS` in `app.py` controls whether an unauthenticated request to a given path gets a `401` JSON body vs. an HTML redirect to login. `app.py` self-checks at import time that every path listed there actually has a registered route — if you rename/remove a route referenced there, the app will fail fast on startup rather than silently start redirecting API callers.
 

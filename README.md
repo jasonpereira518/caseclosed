@@ -28,7 +28,7 @@ From a user’s perspective, the app provides:
 | LLM | Google Gemini via [Vertex AI](https://cloud.google.com/vertex-ai) (`google-genai`) |
 | Case search | [CourtListener](https://www.courtlistener.com/) REST API |
 | PDF | [pdfminer.six](https://github.com/pdfminer/pdfminer.six) |
-| Identity | Clerk (Firebase Authentication retained temporarily for rollback) |
+| Identity | Clerk (Google-only sign-in) |
 | Database | Cloud Firestore |
 | Background work | Google Cloud Tasks + Cloud Run |
 | Retrieval | Google Cloud Vector Search with tenant filters |
@@ -127,7 +127,6 @@ All values are read from the environment (and optionally `.env` via `python-dote
 | Variable | Purpose |
 |----------|---------|
 | `FLASK_SECRET_KEY` | Secret key for Flask sessions (signing cookies). |
-| `AUTH_PROVIDER` | Active identity provider: `clerk` (default) or temporary rollback value `firebase`. |
 | `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Clerk frontend and backend API keys. Never expose the secret key to browser code. |
 | `CLERK_JWT_KEY` | Optional PEM public key for networkless Clerk session verification. |
 | `CLERK_AUTHORIZED_PARTIES` | Comma-separated trusted origins checked against Clerk's `azp` claim. |
@@ -144,7 +143,6 @@ All values are read from the environment (and optionally `.env` via `python-dote
 | `COURTLISTENER_BASE_URL` | CourtListener search API base URL (override only if needed). |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Optional standard Google Application Default Credentials path. Leave unset on Cloud Run to use its service identity. |
 | `FIREBASE_CREDENTIALS` | Optional Firebase service-account path; otherwise Application Default Credentials are used. |
-| `FIREBASE_WEB_CONFIG` | Public Firebase web configuration as one JSON object. |
 | `FIREBASE_STORAGE_BUCKET` | Private bucket used for matter originals, avatars, and account exports. |
 | `AUTH_COOKIE_SECURE` | Set `true` for HTTPS deployments; defaults from `APP_BASE_URL`. |
 | `APP_BASE_URL` | Public application URL used in workspace invitations. |

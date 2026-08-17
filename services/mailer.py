@@ -30,6 +30,17 @@ def send_workspace_invitation(recipient: str, workspace_name: str, invite_url: s
     return _deliver(message)
 
 
+def send_access_request_notification(recipient: str, requester_email: str):
+    message = EmailMessage()
+    message["Subject"] = "New Case Closed access request"
+    message["To"] = recipient
+    message.set_content(
+        f"{requester_email} signed in to Case Closed and is waiting for early access.\n\n"
+        f"Review the request:\n{config.APP_BASE_URL}/admin/access\n"
+    )
+    return _deliver(message)
+
+
 def send_access_approved(recipient: str):
     message = EmailMessage()
     message["Subject"] = "You're in — Case Closed early access"
