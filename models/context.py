@@ -142,14 +142,6 @@ def save_context(context_id, data):
     save_matter(str(context_id), dict(data))
 
 
-def update_context(context_id, data, user_id=None):
-    context = get_or_create_context(context_id, user_id)
-    if context is None:
-        return None
-    context.update(data)
-    return context
-
-
 def list_user_contexts(user_id, workspace_id=None):
     if not user_id:
         return []
@@ -219,31 +211,3 @@ def cap_session_title(text: str, max_len: int = 28) -> str:
         return text
     chunk = text[:max_len + 1]
     return (text[:max_len].rsplit(" ", 1)[0].strip() if " " in chunk else text[:max_len].strip()) or "New Session"
-
-
-def _strip_conversational_lead_in(text: str) -> str:
-    value = (text or "").strip()
-    lowered = value.lower()
-    for prefix in ("i need help with ", "i need help ", "can you help with ", "help with ",
-                   "question about ", "i have a question about "):
-        if lowered.startswith(prefix):
-            return value[len(prefix):].strip()
-    return value
-
-
-def _first_line_preview_words(text: str, max_words: int = 5) -> str:
-    words = _strip_conversational_lead_in((text or "").strip().split("\n", 1)[0]).split()
-    return " ".join(words[:max_words])
-
-
-def auto_generate_title(context):
-    messages = context.get("messages") or [] if isinstance(context, dict) else []
-    if messages:
-        first = messages[0]
-        text = first.get("content") or first.get("text") if isinstance(first, dict) else str(first)
-        if text:
-            return cap_session_title(_first_line_preview_words(text))
-    description = str(context.get("description", "")).strip() if isinstance(context, dict) else ""
-    if description:
-        return cap_session_title(_first_line_preview_words(description))
-    return "New Session"

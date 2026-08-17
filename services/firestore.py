@@ -100,8 +100,3 @@ def list_contexts():
     db = get_firestore_client()
     col = db.collection(config.FIRESTORE_COLLECTION)
     return [doc.id for doc in col.stream()]
-
-
-def try_startup_init():
-    """Attempt early init so misconfiguration is visible when the app loads modules."""
-    _ensure_initialized()

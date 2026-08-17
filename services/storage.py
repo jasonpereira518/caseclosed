@@ -16,16 +16,6 @@ def _bucket():
     return storage.bucket(config.FIREBASE_STORAGE_BUCKET)
 
 
-def upload_staging_file(file_object, workspace_id: str, matter_id: str,
-                        document_id: str, content_type: str | None = None) -> str:
-    """Stage an original only until the ingestion worker extracts its text."""
-    storage_path = f"staging/{workspace_id}/{matter_id}/{document_id}"
-    file_object.stream.seek(0)
-    _bucket().blob(storage_path).upload_from_file(
-        file_object.stream, content_type=content_type or "application/octet-stream")
-    return storage_path
-
-
 def upload_matter_file(file_object, workspace_id: str, matter_id: str,
                        document_id: str, filename: str,
                        content_type: str | None = None) -> str:
@@ -44,12 +34,6 @@ def upload_avatar(path: str, uid: str, filename: str, content_type: str | None =
     storage_path = f"users/{uid}/avatar/{filename}"
     blob = _bucket().blob(storage_path)
     blob.upload_from_filename(path, content_type=content_type or "application/octet-stream")
-    return storage_path
-
-
-def upload_bytes(data: bytes, storage_path: str, content_type: str) -> str:
-    blob = _bucket().blob(storage_path)
-    blob.upload_from_string(data, content_type=content_type)
     return storage_path
 
 
@@ -74,10 +58,6 @@ def delete_path(storage_path: str):
 def delete_prefix(prefix: str):
     for blob in _bucket().list_blobs(prefix=prefix):
         blob.delete()
-
-
-def download_bytes(storage_path: str) -> bytes:
-    return _bucket().blob(storage_path).download_as_bytes()
 
 
 def download_to_file(storage_path: str, destination):
