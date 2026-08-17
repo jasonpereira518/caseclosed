@@ -7,9 +7,10 @@ from services.courtlistener import query_courtlistener
 from services.grounding import answer_from_sources
 from services.jobs import cancellation_requested, update_job
 from services.llm import (
-    check_if_more_info_needed, extract_case_strength,
-    extract_structured_analysis, extract_timeline, generate_query,
-    generate_session_title, grade_case, rerank_cases, summarize_case,
+    CHAT_INTENTS, check_if_more_info_needed, classify_chat_intent,
+    extract_case_strength, extract_structured_analysis, extract_timeline,
+    generate_query, generate_session_title, grade_case, rerank_cases,
+    summarize_case,
 )
 from services.matters import append_message, load_matter, patch_matter, replace_matter_records
 from services.retrieval import citation_for, retrieve
@@ -21,6 +22,7 @@ SUMMARY_RE = re.compile(r"\b(summarize|summary|recap|what (?:do|did) we know)\b"
 
 
 def classify_intent(message: str) -> str:
+    """Zero-cost heuristic — the fallback when the model classifier fails."""
     if RESEARCH_RE.search(message or ""):
         return "legal_research"
     if SUMMARY_RE.search(message or ""):
@@ -30,6 +32,22 @@ def classify_intent(message: str) -> str:
             r"^(who|what|when|where|why|how|can|could|should|does|do|is|are)\b", value):
         return "matter_update"
     return "grounded_question"
+
+
+def resolve_intent(message: str) -> str:
+    """Model-classified intent, falling back to the heuristic on any failure.
+
+    The classifier understands imperative questions ("tell me about our
+    weaknesses") and social messages; the regex cannot. But a classifier
+    hiccup must never break chat, so every failure path lands on the regex.
+    """
+    try:
+        intent = classify_chat_intent(message)
+        if intent in CHAT_INTENTS:
+            return intent
+    except Exception:
+        pass
+    return classify_intent(message)
 
 
 def process_chat_job(matter_id: str, job_id: str, data: dict) -> dict:
@@ -46,12 +64,14 @@ def process_chat_job(matter_id: str, job_id: str, data: dict) -> dict:
         except Exception:
             pass
 
-    intent = "legal_research" if matter.get("pending_questions") else classify_intent(message)
+    intent = "legal_research" if matter.get("pending_questions") else resolve_intent(message)
     update_job(matter_id, job_id, progress=10, stage="routing")
     if intent == "legal_research":
         result = _research(matter_id, job_id, uid, message, matter)
     elif intent == "matter_update":
         result = _update_matter(matter_id, job_id, uid, message, matter)
+    elif intent == "acknowledgment":
+        result = _acknowledge()
     else:
         result = _answer(matter_id, job_id, uid, message, matter, intent)
     append_message(matter_id, uid, "assistant", result["message"], metadata={
@@ -68,9 +88,32 @@ def _update_matter(matter_id: str, job_id: str, uid: str, message: str, matter: 
     description = " ".join(filter(None, [str(matter.get("description") or "").strip(), message])).strip()
     analysis = extract_structured_analysis(description)
     patch_matter(matter_id, uid, root={"description": description}, state={"analysis": analysis})
-    return {"status": "answer", "intent": "matter_update", "grounded": True,
+    # A canned confirmation cites nothing; claiming grounded would be a lie.
+    return {"status": "answer", "intent": "matter_update", "grounded": False,
             "message": "I added that information to the matter record. Ask a question about it or ask me to research authorities when you're ready.",
             "citations": []}
+
+
+def _acknowledge() -> dict:
+    """Social messages get a brief reply and touch nothing."""
+    return {"status": "answer", "intent": "acknowledgment", "grounded": False,
+            "message": "Noted. Ask a question about the matter, add facts to the record, "
+                       "or ask me to research authorities whenever you're ready.",
+            "citations": []}
+
+
+def _recent_turns(matter: dict, limit: int = 6) -> list[dict]:
+    """The last few conversation turns, shaped for prompt context."""
+    messages = matter.get("messages") if isinstance(matter.get("messages"), list) else []
+    turns = []
+    for message in messages[-limit:]:
+        if not isinstance(message, dict):
+            continue
+        turns.append({
+            "role": str(message.get("role") or message.get("sender") or "user"),
+            "content": str(message.get("content") or message.get("text") or "")[:800],
+        })
+    return turns
 
 
 def _answer(matter_id: str, job_id: str, uid: str, message: str,
@@ -88,7 +131,8 @@ def _answer(matter_id: str, job_id: str, uid: str, message: str,
         raise JobCancelled()
     update_job(matter_id, job_id, progress=65, stage="drafting_answer")
     grounded = answer_from_sources(message, sources,
-                                   client_role=str(matter.get("role") or "").strip() or None)
+                                   client_role=str(matter.get("role") or "").strip() or None,
+                                   history=_recent_turns(matter))
     return {"status": "answer", "intent": intent, "message": grounded["answer"],
             "citations": grounded["citations"], "grounded": grounded["grounded"]}
 
@@ -98,7 +142,8 @@ def _research(matter_id: str, job_id: str, uid: str, message: str, matter: dict)
     analysis = matter.get("analysis") if isinstance(matter.get("analysis"), dict) else {}
     attempts = int(matter.get("clarify_attempts", 0) or 0)
     update_job(matter_id, job_id, progress=18, stage="checking_facts")
-    needs_more, questions = check_if_more_info_needed(message, description, analysis)
+    needs_more, questions = check_if_more_info_needed(message, description, analysis,
+                                                      history=_recent_turns(matter))
     questions = list(questions or [])[:5]
     if needs_more and questions and attempts < 2:
         patch_matter(matter_id, uid, root={"description": description,

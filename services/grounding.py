@@ -10,7 +10,9 @@ from services.retrieval import validate_citations
 from utils.helpers import extract_json_object
 
 
-def answer_from_sources(question: str, sources: list[dict], *, client_role: str | None = None) -> dict:
+def answer_from_sources(question: str, sources: list[dict], *,
+                        client_role: str | None = None,
+                        history: list[dict] | None = None) -> dict:
     if not sources:
         return {
             "answer": "I couldn't find support for that in this matter's documents or the connected legal sources.",
@@ -27,12 +29,23 @@ def answer_from_sources(question: str, sources: list[dict], *, client_role: str 
         "from that side's perspective while staying accurate about weaknesses.\n"
         if client_role else ""
     )
+    history_block = ""
+    if history:
+        turns = "\n".join(
+            f"{str(turn.get('role') or 'user').upper()}: {str(turn.get('content') or '')[:800]}"
+            for turn in history
+        )
+        history_block = (
+            "RECENT CONVERSATION (context for follow-up questions only — never cite it, "
+            "and never treat it as a source):\n" + turns + "\n\n"
+        )
     prompt = (
         "Answer the legal-work question using ONLY the supplied sources. Do not invent law, facts, "
         "citations, or source IDs. Distinguish source facts from cautious analysis. This is legal "
         "information, not a guarantee of outcome. Return strict JSON with keys answer and citations. "
         "Each citation must contain source_id and an optional exact quote found in that source.\n"
         f"{role_line}\n"
+        f"{history_block}"
         f"QUESTION:\n{question}\n\nSOURCES:\n{json.dumps(packets, ensure_ascii=False)}"
     )
     response = client.chats.create(model=config.CHAT_FAST_MODEL).send_message(prompt)

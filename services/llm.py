@@ -35,7 +35,41 @@ def filter_redundant_questions(questions, analysis):
     return filtered
 
 
-def check_if_more_info_needed(user_message: str, existing_context: str, analysis: dict = None) -> tuple:
+CHAT_INTENTS = frozenset({
+    "legal_research", "grounded_question", "matter_summary",
+    "matter_update", "acknowledgment",
+})
+
+
+def classify_chat_intent(message: str) -> str:
+    """Label a chat message with one of the five chat intents.
+
+    Raises ValueError on an unusable model response so the orchestrator can
+    fall back to its zero-cost heuristic instead of guessing here.
+    """
+    prompt = (
+        "Classify a message a lawyer sent to their AI legal-research workspace. "
+        "Return strict JSON: {\"intent\": \"<label>\"} where <label> is exactly one of:\n"
+        "- legal_research: asks to find, research, or expand case law / authorities\n"
+        "- grounded_question: asks a question about the matter, the law, strategy, "
+        "strengths or weaknesses — including imperative phrasings like 'tell me about', "
+        "'explain', 'walk me through'\n"
+        "- matter_summary: asks to summarize or recap the matter\n"
+        "- matter_update: shares new facts or information that belongs in the matter record\n"
+        "- acknowledgment: thanks, confirmations, greetings, or other social messages "
+        "that need no legal work\n\n"
+        f"MESSAGE:\n{str(message)[:4000]}"
+    )
+    response = client.chats.create(model=config.CHAT_FAST_MODEL).send_message(prompt)
+    parsed = extract_json_object(str(response.text or "").strip()) or {}
+    intent = str(parsed.get("intent") or "").strip().lower()
+    if intent not in CHAT_INTENTS:
+        raise ValueError(f"unusable intent label: {intent!r}")
+    return intent
+
+
+def check_if_more_info_needed(user_message: str, existing_context: str, analysis: dict = None,
+                              history: list | None = None) -> tuple:
     """
     Check if more information is needed and return up to 3 questions.
     Includes full description and structured analysis to avoid repeat questions.
@@ -46,6 +80,10 @@ def check_if_more_info_needed(user_message: str, existing_context: str, analysis
         for key, val in analysis.items():
             if val:
                 context_text += f"- {key}: {json.dumps(val, indent=2)}\n"
+    if history:
+        context_text += "\nRECENT CONVERSATION (answers here count as known information):\n"
+        for turn in history:
+            context_text += f"- {turn.get('role', 'user')}: {str(turn.get('content') or '')[:800]}\n"
 
     combined = (existing_context + " " + user_message).strip()
 

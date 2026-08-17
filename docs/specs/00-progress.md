@@ -9,7 +9,7 @@ Process defined in the approved refresh plan: per cycle — present current beha
 | 3 | Workspaces & matters | **Done** (2026-08-16) | [03-workspaces-matters.md](03-workspaces-matters.md) |
 | 4 | Client intake | **Done** (2026-08-17) | [04-client-intake.md](04-client-intake.md) |
 | 5 | Documents | **Done** (2026-08-17) | [05-documents.md](05-documents.md) |
-| 6 | Chat core | Not started | — |
+| 6 | Chat core | **Done** (2026-08-17) | [06-chat-core.md](06-chat-core.md) |
 | 7 | Legal research & authorities | Not started | — |
 | 8 | Matter analysis & chronology | Not started | — |
 | 9 | Drafting | Not started | — |
