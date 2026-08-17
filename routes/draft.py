@@ -22,7 +22,9 @@ def draft():
     """Queue a matter_draft job; document generation runs in the job."""
     payload = request.json or {}
     context_id = resolve_matter_id(payload)
-    doc_type = str(payload.get("doc_type") or "memo")  # "memo" or "brief"
+    doc_type = str(payload.get("doc_type") or "memo").strip().lower()
+    if doc_type not in {"memo", "brief"}:
+        return jsonify({"error": "doc_type must be memo or brief"}), 400
 
     if not context_id:
         return jsonify({"error": "No context_id provided"}), 400
@@ -42,6 +44,25 @@ def draft():
     job["status_url"] = f"/api/matters/{context_id}/jobs/{job['job_id']}"
     job["context_id"] = context_id
     return jsonify(job), 202
+
+
+@draft_bp.route("/draft/save", methods=["POST"])
+@login_required
+def draft_save():
+    """Persist an in-app edit of the draft. Export uses what's on screen, so
+    saved text is exactly what ships in the docx."""
+    payload = request.json or {}
+    context_id = resolve_matter_id(payload)
+    if not context_id:
+        return jsonify({"error": "No context_id provided"}), 400
+    draft_text = str(payload.get("draft_text") or "")
+    if not draft_text.strip():
+        return jsonify({"error": "draft_text is required"}), 400
+    context = get_stored_context(context_id, str(current_user.get_id()))
+    if not context:
+        return jsonify({"error": "matter not found"}), 404
+    context["draft"] = draft_text
+    return jsonify({"status": "ok"})
 
 
 @draft_bp.route("/draft/export", methods=["POST"])
@@ -75,17 +96,20 @@ def draft_export():
     section.left_margin = Inches(1)
     section.right_margin = Inches(1)
     
+    # The document announces what it is: the stored draft_type decides.
+    doc_title = 'BRIEF' if str(context.get('draft_type') or 'memo') == 'brief' else 'MEMORANDUM'
     title = doc.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    title_run = title.add_run('MEMORANDUM')
+    title_run = title.add_run(doc_title)
     title_run.bold = True
     title_run.font.size = Pt(14)
-    
+
     case_title = context.get('title', 'Untitled Case')
-    
+    author = current_user.name or current_user.email or '[Author]'
+
     info_lines = [
         ('TO:', '[Recipient]'),
-        ('FROM:', '[Author]'),
+        ('FROM:', author),
         ('RE:', case_title),
         ('DATE:', __import__('datetime').datetime.now().strftime('%B %d, %Y'))
     ]

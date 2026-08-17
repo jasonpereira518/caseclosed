@@ -1422,11 +1422,31 @@ function renderGroundedMessage(data) {
 // =====================================================
 // DRAFT GENERATION
 // =====================================================
+let draftGenerateArmed = false;
+
 async function handleDraftGenerate() {
     if (!contextId) {
         appendMessage('bot', 'Please upload a PDF or describe your case first.');
         return;
     }
+
+    // Two-step confirm when a draft exists: regenerating replaces it (and
+    // any in-app edits). Same pattern as document delete — no dialogs.
+    if (currentDraft && String(currentDraft).trim() && !draftGenerateArmed) {
+        draftGenerateArmed = true;
+        const btn = document.getElementById('draft-generate-btn');
+        if (btn) btn.textContent = 'Replace draft?';
+        setTimeout(() => {
+            draftGenerateArmed = false;
+            const reset = document.getElementById('draft-generate-btn');
+            if (reset) reset.textContent = 'Generate';
+        }, 4000);
+        return;
+    }
+    draftGenerateArmed = false;
+    const generateBtn = document.getElementById('draft-generate-btn');
+    if (generateBtn) generateBtn.textContent = 'Generate';
+    exitDraftEditMode(false);
 
     const docType = document.getElementById('draft-type').value;
     const draftContent = document.getElementById('draft-content');
@@ -1475,35 +1495,105 @@ async function handleDraftGenerate() {
     }
 }
 
+/* ------------------------------------------------------ draft edit mode */
+
+function enterDraftEditMode() {
+    if (!currentDraft) return;
+    const draftContent = document.getElementById('draft-content');
+    if (!draftContent) return;
+    draftContent.innerHTML = '';
+    const textarea = document.createElement('textarea');
+    textarea.id = 'draft-edit-textarea';
+    textarea.className = 'draft-edit-textarea';
+    textarea.value = String(currentDraft);
+    draftContent.appendChild(textarea);
+    document.getElementById('draft-edit-btn').hidden = true;
+    document.getElementById('draft-save-btn').hidden = false;
+    document.getElementById('draft-cancel-btn').hidden = false;
+    textarea.focus();
+}
+
+/** Leave edit mode; rerender = true restores the read view of currentDraft. */
+function exitDraftEditMode(rerender = true) {
+    const saveBtn = document.getElementById('draft-save-btn');
+    const cancelBtn = document.getElementById('draft-cancel-btn');
+    const editBtn = document.getElementById('draft-edit-btn');
+    if (saveBtn) saveBtn.hidden = true;
+    if (cancelBtn) cancelBtn.hidden = true;
+    if (editBtn) editBtn.hidden = !currentDraft;
+    if (rerender && currentDraft) displayDraft(String(currentDraft));
+}
+
+async function saveDraftEdits() {
+    const textarea = document.getElementById('draft-edit-textarea');
+    if (!textarea) return;
+    const text = textarea.value;
+    if (!text.trim()) {
+        showToast('The draft cannot be empty.', 'error');
+        return;
+    }
+    try {
+        const res = await fetch('/draft/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ context_id: contextId, draft_text: text }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showToast(data.error || 'Unable to save the draft', 'error');
+            return;
+        }
+        currentDraft = text;
+        exitDraftEditMode(true);
+        showToast('Draft saved', 'success');
+    } catch (err) {
+        showToast(err.message || 'Unable to save the draft', 'error');
+    }
+}
+
+document.getElementById('draft-edit-btn')?.addEventListener('click', enterDraftEditMode);
+document.getElementById('draft-save-btn')?.addEventListener('click', saveDraftEdits);
+document.getElementById('draft-cancel-btn')?.addEventListener('click', () => exitDraftEditMode(true));
+
 function handleDraftExport() {
-    if (!currentDraft || currentDraft.trim() === '') {
+    // Export what's on screen: an unsaved edit in progress wins over the
+    // last-saved draft.
+    const liveTextarea = document.getElementById('draft-edit-textarea');
+    const exportText = liveTextarea ? liveTextarea.value : currentDraft;
+    if (!exportText || exportText.trim() === '') {
         showToast('No draft to export. Generate a draft first.', 'error');
         return;
     }
-    
+
     const exportBtn = document.getElementById('draft-export-btn');
     const originalText = exportBtn.innerHTML;
     exportBtn.innerHTML = '<span class="loading-spinner" aria-hidden="true"></span> Exporting...';
     exportBtn.disabled = true;
-    
+
+    let downloadName = 'legal_memo.docx';
     fetch('/draft/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ 
+        body: JSON.stringify({
             context_id: contextId,
-            draft_text: currentDraft
+            draft_text: exportText
         })
     })
     .then(res => {
         if (!res.ok) throw new Error('Export failed');
+        // The server names the file after the matter; use it.
+        const disposition = res.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+        if (match && match[1]) downloadName = decodeURIComponent(match[1]);
         return res.blob();
     })
     .then(blob => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'legal_memo.docx';
+        a.download = downloadName;
         document.body.appendChild(a);
         a.click();
         a.remove();

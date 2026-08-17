@@ -141,6 +141,7 @@
     '/upload':          () => demoBlocked('Uploading documents'),
     '/documents/delete':() => demoBlocked('Deleting documents'),
     '/intake':          () => demoBlocked('Submitting the intake form'),
+    '/draft/save':      () => demoBlocked('Saving the draft'),
     '/draft/export':    () => demoBlocked('Exporting to Word'),
 
     '/documents/toggle': (body) => ok({ status: 'ok', included: !!body.included }),

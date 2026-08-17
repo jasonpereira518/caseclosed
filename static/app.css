@@ -1698,3 +1698,6 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 /* Cycle 8: timeline event removal (functional; visual pass owns finish). */
 .timeline-remove-btn { font: inherit; font-size: 14px; line-height: 1; padding: 0 6px; border: none; background: none; cursor: pointer; color: #9E8E7E; float: right; }
 .timeline-remove-btn:hover { color: #8d2926; }
+
+/* Cycle 9: in-app draft editing (functional; visual pass owns finish). */
+.draft-edit-textarea { width: 100%; min-height: 420px; font: 13px/1.6 ui-monospace, "SF Mono", Menlo, monospace; padding: 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: inherit; resize: vertical; }

@@ -14,6 +14,7 @@ PROTECTED_JSON_PATHS = frozenset(
         "/upload",
         "/analyze",
         "/draft",
+        "/draft/save",
         "/draft/export",
         "/context",
         "/case/ask",

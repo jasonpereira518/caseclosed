@@ -252,7 +252,9 @@ function updateDraftPanel(draft) {
     const draftContent = document.getElementById('draft-content');
     const draftDownloadBtn = document.getElementById('draft-download-btn');
     const draftExportBtn = document.getElementById('draft-export-btn');
+    const draftEditBtn = document.getElementById('draft-edit-btn');
     if (!draftContent) return;
+    if (typeof exitDraftEditMode === 'function') exitDraftEditMode(false);
 
     if (draft && String(draft).trim()) {
         displayDraft(String(draft));
@@ -262,6 +264,9 @@ function updateDraftPanel(draft) {
         }
         if (draftExportBtn) {
             draftExportBtn.hidden = false;
+        }
+        if (draftEditBtn) {
+            draftEditBtn.hidden = false;
         }
         return;
     }
@@ -273,6 +278,9 @@ function updateDraftPanel(draft) {
     }
     if (draftExportBtn) {
         draftExportBtn.hidden = true;
+    }
+    if (draftEditBtn) {
+        draftEditBtn.hidden = true;
     }
 }
 
