@@ -1,4 +1,5 @@
 import json
+import re
 
 from google import genai
 
@@ -288,6 +289,54 @@ def generate_query(summary: str, analysis: dict = None) -> str:
         return ans
     except Exception:
         return fb
+
+
+def grade_cases_batch(summary: str, cases: list[dict], analysis: dict = None) -> list[dict]:
+    """Grade one query-round of candidate cases in a single model call.
+
+    Returns a grade dict per input case (same order). Raises ValueError on an
+    unusable response so the caller can fall back to per-case grade_case.
+    """
+    context = ""
+    if analysis:
+        issues = _join_analysis_field(analysis.get("legal_issues", []))
+        causes = _join_analysis_field(analysis.get("causes_of_action", []))
+        if issues or causes:
+            context = f"LEGAL ISSUES: {issues}\nCAUSES OF ACTION: {causes}\n"
+    listing = "\n\n".join(
+        f"[{index}] {case.get('title', 'Untitled')}\n{str(case.get('snippet') or '')[:1200]}"
+        for index, case in enumerate(cases)
+    )
+    prompt = (
+        "Score each candidate case's relevance to the matter, 0-100. Return a strict JSON "
+        "array with one object per candidate: {\"index\": <int>, \"score\": <int>, "
+        "\"reason\": <short string>, \"dimensions\": {\"factual\": <int>, \"legal\": <int>, "
+        "\"jurisdiction\": <int>, \"recency\": <int>, \"posture\": <int>}}.\n\n"
+        f"MATTER SUMMARY:\n{summary}\n{context}\nCANDIDATES:\n{listing}"
+    )
+    response = client.chats.create(model=config.SCORER_MODEL).send_message(prompt)
+    text = str(response.text or "").strip()
+    match = re.search(r"\[.*\]", text, re.DOTALL)
+    if not match:
+        raise ValueError("batch grading returned no JSON array")
+    try:
+        parsed = json.loads(match.group(0))
+    except json.JSONDecodeError as exc:
+        raise ValueError("batch grading returned invalid JSON") from exc
+    if not isinstance(parsed, list):
+        raise ValueError("batch grading returned a non-list")
+    by_index = {}
+    for item in parsed:
+        if isinstance(item, dict) and isinstance(item.get("index"), int):
+            by_index[item["index"]] = item
+    return [
+        {
+            "score": int(by_index.get(index, {}).get("score", 0) or 0),
+            "reason": str(by_index.get(index, {}).get("reason", "") or ""),
+            "dimensions": by_index.get(index, {}).get("dimensions") or {},
+        }
+        for index in range(len(cases))
+    ]
 
 
 def grade_case(summary: str, case_title: str, snippet: str, analysis: dict = None) -> dict:

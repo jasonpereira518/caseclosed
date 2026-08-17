@@ -18,6 +18,10 @@ def query_courtlistener(query: str):
     for item in data.get("results", []):
         title = item.get("caseName") or item.get("name") or "Untitled"
         citation = item.get("citation") or ""
+        # CourtListener v4 sometimes returns citation as a list of parallel
+        # citations; keep the first two, comma-joined.
+        if isinstance(citation, list):
+            citation = ", ".join(str(value) for value in citation[:2] if value)
         pdf_link = item.get("absolute_url") or item.get("url") or ""
         if pdf_link.startswith("/"):
             pdf_link = "https://www.courtlistener.com" + pdf_link
@@ -30,7 +34,7 @@ def query_courtlistener(query: str):
             "snippet": snippet,
             "decision_date": decision_date,
         })
-    return results[:4]
+    return results[:10]
 
 
 def extract_cluster_id(pdf_link: str):
@@ -45,13 +49,16 @@ def extract_cluster_id(pdf_link: str):
 
 def check_case_treatment(cluster_id: str, citation_string: str = "") -> dict:
     """Check if case has been overturned or negatively treated using citing search."""
+    # checked stays False until a real verdict lands: an API failure or a
+    # missing cluster id must not be cached forever as "unknown" (the UI only
+    # re-attempts unchecked treatments).
     base_treatment = {
         "status": "unknown",
         "label": "",
         "details": "",
-        "checked": True
+        "checked": False
     }
-    
+
     if not cluster_id:
         return base_treatment
         
@@ -71,6 +78,7 @@ def check_case_treatment(cluster_id: str, citation_string: str = "") -> dict:
         if not results:
             base_treatment["status"] = "good"
             base_treatment["label"] = "✓ No Negative Treatment Found"
+            base_treatment["checked"] = True
             return base_treatment
             
         is_negative = False
@@ -124,9 +132,11 @@ def check_case_treatment(cluster_id: str, citation_string: str = "") -> dict:
         else:
             base_treatment["status"] = "good"
             base_treatment["label"] = "✓ No Negative Treatment Found"
-            
+        base_treatment["checked"] = True
+
     except Exception:
-        # Don't crash on rate limits or API failures
+        # Don't crash on rate limits or API failures; checked stays False so
+        # the next render retries instead of trusting a failed lookup forever.
         pass
-        
+
     return base_treatment

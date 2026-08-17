@@ -9,8 +9,8 @@ from services.jobs import cancellation_requested, update_job
 from services.llm import (
     CHAT_INTENTS, check_if_more_info_needed, classify_chat_intent,
     extract_case_strength, extract_structured_analysis, extract_timeline,
-    generate_query, generate_session_title, grade_case, rerank_cases,
-    summarize_case,
+    generate_query, generate_session_title, grade_case, grade_cases_batch,
+    rerank_cases, summarize_case,
 )
 from services.matters import append_message, load_matter, patch_matter, replace_matter_records
 from services.retrieval import citation_for, retrieve
@@ -170,15 +170,15 @@ def _research(matter_id: str, job_id: str, uid: str, message: str, matter: dict)
             continue
         queries.append(query)
         for case in query_courtlistener(query):
-            key = case.get("pdf_link") or case.get("citation") or case.get("title")
+            key = _case_key(case)
             if key and key not in seen:
                 seen.add(key)
                 cases.append(case)
 
     update_job(matter_id, job_id, progress=55, stage="grading_authorities")
     results = []
-    for case in cases:
-        grading = grade_case(summary, case.get("title", ""), case.get("snippet", ""), analysis)
+    grades = _grade_round(summary, cases, analysis)
+    for case, grading in zip(cases, grades):
         score = int(grading.get("score", 0) or 0)
         if score >= 15:
             results.append({**case, "initial_score": score, "relevance_score": score,
@@ -189,7 +189,10 @@ def _research(matter_id: str, job_id: str, uid: str, message: str, matter: dict)
         if isinstance(reranked, list):
             results = reranked
     results.sort(key=lambda item: item.get("relevance_score", 0), reverse=True)
-    results = [_compact_case(item) for item in results[:20]]
+    # Merge instead of replace: research must never destroy the lawyer's
+    # bookmarks, notes, follow-ups, or cached treatment checks.
+    results = merge_research_results(matter.get("cases") or [],
+                                     [_compact_case(item) for item in results])
 
     update_job(matter_id, job_id, progress=75, stage="building_matter_analysis")
     timeline = extract_timeline(description)
@@ -238,6 +241,54 @@ def _statute_from_source(source: dict) -> dict:
             "relevance": "Retrieved from the configured official legal corpus.",
             "source_id": source.get("source_id"),
             "url": source.get("canonical_url") or ""}
+
+
+def _case_key(case: dict) -> str:
+    return str(case.get("pdf_link") or case.get("citation") or case.get("title") or "")
+
+
+def _is_annotated(case: dict) -> bool:
+    return bool(case.get("bookmarked") or str(case.get("notes") or "").strip()
+                or case.get("follow_ups"))
+
+
+def merge_research_results(existing: list[dict], fresh: list[dict], *, cap: int = 20) -> list[dict]:
+    """Merge a fresh research run into the existing authority list.
+
+    Annotated cases (bookmarked, noted, or with follow-up Q&As) always
+    survive and are exempt from the cap; when a fresh result re-finds one,
+    its relevance fields are refreshed while the annotations, cached
+    treatment, and description are kept. Unannotated existing cases are
+    replaced by the fresh list.
+    """
+    annotated = {_case_key(case): dict(case)
+                 for case in (existing or []) if _is_annotated(case)}
+    merged_fresh = []
+    for result in fresh or []:
+        key = _case_key(result)
+        if key in annotated:
+            kept = annotated[key]
+            for field in ("relevance_score", "relevance_reason",
+                          "relevance_dimensions", "initial_score", "snippet"):
+                if field in result:
+                    kept[field] = result[field]
+        else:
+            merged_fresh.append(dict(result))
+    merged = list(annotated.values()) + merged_fresh[:cap]
+    merged.sort(key=lambda item: item.get("relevance_score", 0), reverse=True)
+    return merged
+
+
+def _grade_round(summary: str, cases: list[dict], analysis: dict) -> list[dict]:
+    """One grade per candidate — batched into a single model call, falling
+    back to per-case grading if the batch response is unusable."""
+    if not cases:
+        return []
+    try:
+        return grade_cases_batch(summary, cases, analysis)
+    except Exception:
+        return [grade_case(summary, case.get("title", ""), case.get("snippet", ""), analysis)
+                for case in cases]
 
 
 def _compact_case(case: dict) -> dict:

@@ -155,11 +155,13 @@ def case_ask():
 @chat_bp.route("/chat/case/treatment", methods=["POST"])
 @login_required
 def case_treatment():
+    # checked: False so a failed lookup is retried on the next render instead
+    # of being cached forever as "unknown".
     default_error = {
         "status": "unknown",
         "label": "",
         "details": "",
-        "checked": True
+        "checked": False
     }
     try:
         payload = request.get_json(silent=True) or {}

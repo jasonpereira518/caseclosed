@@ -2281,6 +2281,7 @@ function renderCaseDetailView(caseData) {
                 <div class="cases-detail-card-title">${titleSafe}</div>
                 <div class="cases-detail-card-citation">${citationSafe}</div>
                 <div class="cases-detail-card-relevance" id="case-description-relevance"></div>
+                <div class="cases-detail-card-description" id="case-detail-description"></div>
             </div>
             ${buildCaseNotesHtml(caseData)}
             <div class="cases-detail-scroll-area" id="cases-detail-scroll">
@@ -2295,6 +2296,7 @@ function renderCaseDetailView(caseData) {
     `;
 
     renderCaseDetailRelevanceSection(caseData);
+    loadCaseDescription(activeCaseIndex);
     renderCaseDetailFollowUps(caseData);
     bindCasesDetailScrollCondense();
     bindCaseNotesPanel(activeCaseIndex);
@@ -2307,6 +2309,38 @@ function renderCaseDetailView(caseData) {
         }
     });
     document.getElementById('cases-detail-question')?.focus();
+}
+
+/** "What this case is about" — cached on the case server-side; fetched once
+ *  via /case/describe on first open. Failure shows nothing, not an error. */
+async function loadCaseDescription(caseIndex) {
+    const el = document.getElementById('case-detail-description');
+    if (!el || caseIndex === null) return;
+    const caseData = currentCases[caseIndex];
+    if (!caseData) return;
+    const cached = String(caseData.description || '').trim();
+    if (cached) {
+        el.textContent = cached;
+        return;
+    }
+    el.innerHTML = '<span class="loading-spinner" aria-hidden="true"></span> Summarizing this case…';
+    try {
+        const res = await fetch('/case/describe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ context_id: contextId, case_index: caseIndex }),
+        });
+        const data = await res.json();
+        const description = String((data && data.description) || '').trim();
+        if (!res.ok || !description) {
+            el.textContent = '';
+            return;
+        }
+        caseData.description = description;
+        if (activeCaseIndex === caseIndex) el.textContent = description;
+    } catch (_err) {
+        el.textContent = '';
+    }
 }
 
 async function submitCasesPanelAsk() {

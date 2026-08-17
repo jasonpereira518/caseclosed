@@ -1690,3 +1690,7 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 .doc-status--processing, .doc-status--retrying { color: #6f5d52; }
 .doc-error { font-size: 11px; color: #8d2926; margin-left: 20px; }
 .doc-retry-btn { font: inherit; font-size: 12px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); cursor: pointer; }
+
+/* Cycle 7: case description in the Authority detail view. */
+.cases-detail-card-description { font-size: 13px; line-height: 1.5; margin-top: 8px; color: var(--text-muted, inherit); }
+.cases-detail-card-description:empty { display: none; }
