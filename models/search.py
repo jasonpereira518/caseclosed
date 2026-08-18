@@ -13,6 +13,7 @@ _FIELD_WEIGHTS = {
     "session_title": 10,
     "case_title": 8,
     "case_citation": 8,
+    "document_filename": 7,
     "note": 6,
     "message": 4,
     "description": 3,
@@ -62,7 +63,8 @@ def _text_matches(text, query_lower):
 
 
 def _add_result(results, *, result_type, field_type, title, snippet_raw, query,
-                context_id, session_title, case_index=None, updated_at=None):
+                context_id, session_title, case_index=None, updated_at=None,
+                archived=False):
     """Build and append a search result dict."""
     snippet = _extract_snippet(snippet_raw, query)
     highlighted = _highlight_snippet(snippet, query)
@@ -77,6 +79,7 @@ def _add_result(results, *, result_type, field_type, title, snippet_raw, query,
         "session_title": session_title,
         "case_index": case_index,
         "updated_at": updated_at,
+        "archived": bool(archived),
     })
 
 
@@ -93,7 +96,7 @@ def search_user_contexts(user_id, query, filters=None):
     query_lower = query.lower()
     filters = filters or {}
     content_types = set(filters.get("content_types") or
-                        ["sessions", "cases", "notes", "messages"])
+                        ["sessions", "cases", "notes", "messages", "documents"])
 
     results = []
 
@@ -101,13 +104,21 @@ def search_user_contexts(user_id, query, filters=None):
     try:
         for workspace in list_workspaces(str(user_id)):
             for summary in list_matters(workspace["workspace_id"], str(user_id)):
-                authorized.append((summary["matter_id"], load_matter(summary["matter_id"], str(user_id)) or {}))
+                # include_document_text=False: search never reads document
+                # text, so don't pay to load it.
+                authorized.append((
+                    summary["matter_id"],
+                    load_matter(summary["matter_id"], str(user_id),
+                                include_document_text=False) or {},
+                    summary.get("status") == "archived",
+                ))
     except RuntimeError:
         return []
 
-    for ctx_id, data in authorized:
+    for ctx_id, data, is_archived in authorized:
         sess_title = data.get("title") or "New Session"
         updated_at = data.get("updated_at")
+        matter_result_start = len(results)
 
         # --- Session-level fields ---
         if "sessions" in content_types:
@@ -214,6 +225,22 @@ def search_user_contexts(user_id, query, filters=None):
                                     snippet_raw=a_text, query=query,
                                     context_id=ctx_id, session_title=sess_title,
                                     case_index=ci, updated_at=updated_at)
+
+        # --- Documents (filenames only; text is never loaded here) ---
+        if "documents" in content_types:
+            for document in data.get("uploaded_documents") or []:
+                if not isinstance(document, dict):
+                    continue
+                filename = document.get("filename") or ""
+                if filename and _text_matches(filename, query_lower):
+                    _add_result(results, result_type="document",
+                                field_type="document_filename",
+                                title=filename, snippet_raw=filename, query=query,
+                                context_id=ctx_id, session_title=sess_title,
+                                updated_at=updated_at)
+
+        for result in results[matter_result_start:]:
+            result["archived"] = is_archived
 
     # Sort by rank descending, then by updated_at descending
     results.sort(key=lambda r: (r["rank"], r.get("updated_at") or ""), reverse=True)

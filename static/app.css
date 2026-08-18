@@ -1701,3 +1701,7 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 
 /* Cycle 9: in-app draft editing (functional; visual pass owns finish). */
 .draft-edit-textarea { width: 100%; min-height: 420px; font: 13px/1.6 ui-monospace, "SF Mono", Menlo, monospace; padding: 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: inherit; resize: vertical; }
+
+/* Cycle 10: search document badge, archived chips (functional). */
+.badge-document { background: var(--surface-muted); }
+.gs-archived-chip, .time-report-archived { font-size: 10px; padding: 1px 6px; margin-left: 6px; border: 1px solid var(--border); border-radius: 999px; color: #6f5d52; vertical-align: middle; }

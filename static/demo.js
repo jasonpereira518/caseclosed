@@ -345,6 +345,9 @@
     };
 
     add('session', FIXTURE.title, FIXTURE.title);
+    (FIXTURE.uploaded_documents || []).forEach((doc) => {
+      if (doc.filename) add('document', doc.filename, doc.filename);
+    });
     FIXTURE.cases.forEach((c) => {
       add('case', c.title, `${c.title} ${c.citation} ${c.snippet}`);
       if (c.notes) add('note', c.title, c.notes);

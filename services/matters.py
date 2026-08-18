@@ -113,10 +113,16 @@ def _ordered(ref, collection_name):
     return result
 
 
-def _load_documents(ref):
+def _load_documents(ref, include_text: bool = True):
     result = _ordered(ref, "documents")
     for item in result:
         record_id = item.get("record_id")
+        if not include_text:
+            # Metadata-only consumers (global search) never read the text;
+            # skipping the chunk fetch keeps them fast on document-heavy
+            # matters.
+            item.pop("text_chunked", None)
+            continue
         if item.pop("text_chunked", False) and record_id:
             chunks = list(ref.collection("documents").document(record_id).collection("text_chunks").stream())
             chunks.sort(key=lambda snap: (snap.to_dict() or {}).get("position", 0))
@@ -124,7 +130,7 @@ def _load_documents(ref):
     return result
 
 
-def load_matter(matter_id: str, uid: str) -> dict | None:
+def load_matter(matter_id: str, uid: str, *, include_document_text: bool = True) -> dict | None:
     try:
         workspace_id, ref, root = require_matter(matter_id, uid)
     except AuthorizationError:
@@ -140,7 +146,8 @@ def load_matter(matter_id: str, uid: str) -> dict | None:
     if draft_snap.exists:
         data.update(draft_snap.to_dict() or {})
     for key, collection_name in LIST_COLLECTIONS.items():
-        data[key] = _load_documents(ref) if key == "uploaded_documents" else _ordered(ref, collection_name)
+        data[key] = (_load_documents(ref, include_text=include_document_text)
+                     if key == "uploaded_documents" else _ordered(ref, collection_name))
     data["workspace_id"] = workspace_id
     data["matter_id"] = str(matter_id)
     return data

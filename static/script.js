@@ -3050,6 +3050,7 @@ function _globalSearchRenderFiltered() {
         const typeMap = {
             'sessions': 'session',
             'cases': 'case',
+            'documents': 'document',
             'notes': 'note',
             'messages': 'message'
         };
@@ -3065,12 +3066,14 @@ function _globalSearchRenderFiltered() {
     const badgeMap = {
         'session': { label: 'Session', cls: 'badge-session' },
         'case': { label: 'Case', cls: 'badge-case' },
+        'document': { label: 'Document', cls: 'badge-document' },
         'note': { label: 'Note', cls: 'badge-note' },
         'message': { label: 'Message', cls: 'badge-message' }
     };
 
     container.innerHTML = filtered.map((r, i) => {
         const badge = badgeMap[r.type] || badgeMap['session'];
+        const archivedChip = r.archived ? '<span class="gs-archived-chip">Archived</span>' : '';
         const meta = r.session_title && r.session_title !== r.title
             ? `<div class="gs-result-meta">${escapeHtml(r.session_title)}</div>`
             : '';
@@ -3078,7 +3081,7 @@ function _globalSearchRenderFiltered() {
             <div class="gs-result-item${i === _gsActiveIndex ? ' gs-active' : ''}" data-gs-index="${i}" role="option">
                 <span class="gs-result-badge ${badge.cls}">${badge.label}</span>
                 <div class="gs-result-body">
-                    <div class="gs-result-title">${escapeHtml(r.title || 'Untitled')}</div>
+                    <div class="gs-result-title">${escapeHtml(r.title || 'Untitled')}${archivedChip}</div>
                     <div class="gs-result-snippet">${r.snippet || ''}</div>
                     ${meta}
                 </div>
@@ -3108,6 +3111,10 @@ async function _gsOpenResult(result) {
     }
 
     // Navigate to the right tab/view
+    if (result.type === 'document') {
+        openDocManager();
+        return;
+    }
     if (result.type === 'case' || result.type === 'note') {
         // Switch to Cases tab
         document.querySelector('.panel-tab[data-tab="authority"]')?.click();
@@ -3196,21 +3203,27 @@ function openTimeReport() {
     openModal('time-report-modal');
     const list = document.getElementById('time-report-list');
     const grandTotal = document.getElementById('time-report-grand-total');
-    
+
+    // Archived matters count: billable time doesn't vanish when a matter
+    // closes. Archived rows are labelled.
     let totalSecs = 0;
-    const sorted = [...sessionHistory].sort((a, b) => (b.total_seconds || 0) - (a.total_seconds || 0));
-    
-    list.innerHTML = sorted.map(s => {
+    const rows = [
+        ...sessionHistory.map(s => ({ ...s, _archived: false })),
+        ...(archivedHistory || []).map(s => ({ ...s, _archived: true })),
+    ].sort((a, b) => (b.total_seconds || 0) - (a.total_seconds || 0));
+
+    list.innerHTML = rows.map(s => {
         const secs = s.total_seconds || 0;
         totalSecs += secs;
+        const archivedTag = s._archived ? ' <span class="time-report-archived">Archived</span>' : '';
         return `
             <div class="time-report-row">
-                <span class="time-report-title">${escapeHtml(s.title || 'Untitled')}</span>
+                <span class="time-report-title">${escapeHtml(s.title || 'Untitled')}${archivedTag}</span>
                 <span class="time-report-value">${formatTime(secs)}</span>
             </div>
         `;
     }).join('');
-    
+
     grandTotal.textContent = formatTime(totalSecs);
 }
 
