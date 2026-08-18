@@ -1705,3 +1705,8 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 /* Cycle 10: search document badge, archived chips (functional). */
 .badge-document { background: var(--surface-muted); }
 .gs-archived-chip, .time-report-archived { font-size: 10px; padding: 1px 6px; margin-left: 6px; border: 1px solid var(--border); border-radius: 999px; color: #6f5d52; vertical-align: middle; }
+
+/* Cycle 11: team activity + pending invitations (functional). */
+.team-activity { margin: 8px 0; }
+.activity-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+.activity-meta { color: #6f5d52; font-size: 12px; white-space: nowrap; }

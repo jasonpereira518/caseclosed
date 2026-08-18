@@ -19,9 +19,10 @@ from services.storage import delete_prefix, signed_download_url, upload_avatar
 from services.task_queue import enqueue_account_job
 from services.tenancy import (
     AuthorizationError, ValidationError, accept_invitation, active_matter, active_workspace,
-    audit, create_invitation, create_team, get_profile, list_members,
-    list_workspaces, membership, now, remove_member, require_workspace,
-    revoke_invitation, set_active_matter, set_active_workspace, set_member_role, transfer_ownership, update_profile,
+    audit, create_invitation, create_team, get_profile, list_activity, list_invitations,
+    list_members, list_workspaces, membership, now, remove_member, rename_workspace,
+    require_workspace, revoke_invitation, set_active_matter, set_active_workspace,
+    set_member_role, transfer_ownership, update_profile,
 )
 
 account_bp = Blueprint("account", __name__, url_prefix="/api")
@@ -144,6 +145,35 @@ def workspace_matters(workspace_id):
     try:
         return jsonify({"matters": list_matters(workspace_id, _uid())})
     except AuthorizationError as exc:
+        return _error(exc)
+
+
+@account_bp.route("/workspaces/<workspace_id>/invitations", methods=["GET"])
+@login_required
+def pending_invitations(workspace_id):
+    try:
+        return jsonify({"invitations": list_invitations(workspace_id, _uid())})
+    except (AuthorizationError, ValidationError) as exc:
+        return _error(exc)
+
+
+@account_bp.route("/workspaces/<workspace_id>", methods=["PATCH"])
+@login_required
+def rename_workspace_route(workspace_id):
+    try:
+        workspace = rename_workspace(workspace_id, _uid(),
+                                     (request.get_json(silent=True) or {}).get("name"))
+        return jsonify({"workspace": workspace})
+    except (AuthorizationError, ValidationError) as exc:
+        return _error(exc)
+
+
+@account_bp.route("/workspaces/<workspace_id>/activity", methods=["GET"])
+@login_required
+def workspace_activity(workspace_id):
+    try:
+        return jsonify({"events": list_activity(workspace_id, _uid())})
+    except (AuthorizationError, ValidationError) as exc:
         return _error(exc)
 
 

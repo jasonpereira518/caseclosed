@@ -14,7 +14,7 @@ Process defined in the approved refresh plan: per cycle — present current beha
 | 8 | Matter analysis & chronology | **Done** (2026-08-17) | [08-analysis-chronology.md](08-analysis-chronology.md) |
 | 9 | Drafting | **Done** (2026-08-17) | [09-drafting.md](09-drafting.md) |
 | 10 | Workspace utilities | **Done** (2026-08-18) | [10-workspace-utilities.md](10-workspace-utilities.md) |
-| 11 | Teams & collaboration | Not started | — |
+| 11 | Teams & collaboration | **Done** (2026-08-18) | [11-teams-collaboration.md](11-teams-collaboration.md) |
 | 12 | Account center | Not started | — |
 | 13 | Jobs infrastructure | Not started | — |
 

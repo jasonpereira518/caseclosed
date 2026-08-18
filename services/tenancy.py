@@ -383,6 +383,63 @@ def transfer_ownership(workspace_id: str, actor_uid: str, target_uid: str):
     audit(workspace_id, actor_uid, "workspace.ownership_transferred", {"target_uid": target_uid})
 
 
+def list_invitations(workspace_id: str, actor_uid: str) -> list[dict]:
+    """Pending invitations for the workspace. Token hashes never leave here."""
+    require_workspace(workspace_id, actor_uid, admin=True)
+    rows = []
+    stream = (get_firestore_client().collection(config.FIRESTORE_INVITATIONS_COLLECTION)
+              .where("workspace_id", "==", str(workspace_id)).stream())
+    for snap in stream:
+        data = snap.to_dict() or {}
+        if data.get("status") != "pending":
+            continue
+        rows.append({
+            "invitation_id": snap.id,
+            "email": data.get("email"),
+            "role": data.get("role"),
+            "created_at": data.get("created_at"),
+            "expires_at": data.get("expires_at"),
+        })
+    rows.sort(key=lambda row: str(row.get("created_at") or ""), reverse=True)
+    return rows
+
+
+def rename_workspace(workspace_id: str, actor_uid: str, name: str) -> dict:
+    require_workspace(workspace_id, actor_uid, admin=True)
+    clean_name = (name or "").strip()[:120]
+    if not clean_name:
+        raise ValidationError("workspace name is required")
+    ref = get_firestore_client().collection(config.FIRESTORE_WORKSPACES_COLLECTION).document(str(workspace_id))
+    workspace = ref.get().to_dict() or {}
+    if workspace.get("type") != "team":
+        raise ValidationError("personal workspaces cannot be renamed")
+    ref.set({"name": clean_name, "updated_at": now()}, merge=True)
+    audit(workspace_id, actor_uid, "workspace.renamed",
+          {"from": workspace.get("name"), "to": clean_name})
+    return {"workspace_id": str(workspace_id), "name": clean_name}
+
+
+def list_activity(workspace_id: str, actor_uid: str, limit: int = 50) -> list[dict]:
+    """The latest audit events, newest first — the read side of audit()."""
+    require_workspace(workspace_id, actor_uid, admin=True)
+    stream = (get_firestore_client().collection(config.FIRESTORE_WORKSPACES_COLLECTION)
+              .document(str(workspace_id)).collection("audit_events")
+              .order_by("created_at", direction=gc_firestore.Query.DESCENDING)
+              .limit(int(limit)).stream())
+    events = []
+    for snap in stream:
+        data = snap.to_dict() or {}
+        created = data.get("created_at")
+        events.append({
+            "event": data.get("event"),
+            "actor_uid": data.get("actor_uid"),
+            "matter_id": data.get("matter_id"),
+            "metadata": data.get("metadata") or {},
+            "created_at": created.isoformat() if hasattr(created, "isoformat") else created,
+        })
+    return events
+
+
 def create_invitation(workspace_id: str, actor_uid: str, email: str, role: str) -> tuple[dict, str]:
     require_workspace(workspace_id, actor_uid, admin=True)
     if role not in {"admin", "member"}:

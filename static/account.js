@@ -70,22 +70,58 @@ document.getElementById('workspace-list').addEventListener('click', async event 
   const destroy = event.target.closest('[data-delete-team]');
   if (destroy && confirm('Permanently delete this team and every team matter?')) {
     try { await api(`/api/workspaces/${destroy.dataset.deleteTeam}`, {method: 'DELETE'}); await load(); status('Team deleted.'); }
-    catch (error) { status(error.message, true); }
+    catch (error) { status(error.message, true); } return;
+  }
+  const revoke = event.target.closest('[data-revoke-invitation]');
+  if (revoke) {
+    try { await api(`/api/workspaces/${revoke.dataset.workspaceId}/invitations/${revoke.dataset.revokeInvitation}`, {method: 'DELETE'});
+      await renderTeam(revoke.dataset.workspaceId); status('Invitation revoked.'); }
+    catch (error) { status(error.message, true); } return;
+  }
+  const activity = event.target.closest('[data-load-activity]');
+  if (activity) {
+    const wid = activity.dataset.loadActivity;
+    const activityPanel = document.querySelector(`[data-activity-panel="${wid}"]`);
+    if (!activityPanel) return;
+    activityPanel.hidden = false; activityPanel.textContent = 'Loading activity…';
+    try { const result = await api(`/api/workspaces/${wid}/activity`);
+      activityPanel.innerHTML = (result.events || []).map(item =>
+        `<div class="activity-row"><span class="activity-event">${escapeText(item.event)}</span><span class="activity-meta">${escapeText(item.actor_uid || '')} · ${escapeText(String(item.created_at || '').slice(0, 16))}</span></div>`
+      ).join('') || '<p>No recorded activity.</p>'; }
+    catch (error) { activityPanel.textContent = error.message; }
   }
 });
 document.getElementById('workspace-list').addEventListener('submit', async event => {
-  const form = event.target.closest('[data-invite-form]'); if (!form) return; event.preventDefault(); const wid = form.dataset.inviteForm;
-  try { const result = await api(`/api/workspaces/${wid}/invitations`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(Object.fromEntries(new FormData(form)))});
-    form.reset(); status(result.email_sent ? 'Invitation sent.' : `Invitation created: ${result.invite_url}`); }
-  catch (error) { status(error.message, true); }
+  const inviteForm = event.target.closest('[data-invite-form]');
+  if (inviteForm) { event.preventDefault(); const wid = inviteForm.dataset.inviteForm;
+    try { const result = await api(`/api/workspaces/${wid}/invitations`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(Object.fromEntries(new FormData(inviteForm)))});
+      inviteForm.reset(); status(result.email_sent ? 'Invitation sent.' : `Invitation created: ${result.invite_url}`);
+      await renderTeam(wid); }
+    catch (error) { status(error.message, true); } return;
+  }
+  const renameForm = event.target.closest('[data-rename-form]');
+  if (renameForm) { event.preventDefault(); const wid = renameForm.dataset.renameForm;
+    try { await api(`/api/workspaces/${wid}`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: new FormData(renameForm).get('name')})});
+      status('Team renamed.'); await load(); }
+    catch (error) { status(error.message, true); }
+  }
 });
 async function renderTeam(wid) {
   const panel = document.querySelector(`[data-team-panel="${wid}"]`); panel.textContent = 'Loading members…';
-  try { const [data, matterData] = await Promise.all([api(`/api/workspaces/${wid}/members`), api(`/api/workspaces/${wid}/matters`)]); const workspace = accountData.workspaces.find(w => w.workspace_id === wid);
-    panel.innerHTML = `<div class="team-manager"><h3>Members</h3>${data.members.map(member => `<div class="member-row"><span>${escapeText(member.profile.display_name || member.profile.email || member.uid)}</span>
-      ${member.role === 'owner' ? '<strong>Owner</strong>' : (['owner', 'admin'].includes(workspace.role) ? `<select data-role-select data-workspace-id="${escapeAttr(wid)}" data-user-id="${escapeAttr(member.uid)}"><option value="member" ${member.role === 'member' ? 'selected' : ''}>Member</option><option value="admin" ${member.role === 'admin' ? 'selected' : ''}>Admin</option></select><button class="btn btn--ghost" data-role-save data-workspace-id="${escapeAttr(wid)}" data-user-id="${escapeAttr(member.uid)}">Save</button><button class="btn btn--ghost" data-remove-member data-workspace-id="${escapeAttr(wid)}" data-user-id="${escapeAttr(member.uid)}">Remove</button>${workspace.role === 'owner' ? `<button class="btn btn--ghost" data-transfer-owner data-workspace-id="${escapeAttr(wid)}" data-user-id="${escapeAttr(member.uid)}">Make owner</button>` : ''}` : `<strong>${escapeText(member.role)}</strong>`)}</div>`).join('')}
-      ${['owner', 'admin'].includes(workspace.role) ? `<form data-invite-form="${wid}" class="account-inline"><input type="email" name="email" placeholder="colleague@example.com" required><select name="role"><option value="member">Member</option><option value="admin">Admin</option></select><button class="btn btn--secondary">Invite</button></form>` : ''}
+  try { const workspace = accountData.workspaces.find(w => w.workspace_id === wid);
+    const isAdmin = ['owner', 'admin'].includes(workspace.role);
+    const requests = [api(`/api/workspaces/${wid}/members`), api(`/api/workspaces/${wid}/matters`)];
+    if (isAdmin) requests.push(api(`/api/workspaces/${wid}/invitations`));
+    const [data, matterData, inviteData] = await Promise.all(requests);
+    const pending = (inviteData && inviteData.invitations) || [];
+    panel.innerHTML = `<div class="team-manager">
+      ${isAdmin ? `<form data-rename-form="${escapeAttr(wid)}" class="account-inline"><input type="text" name="name" value="${escapeAttr(workspace.name || '')}" maxlength="120" required><button class="btn btn--ghost">Rename</button></form>` : ''}
+      <h3>Members</h3>${data.members.map(member => `<div class="member-row"><span>${escapeText(member.profile.display_name || member.profile.email || member.uid)}</span>
+      ${member.role === 'owner' ? '<strong>Owner</strong>' : (isAdmin ? `<select data-role-select data-workspace-id="${escapeAttr(wid)}" data-user-id="${escapeAttr(member.uid)}"><option value="member" ${member.role === 'member' ? 'selected' : ''}>Member</option><option value="admin" ${member.role === 'admin' ? 'selected' : ''}>Admin</option></select><button class="btn btn--ghost" data-role-save data-workspace-id="${escapeAttr(wid)}" data-user-id="${escapeAttr(member.uid)}">Save</button><button class="btn btn--ghost" data-remove-member data-workspace-id="${escapeAttr(wid)}" data-user-id="${escapeAttr(member.uid)}">Remove</button>${workspace.role === 'owner' ? `<button class="btn btn--ghost" data-transfer-owner data-workspace-id="${escapeAttr(wid)}" data-user-id="${escapeAttr(member.uid)}">Make owner</button>` : ''}` : `<strong>${escapeText(member.role)}</strong>`)}</div>`).join('')}
+      ${isAdmin ? `<form data-invite-form="${wid}" class="account-inline"><input type="email" name="email" placeholder="colleague@example.com" required><select name="role"><option value="member">Member</option><option value="admin">Admin</option></select><button class="btn btn--secondary">Invite</button></form>` : ''}
+      ${isAdmin && pending.length ? `<h3>Pending invitations</h3>${pending.map(invite => `<div class="member-row"><span>${escapeText(invite.email)} · ${escapeText(invite.role)}</span><button class="btn btn--ghost" data-revoke-invitation="${escapeAttr(invite.invitation_id)}" data-workspace-id="${escapeAttr(wid)}">Revoke</button></div>`).join('')}` : ''}
       <h3>Matter assignments</h3>${matterData.matters.map(matter => `<div class="matter-assignment" data-matter-assignments><strong>${escapeText(matter.title)}</strong><div>${data.members.map(member => `<label><input type="checkbox" value="${escapeAttr(member.uid)}" ${(matter.assigned_user_ids || []).includes(member.uid) ? 'checked' : ''}>${escapeText(member.profile.display_name || member.profile.email || member.uid)}</label>`).join('')}</div><button class="btn btn--ghost" data-save-assignments="${escapeAttr(matter.matter_id)}">Save assignments</button></div>`).join('') || '<p>No matters yet.</p>'}
+      ${isAdmin ? `<h3>Activity</h3><button class="btn btn--ghost" data-load-activity="${escapeAttr(wid)}">Show recent activity</button><div class="team-activity" data-activity-panel="${escapeAttr(wid)}" hidden></div>` : ''}
       ${workspace.role === 'owner' ? `<button class="btn btn--danger" data-delete-team="${wid}">Delete team</button>` : `<button class="btn btn--ghost" data-leave-team="${wid}">Leave team</button>`}</div>`; }
   catch (error) { panel.textContent = error.message; }
 }
