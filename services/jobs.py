@@ -78,12 +78,14 @@ def _claim(ref, build_public):
         timestamp = now()
         if data.get("cancel_requested"):
             patch = {"status": "cancelled", "stage": "cancelled", "updated_at": timestamp,
-                     "finished_at": timestamp}
+                     "finished_at": timestamp,
+                     "expires_at": timestamp + timedelta(days=JOB_TTL_DAYS)}
         else:
             attempts = int(data.get("attempts", 0)) + 1
             if attempts > config.JOB_MAX_ATTEMPTS:
                 patch = {"status": "failed", "stage": "failed", "updated_at": timestamp,
                          "finished_at": timestamp,
+                         "expires_at": timestamp + timedelta(days=JOB_TTL_DAYS),
                          "error": {"code": "attempts_exhausted",
                                    "message": "Job retry limit reached."}}
             else:
@@ -109,6 +111,10 @@ def _update(ref, data: dict, changes: dict) -> dict:
     if patch.get("status") in TERMINAL_STATUSES:
         patch["finished_at"] = now()
         patch["expires_at"] = now() + timedelta(days=JOB_TTL_DAYS)
+    elif patch.get("status") in ("queued", "running"):
+        # A retried job must not carry a stale deletion timestamp from its
+        # previous terminal state.
+        patch["expires_at"] = gc_firestore.DELETE_FIELD
     ref.set(patch, merge=True)
     data.update(patch)
     return data

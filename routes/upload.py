@@ -189,7 +189,11 @@ def retry_document(matter_id, document_id):
                    {"status": "processing", "error": None})
     update_job(matter_id, job_id, status="queued", progress=0, stage="queued",
                error=None, result=None, cancel_requested=False, attempts=0)
-    enqueue_job(matter_id, job_id)
+    # A fresh task suffix is required in cloud mode: Cloud Tasks refuses to
+    # recreate a task under the tombstoned name the original attempt used,
+    # and the transport deliberately swallows that as a dedup. Same pattern
+    # as the generic retry endpoint.
+    enqueue_job(matter_id, job_id, task_suffix=f"manual-{uuid.uuid4().hex[:10]}")
     return jsonify({"job_id": job_id, "document_id": document_id, "status": "queued",
                     "status_url": f"/api/matters/{matter_id}/jobs/{job_id}"}), 202
 

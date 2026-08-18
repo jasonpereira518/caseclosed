@@ -309,6 +309,12 @@ async function handleNewSession() {
 
         const res = await fetch('/contexts/new', { method: 'POST' });
         const data = await res.json();
+        if (!res.ok || !data.context_id) {
+            // Demo blocks creation (403 + its own toast); a server error must
+            // not blank the current matter's panels either way.
+            await loadContext();
+            return;
+        }
         contextId = data.context_id;
         clearPanelsForNewSession();
         await loadSessionHistory();

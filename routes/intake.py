@@ -80,7 +80,11 @@ Description:
     existing_description = str(ctx.get("description") or "")
     updating = INTAKE_START in existing_description
     if updating:
-        ctx["description"] = _INTAKE_BLOCK.sub(block, existing_description, count=1).strip()
+        # Callable replacement: `block` is user-supplied text, and re.sub
+        # would otherwise interpret its backslashes as escape templates
+        # (r"C:\Users" raises re.error: bad escape).
+        ctx["description"] = _INTAKE_BLOCK.sub(lambda _match: block,
+                                               existing_description, count=1).strip()
     else:
         ctx["description"] = (existing_description + "\n\n" + block).strip()
 

@@ -231,16 +231,18 @@
     },
 
     '/case/notes': (body, init) => {
+      // Same field names as routes/notes.py: the client sends `content` and
+      // reads `updated_at` from the response.
       const c = FIXTURE.cases[body.case_index];
       if (c) {
         if ((init.method || 'POST').toUpperCase() === 'DELETE') {
           c.notes = '';
         } else {
-          c.notes = body.notes || '';
+          c.notes = body.content || '';
           c.notes_updated_at = new Date().toISOString();
         }
       }
-      return ok({ status: 'ok', notes_updated_at: c ? c.notes_updated_at : null });
+      return ok({ status: 'ok', updated_at: c ? c.notes_updated_at : null });
     },
 
     '/search': (body) => ok({ results: localSearch(body.query || '') }),

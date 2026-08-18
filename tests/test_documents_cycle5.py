@@ -223,7 +223,11 @@ class DocumentRetryTests(unittest.TestCase):
         update_job.assert_called_once()
         self.assertEqual(update_job.call_args.kwargs.get("status"), "queued")
         self.assertEqual(update_job.call_args.kwargs.get("attempts"), 0)
-        enqueue.assert_called_once_with("matter-1", self.job_id)
+        enqueue.assert_called_once()
+        self.assertEqual(enqueue.call_args.args, ("matter-1", self.job_id))
+        # Cloud Tasks tombstones consumed task names; a retry must use a
+        # fresh suffix or the transport silently drops it as a duplicate.
+        self.assertTrue(enqueue.call_args.kwargs.get("task_suffix", "").startswith("manual-"))
         patch_doc.assert_called_once_with(
             "matter-1", "test-user", "doc-1", {"status": "processing", "error": None})
 

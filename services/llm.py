@@ -307,11 +307,14 @@ def grade_cases_batch(summary: str, cases: list[dict], analysis: dict = None) ->
         f"[{index}] {case.get('title', 'Untitled')}\n{str(case.get('snippet') or '')[:1200]}"
         for index, case in enumerate(cases)
     )
+    # Dimension keys must match grade_case's schema — the UI's score-breakdown
+    # tooltip (RELEVANCE_DIMENSION_ATTRS in script.js) only knows these five.
     prompt = (
         "Score each candidate case's relevance to the matter, 0-100. Return a strict JSON "
         "array with one object per candidate: {\"index\": <int>, \"score\": <int>, "
-        "\"reason\": <short string>, \"dimensions\": {\"factual\": <int>, \"legal\": <int>, "
-        "\"jurisdiction\": <int>, \"recency\": <int>, \"posture\": <int>}}.\n\n"
+        "\"reason\": <short string>, \"dimensions\": {\"factual_similarity\": <int>, "
+        "\"legal_issues_match\": <int>, \"causes_of_action_overlap\": <int>, "
+        "\"jurisdictional_relevance\": <int>, \"practical_utility\": <int>}}.\n\n"
         f"MATTER SUMMARY:\n{summary}\n{context}\nCANDIDATES:\n{listing}"
     )
     response = client.chats.create(model=config.SCORER_MODEL).send_message(prompt)

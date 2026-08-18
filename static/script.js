@@ -240,6 +240,9 @@ function syncTimeToBackend() {
 
 // Sync on page unload
 window.addEventListener('beforeunload', () => {
+    // The demo sandbox promises nothing leaves the page; sendBeacon bypasses
+    // the fetch shim, so skip it there.
+    if (document.querySelector('.app')?.dataset.demo === '1') return;
     if (pendingSecondsToSync > 0 && contextId) {
         // Use sendBeacon for reliable unload-time sending
         const data = JSON.stringify({ context_id: contextId, seconds: pendingSecondsToSync });
@@ -659,7 +662,7 @@ function setupIntakeModal() {
             ? data.key_dates : [{}];
         datesContainer.innerHTML = keyDates.map(d => dateRowHtml(d.date, d.label)).join('');
         document.querySelectorAll('.intake-error').forEach(f => f.classList.remove('intake-error'));
-        const roleGroup = document.querySelector('.intake-radio-group');
+        const roleGroup = document.querySelector('#intake-modal .radio-group');
         if (roleGroup) roleGroup.classList.remove('intake-role-error');
         submitBtn.disabled = false;
         submitBtn.textContent = 'Submit & Analyze';
@@ -694,7 +697,7 @@ function setupIntakeModal() {
              const jur = document.getElementById('intake-jurisdiction');
              const role = document.querySelector('input[name="intake-role"]:checked');
              const desc = document.getElementById('intake-description');
-             const roleRadiosGrp = document.querySelector('.intake-radio-group');
+             const roleRadiosGrp = document.querySelector('#intake-modal .radio-group');
 
              let hasError = false;
              const required = [title, cat, jur, desc];
@@ -1018,6 +1021,15 @@ document.getElementById('doc-manager-close')?.addEventListener('click', () => {
     closeModal('doc-manager-modal');
 });
 
+// Cycle-13 integration pass: these three controls existed in the markup with
+// no listener at all.
+document.getElementById('doc-manager-btn')?.addEventListener('click', openDocManager);
+document.getElementById('sidebar-search')?.addEventListener('click', () => openQuickSwitcher());
+document.getElementById('timeline-add-btn')?.addEventListener('click', () => {
+    const dateInput = document.getElementById('timeline-new-date');
+    if (dateInput) dateInput.focus();
+});
+
 document.getElementById('doc-manager-done')?.addEventListener('click', () => {
     closeModal('doc-manager-modal');
 });
@@ -1031,7 +1043,7 @@ function renderDocList() {
     if (!list) return;
 
     const docs = currentUploadedDocs || [];
-    const loggedInUser = document.querySelector('.workspace-container')?.getAttribute('data-user-name') || '';
+    const loggedInUser = document.querySelector('.app')?.getAttribute('data-user-name') || '';
     const todayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
     // Backfill metadata for any older documents missing it
@@ -1053,10 +1065,10 @@ function renderDocList() {
             <div class="doc-info" style="display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0;">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span class="doc-number" style="color: #9E8E7E; font-size: 13px; font-weight: 500;">${i + 1}.</span>
-                    <span class="doc-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${doc.filename}</span>
+                    <span class="doc-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(doc.filename)}</span>
                     ${statusChip}
                 </div>
-                <span style="font-size: 11px; color: #9E8E7E; margin-left: 20px;">Uploaded by ${doc.uploaded_by} • ${doc.uploaded_at}</span>
+                <span style="font-size: 11px; color: #9E8E7E; margin-left: 20px;">Uploaded by ${escapeHtml(doc.uploaded_by)} • ${escapeHtml(String(doc.uploaded_at))}</span>
                 ${failureReason}
             </div>
             <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
@@ -1245,7 +1257,7 @@ async function handleChatSubmit(e) {
     if (!message) return;
 
     triggerSendIconAnimation();
-    appendMessage('user', message.replace(/\n/g, '<br>'));
+    appendMessage('user', escapeHtml(message).replace(/\n/g, '<br>'));
     chatInput.value = '';
     autoResizeTextarea();
 
@@ -1674,12 +1686,14 @@ function renderChronologyPanel(timeline) {
 
     const events = Array.isArray(timeline) ? timeline : [];
     if (!events.length) {
+        // The empty state still offers the add form — it says you can add
+        // events by hand, so you can.
         el.innerHTML = `
           <div class="empty-state">
             <svg class="empty-state__icon" aria-hidden="true"><use href="#i-chronology"></use></svg>
             <p class="empty-state__title">No chronology yet</p>
             <p class="empty-state__body">Dates found in the record appear here in order. You can add events by hand at any time.</p>
-          </div>`;
+          </div>` + renderTimeline([]);
         return;
     }
     el.innerHTML = renderTimeline(events);
@@ -1872,7 +1886,7 @@ function renderTimeline(events) {
             <div class="timeline-add-event">
                 <input type="text" id="timeline-new-date" placeholder="Date (e.g., Jan 5, 2024)" />
                 <input type="text" id="timeline-new-desc" placeholder="Describe the event..." />
-                <button id="timeline-add-btn" onclick="submitManualTimelineEvent()">+ Add</button>
+                <button type="button" class="timeline-add-submit" onclick="submitManualTimelineEvent()">+ Add</button>
             </div>
         </div>
     `;
@@ -2683,7 +2697,7 @@ function renderCasesList(cases) {
                 </div>
                 ${c.relevance_reason ? `<div class="relevance-reason">${escapeHtml(c.relevance_reason)}</div>` : ''}
                 ${c.snippet ? `<div class="case-snippet">${escapeHtml(c.snippet.substring(0, 200))}...</div>` : ''}
-                ${c.pdf_link && c.pdf_link !== '#' ? `<a href="${c.pdf_link}" target="_blank" class="case-link">View case</a>` : ''}
+                ${/^https?:\/\//i.test(c.pdf_link || '') ? `<a href="${escapeHtml(c.pdf_link)}" target="_blank" rel="noopener noreferrer" class="case-link">View case</a>` : ''}
             </div>
         `;
     });
@@ -2716,7 +2730,8 @@ function bindCaseBookmarks(content) {
             
             // Optimistic UI update
             star.classList.toggle('bookmarked');
-            star.textContent = isBookmarked ? '★' : '☆';
+            const iconUse = star.querySelector('use');
+            if (iconUse) iconUse.setAttribute('href', isBookmarked ? '#i-bookmark-filled' : '#i-bookmark');
             if (currentCases && currentCases[index]) {
                 currentCases[index].bookmarked = isBookmarked;
             }
@@ -2926,6 +2941,8 @@ let _gsActiveIndex = -1;
 let _gsLastQuery = '';
 
 const _GS_MAX_RECENT = 5;
+const _GS_TYPE_MAP = { 'sessions': 'session', 'cases': 'case', 'documents': 'document',
+                       'notes': 'note', 'messages': 'message' };
 let _gsRecent = [];
 
 async function _gsLoadRecent() {
@@ -3066,14 +3083,7 @@ function _globalSearchRenderFiltered() {
 
     let filtered = _gsResults;
     if (_gsActiveFilter !== 'all') {
-        const typeMap = {
-            'sessions': 'session',
-            'cases': 'case',
-            'documents': 'document',
-            'notes': 'note',
-            'messages': 'message'
-        };
-        const t = typeMap[_gsActiveFilter];
+        const t = _GS_TYPE_MAP[_gsActiveFilter];
         if (t) filtered = _gsResults.filter(r => r.type === t);
     }
 
@@ -3177,10 +3187,7 @@ function _globalSearchKeydown(e) {
             e.preventDefault();
             const filtered = _gsActiveFilter === 'all'
                 ? _gsResults
-                : _gsResults.filter(r => {
-                    const typeMap = { 'sessions': 'session', 'cases': 'case', 'notes': 'note', 'messages': 'message' };
-                    return r.type === typeMap[_gsActiveFilter];
-                });
+                : _gsResults.filter(r => r.type === _GS_TYPE_MAP[_gsActiveFilter]);
             _gsOpenResult(filtered[_gsActiveIndex]);
         }
     } else {

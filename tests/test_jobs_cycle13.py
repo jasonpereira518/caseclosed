@@ -26,9 +26,13 @@ class TerminalStampTests(unittest.TestCase):
                 self.assertEqual(data["expires_at"],
                                  moment + datetime.timedelta(days=30))
 
-    def test_running_jobs_do_not_expire(self):
+    def test_running_jobs_clear_any_stale_expiry(self):
+        from google.cloud import firestore as gc_firestore
+
         data, _ = self._update({"status": "running", "progress": 40})
-        self.assertNotIn("expires_at", data)
+        # Non-terminal statuses actively clear the field so a retried job
+        # never carries its previous terminal state's deletion timestamp.
+        self.assertIs(data["expires_at"], gc_firestore.DELETE_FIELD)
 
     def test_expiry_never_leaks_into_the_public_payload(self):
         from services import jobs
