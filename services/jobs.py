@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from datetime import timedelta
 
 import config
 from google.cloud import firestore as gc_firestore
@@ -95,12 +96,19 @@ def _claim(ref, build_public):
     return claim(transaction)
 
 
+# Terminal job records become deletable by a Firestore TTL policy on
+# expires_at (a console toggle, not yet enabled) — the same pattern as the
+# Clerk webhook dedupe records.
+JOB_TTL_DAYS = 30
+
+
 def _update(ref, data: dict, changes: dict) -> dict:
     allowed = {"status", "progress", "stage", "result", "error", "attempts", "cancel_requested"}
     patch = {key: value for key, value in changes.items() if key in allowed}
     patch["updated_at"] = now()
     if patch.get("status") in TERMINAL_STATUSES:
         patch["finished_at"] = now()
+        patch["expires_at"] = now() + timedelta(days=JOB_TTL_DAYS)
     ref.set(patch, merge=True)
     data.update(patch)
     return data

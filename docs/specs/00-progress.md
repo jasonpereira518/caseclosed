@@ -1,5 +1,7 @@
 # Functional Refresh — Cycle Tracker
 
+**COMPLETE (2026-08-18):** all 13 cycles done. Remaining follow-ups live in "Deferred / parked items" below; the visual pass is the natural next project.
+
 Process defined in the approved refresh plan: per cycle — present current behavior → elicit vision → spec → implement → verify. Functionality only; visuals deferred to a later pass.
 
 | # | Cycle | Status | Spec |
@@ -16,7 +18,7 @@ Process defined in the approved refresh plan: per cycle — present current beha
 | 10 | Workspace utilities | **Done** (2026-08-18) | [10-workspace-utilities.md](10-workspace-utilities.md) |
 | 11 | Teams & collaboration | **Done** (2026-08-18) | [11-teams-collaboration.md](11-teams-collaboration.md) |
 | 12 | Account center | **Done** (2026-08-18) | [12-account-center.md](12-account-center.md) |
-| 13 | Jobs infrastructure | Not started | — |
+| 13 | Jobs infrastructure | **Done** (2026-08-18) | [13-jobs-infrastructure.md](13-jobs-infrastructure.md) |
 
 ## Deferred / parked items
 

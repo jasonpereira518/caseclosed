@@ -2,18 +2,24 @@
 // Used by both the workspace (chat/upload/analyze/draft) and account (export)
 // pages, which previously each hand-rolled their own poll loop with a
 // different interval, deadline, and terminal-status vocabulary.
-async function pollJob(statusUrl, { deadlineMs = 95000, intervalMs = 900, onUpdate } = {}) {
+async function pollJob(statusUrl, { deadlineMs = 95000, intervalMs = 900,
+                                    maxIntervalMs = 2500, onUpdate } = {}) {
     if (!statusUrl) throw new Error('The server did not return a job status URL.');
     const deadline = Date.now() + deadlineMs;
+    let interval = intervalMs;
     while (Date.now() < deadline) {
         const res = await fetch(statusUrl, { headers: { 'Accept': 'application/json' } });
         const job = await res.json();
         if (!res.ok) throw new Error(job.error || 'Unable to read job status');
         if (onUpdate) onUpdate(job);
         if (['succeeded', 'failed', 'cancelled'].includes(job.status)) return job;
-        await new Promise(resolve => setTimeout(resolve, intervalMs));
+        await new Promise(resolve => setTimeout(resolve, interval));
+        // Backoff: long jobs don't need sub-second status reads.
+        interval = Math.min(Math.round(interval * 1.25), maxIntervalMs);
     }
-    throw new Error('This request is still running. Check again shortly.');
+    const timeout = new Error('This request is still running. Check again shortly.');
+    timeout.stillRunning = true;
+    throw timeout;
 }
 
 // Job control: cancel a running/queued job, or retry one that failed or was

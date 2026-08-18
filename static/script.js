@@ -1280,7 +1280,30 @@ async function handleChatSubmit(e) {
  *  cancellation), offers a Retry button that re-queues the same job via
  *  POST .../retry and re-enters this same settle loop. */
 async function settleChatJob(statusUrl, loadingElement) {
-    let data = await pollChatJob(statusUrl, loadingElement);
+    let data;
+    try {
+        data = await pollChatJob(statusUrl, loadingElement);
+    } catch (err) {
+        if (!err.stillRunning) throw err;
+        // The job outlived the poll window but hasn't failed — offer to keep
+        // waiting on the same status_url instead of a dead-end message.
+        removeMessage(loadingElement);
+        const waitingMsg = appendMessage('bot',
+            'This is taking longer than usual — the work is still running. '
+            + '<button type="button" class="btn btn--ghost btn--sm chat-wait-btn">Keep waiting</button>');
+        waitingMsg.querySelector('.chat-wait-btn')?.addEventListener('click', async () => {
+            removeMessage(waitingMsg);
+            const waiting = appendLoadingMessage('Still working…');
+            addLoadingCancelControl(waiting, () => cancelJob(statusUrl));
+            try {
+                await settleChatJob(statusUrl, waiting);
+            } catch (waitError) {
+                removeMessage(waiting);
+                appendMessage('bot', escapeHtml(waitError.message || 'Server error.'));
+            }
+        }, { once: true });
+        return;
+    }
     removeMessage(loadingElement);
 
     if (data.status !== 'succeeded') {
@@ -1385,20 +1408,16 @@ async function settleChatJob(statusUrl, loadingElement) {
 }
 
 async function pollChatJob(statusUrl, loadingElement) {
-    try {
-        return await pollJob(statusUrl, {
-            deadlineMs: 95000,
-            onUpdate: job => {
-                const stage = String(job.stage || 'working').replace(/_/g, ' ');
-                updateLoadingText(loadingElement, `${stage} · ${Number(job.progress || 0)}%`);
-            },
-        });
-    } catch (err) {
-        if (err.message === 'This request is still running. Check again shortly.') {
-            throw new Error('This request is still running. Refresh the matter to see its result.');
-        }
-        throw err;
-    }
+    // 180s: a thorough research run (three query rounds + batch grading)
+    // can legitimately outlive the old 95s window. Deadline expiry keeps
+    // its stillRunning marker so settleChatJob can offer "Keep waiting".
+    return await pollJob(statusUrl, {
+        deadlineMs: 180000,
+        onUpdate: job => {
+            const stage = String(job.stage || 'working').replace(/_/g, ' ');
+            updateLoadingText(loadingElement, `${stage} · ${Number(job.progress || 0)}%`);
+        },
+    });
 }
 
 function renderGroundedMessage(data) {
