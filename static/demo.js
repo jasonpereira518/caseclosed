@@ -94,6 +94,10 @@
   function readDemoJob(jobId) {
     const job = demoJobs.get(jobId);
     if (!job) return null;
+    if (job.cancelled) {
+      return { job_id: jobId, matter_id: FIXTURE.context_id, status: 'cancelled',
+               progress: 0, stage: 'cancelled', result: null, error: null };
+    }
     const elapsed = Date.now() - job.createdAt;
     if (elapsed >= job.totalMs) {
       return { job_id: jobId, matter_id: FIXTURE.context_id, status: 'succeeded',
@@ -102,6 +106,15 @@
     const step = stageFor(job.steps, elapsed);
     return { job_id: jobId, matter_id: FIXTURE.context_id, status: 'running',
              progress: step.progress, stage: step.stage, result: null, error: null };
+  }
+
+  /** Honour DELETE on a demo job like routes/jobs.py does: a still-running
+   *  job flips to cancelled and stays there for every later poll. */
+  function cancelDemoJob(jobId) {
+    const job = demoJobs.get(jobId);
+    if (!job) return null;
+    if (Date.now() - job.createdAt < job.totalMs) job.cancelled = true;
+    return readDemoJob(jobId);
   }
 
   function queuedJobResponse(jobId) {
@@ -377,7 +390,8 @@
     // generated per-request, so this can't be a static ROUTES entry.
     const jobMatch = path.match(/^\/demo\/jobs\/(.+)$/);
     if (jobMatch) {
-      const job = readDemoJob(jobMatch[1]);
+      const method = ((opts.method) || 'GET').toUpperCase();
+      const job = method === 'DELETE' ? cancelDemoJob(jobMatch[1]) : readDemoJob(jobMatch[1]);
       return job
         ? ok(job)
         : new Response(JSON.stringify({ error: 'job not found' }),
