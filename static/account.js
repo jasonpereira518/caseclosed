@@ -28,6 +28,10 @@ document.getElementById('profile-form').addEventListener('submit', async event =
   try { accountData.profile = (await api('/api/account', {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)})).profile; status('Profile saved.'); }
   catch (error) { status(error.message, true); }
 });
+document.getElementById('avatar-remove').addEventListener('click', async () => {
+  try { await api('/api/account/avatar', {method: 'DELETE'}); status('Profile photo removed.'); }
+  catch (error) { status(error.message, true); }
+});
 document.getElementById('avatar-form').addEventListener('submit', async event => {
   event.preventDefault(); try { await api('/api/account/avatar', {method: 'POST', body: new FormData(event.currentTarget)}); status('Profile photo saved.'); }
   catch (error) { status(error.message, true); }

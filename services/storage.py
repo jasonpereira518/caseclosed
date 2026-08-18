@@ -55,6 +55,14 @@ def delete_path(storage_path: str):
             blob.delete()
 
 
+def delete_prefix_except(prefix: str, keep_path: str):
+    """Delete every object under prefix except keep_path (latest-only
+    retention for account exports)."""
+    for blob in _bucket().list_blobs(prefix=prefix):
+        if blob.name != keep_path:
+            blob.delete()
+
+
 def delete_prefix(prefix: str):
     for blob in _bucket().list_blobs(prefix=prefix):
         blob.delete()

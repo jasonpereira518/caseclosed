@@ -262,6 +262,21 @@ def delete_matter(matter_id: str, uid: str) -> bool:
     return True
 
 
+def list_time_entries(matter_id: str, uid: str) -> list[dict]:
+    """Logged time entries, oldest first — authorized like every matter read."""
+    _, ref, _ = require_matter(matter_id, uid)
+    entries = []
+    for snap in ref.collection("time_entries").stream():
+        data = snap.to_dict() or {}
+        created = data.get("created_at")
+        entries.append({
+            "seconds": int(data.get("seconds") or 0),
+            "created_at": created.isoformat() if hasattr(created, "isoformat") else created,
+        })
+    entries.sort(key=lambda item: str(item.get("created_at") or ""))
+    return entries
+
+
 def append_time_entry(matter_id: str, uid: str, seconds: int):
     workspace_id, ref, _ = require_matter(matter_id, uid)
     value = max(0, int(seconds))

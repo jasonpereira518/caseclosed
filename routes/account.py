@@ -15,7 +15,7 @@ from services.firestore import get_firestore_client
 from services.mailer import send_workspace_invitation
 from services.jobs import create_account_job, get_account_job, update_account_job
 from services.matters import create_matter, delete_matter, list_matters, patch_matter, require_matter
-from services.storage import delete_prefix, signed_download_url, upload_avatar
+from services.storage import delete_path, delete_prefix, signed_download_url, upload_avatar
 from services.task_queue import enqueue_account_job
 from services.tenancy import (
     AuthorizationError, ValidationError, accept_invitation, active_matter, active_workspace,
@@ -75,6 +75,23 @@ def recent_searches():
         current = current[:5]
         ref.set({"recent_searches": current, "updated_at": now()}, merge=True)
     return jsonify({"recent_searches": current})
+
+
+@account_bp.route("/account/avatar", methods=["DELETE"])
+@login_required
+def remove_avatar():
+    """Back to the default: delete the stored object, clear the field."""
+    ref = get_firestore_client().collection(config.FIRESTORE_USERS_COLLECTION).document(_uid())
+    record = ref.get().to_dict() or {}
+    storage_path = record.get("avatar_storage_path")
+    if storage_path:
+        try:
+            delete_path(storage_path)
+        except Exception:
+            pass  # the field clear below is what makes the avatar gone
+        ref.set({"avatar_storage_path": gc_firestore.DELETE_FIELD,
+                 "updated_at": now()}, merge=True)
+    return jsonify({"profile": get_profile(_uid())})
 
 
 @account_bp.route("/account/avatar", methods=["POST"])

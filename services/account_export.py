@@ -14,8 +14,8 @@ from werkzeug.utils import secure_filename
 
 import config
 from services.firestore import get_firestore_client
-from services.matters import list_matters, load_matter
-from services.storage import download_to_file, upload_file_object
+from services.matters import list_matters, list_time_entries, load_matter
+from services.storage import delete_prefix_except, download_to_file, upload_file_object
 from services.tenancy import get_profile, list_workspaces
 
 
@@ -53,6 +53,11 @@ def run_account_export(uid: str, job_id: str, data: dict) -> dict:
                     bundle.writestr(f"{prefix}/matter.html", html_document)
                     if matter.get("draft"):
                         bundle.writestr(f"{prefix}/draft.txt", str(matter["draft"]))
+                    # Billable records belong in the portable archive.
+                    bundle.writestr(f"{prefix}/time.json", json.dumps({
+                        "total_seconds": int(matter.get("total_seconds") or 0),
+                        "entries": list_time_entries(summary["matter_id"], uid),
+                    }, default=_json_safe, indent=2))
                     for document in matter.get("uploaded_documents") or []:
                         if document.get("storage_path"):
                             filename = secure_filename(
@@ -61,6 +66,13 @@ def run_account_export(uid: str, job_id: str, data: dict) -> dict:
                                 download_to_file(document["storage_path"], destination)
         storage_path = f"users/{uid}/exports/{job_id}.zip"
         upload_file_object(archive, storage_path, "application/zip")
+        # Latest-only retention: the fresh archive supersedes older ones.
+        # Best-effort — a cleanup hiccup must not fail a successful export.
+        try:
+            delete_prefix_except(f"users/{uid}/exports/", storage_path)
+        except Exception:
+            import logging
+            logging.warning("export cleanup failed for %s", uid)
         return {"storage_path": storage_path}
     finally:
         archive.close()
