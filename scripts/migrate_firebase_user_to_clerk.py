@@ -15,7 +15,12 @@ if str(ROOT) not in sys.path:
 from clerk_backend_api import Clerk  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402
 
+import config  # noqa: E402
+
 load_dotenv(ROOT / ".env")
+# .env documents variables it leaves blank; a blank value is not a configured
+# value, and google-auth in particular treats one as a missing credentials file.
+config._drop_blank_env("GOOGLE_APPLICATION_CREDENTIALS")
 
 
 def firebase_password_digest(user: dict, *, signer_key: str, salt_separator: str,

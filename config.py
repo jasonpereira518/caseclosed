@@ -7,6 +7,24 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _drop_blank_env(*names):
+    """Treat a blank environment variable as unset.
+
+    A `.env` line that documents a variable without a value -- e.g.
+    `GOOGLE_APPLICATION_CREDENTIALS=` -- puts an empty string in the
+    environment. google-auth reads that as "an explicit credentials file was
+    configured" and raises `File  was not found.` rather than falling back to
+    Application Default Credentials, which takes every Firestore call down with
+    it, including the user provisioning that finishes Google sign-in.
+    """
+    for name in names:
+        if not (os.environ.get(name) or "").strip():
+            os.environ.pop(name, None)
+
+
+_drop_blank_env("GOOGLE_APPLICATION_CREDENTIALS")
+
 # Flask app settings
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-secret")
 SECRET_KEY = os.getenv("SECRET_KEY", FLASK_SECRET_KEY)

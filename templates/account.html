@@ -1,37 +1,310 @@
 {% extends "base.html" %}
-{% block title %}Account — Case Closed{% endblock %}
+{% block title %}Account center — Case Closed{% endblock %}
 {% block body_attrs %} class="app-body"{% endblock %}
-{% block content %}
-<main class="account-center" id="main">
-  <header class="account-center__header">
-    <div><a href="{{ url_for('main.workspace') }}">← Workspace</a><h1>Account center</h1><p>Manage your profile, workspaces, and information.</p></div>
-    <a href="{{ url_for('auth.logout') }}" data-clerk-sign-out>Sign out</a>
-  </header>
-  <div id="account-status" role="status" aria-live="polite"></div>
-  <section class="account-panel">
-    <h2>Profile</h2>
-    <form id="profile-form" class="account-form">
-      <label>Display name<input name="display_name"></label><label>Job title<input name="job_title"></label>
-      <label>Organization<input name="organization"></label><label>Phone<input name="phone" type="tel"></label>
-      <label>Timezone<input name="timezone" placeholder="America/New_York"></label><label>Bar number<input name="bar_number"></label>
-      <label>Jurisdictions<input name="jurisdictions" placeholder="New York, Federal"></label>
-      <label>Practice areas<input name="practice_areas" placeholder="Civil litigation, Employment"></label>
-      <label><span>Email notifications</span><input name="notification_email" type="checkbox"></label>
-      <label class="account-form__wide">Office address<input name="office_address"></label>
-      <label class="account-form__wide">Bio<textarea name="bio" rows="4"></textarea></label>
-      <button class="btn btn--primary" type="submit">Save profile</button>
-    </form>
-    <form id="avatar-form"><label>Profile photo<input type="file" name="avatar" accept="image/png,image/jpeg,image/webp"></label><button class="btn btn--secondary">Upload</button><button class="btn btn--ghost" type="button" id="avatar-remove">Remove photo</button></form>
-  </section>
-  <section class="account-panel"><h2>Workspaces</h2><div id="workspace-list"></div>
-    <form id="team-form" class="account-inline"><input name="name" placeholder="New team name" required><button class="btn btn--primary">Create team</button></form>
-  </section>
-  <section class="account-panel"><h2>Your information</h2><p>Download your profile and every personal or team matter you can currently access, including original files.</p>
-    <button id="export-account" class="btn btn--secondary">Create portable ZIP</button>
-  </section>
-  <section class="account-panel account-panel--danger"><h2>Delete account</h2><p>Personal matters will be permanently removed. Team records remain with the team. Team ownership must be transferred first.</p>
-    <button id="delete-account" class="btn btn--danger">Delete my account</button>
-  </section>
-</main>
+{% block direction_contract %}
+<!--
+  THESIS: Account settings are part of the workspace, not a document that fell
+  out of it. The page the lawyer manages their practice details in should be
+  built from the same shell they just left.
+  OWN-WORLD: Retained espresso/clay/sand on paper. The workspace shell reused
+  wholesale — sand rail at 260px, 52px caption band, flat surfaces, borders
+  instead of shadows, radii 2-8px, no gradients. Clay marks the active section
+  and nothing else.
+  STORY: A litigator steps out of a matter to correct their bar number or hand
+  a team to a colleague, finds the control without hunting, and returns.
+  FIRST VIEWPORT: Section rail left, one pane right under the caption. Profile
+  is open; the destructive section is a destination, never a scroll depth.
+  FORM: Canon — settings as a vertical tablist, the category standard executed
+  without irony. Seed key 432d4b9c.
+  FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md.
+-->
 {% endblock %}
-{% block page_scripts %}<script src="{{ url_for('static', filename='job-poller.js') }}"></script><script src="{{ url_for('static', filename='account.js') }}"></script>{% endblock %}
+{% block content %}
+<div class="app app--account">
+
+  {# The rail keeps the workspace's width and sand, so the column does not move
+     when you cross from /app to /account. Only what sits beside it changes. #}
+  <aside class="account-nav">
+    <div class="sidebar-brand">
+      <a class="btn btn--ghost btn--sm" href="{{ url_for('main.workspace') }}">
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-chevron-left"></use></svg>
+        <span>Workspace</span>
+      </a>
+    </div>
+    <div class="account-nav__list" role="tablist" aria-orientation="vertical" aria-label="Account sections">
+      <button class="account-nav__item" type="button" role="tab" id="tab-profile"
+              aria-controls="pane-profile" aria-selected="true" tabindex="0">
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-user"></use></svg>
+        <span>Profile</span>
+      </button>
+      <button class="account-nav__item" type="button" role="tab" id="tab-workspaces"
+              aria-controls="pane-workspaces" aria-selected="false" tabindex="-1">
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-briefcase"></use></svg>
+        <span>Workspaces</span>
+      </button>
+      <button class="account-nav__item" type="button" role="tab" id="tab-data"
+              aria-controls="pane-data" aria-selected="false" tabindex="-1">
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-download"></use></svg>
+        <span>Your data</span>
+      </button>
+      <button class="account-nav__item" type="button" role="tab" id="tab-danger"
+              aria-controls="pane-danger" aria-selected="false" tabindex="-1">
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-trash"></use></svg>
+        <span>Delete account</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main" id="main">
+    <header class="matter-bar">
+      <div class="matter-identity">
+        <h1 class="matter-title">Account center</h1>
+        <p class="matter-meta">{{ user_name or user_email or 'Signed in' }}{% if user_name and user_email %} · {{ user_email }}{% endif %}</p>
+      </div>
+      <div class="matter-status">
+        <a class="btn btn--ghost btn--sm" href="{{ url_for('auth.logout') }}" data-clerk-sign-out>Sign out</a>
+      </div>
+    </header>
+
+    <div class="account-content">
+
+      {# ------------------------------------------------------------ Profile #}
+      <div class="panel-tab-content active" id="pane-profile" role="tabpanel" aria-labelledby="tab-profile" tabindex="0">
+        <form id="profile-form" novalidate>
+
+          <div class="panel-section">
+            <div class="panel-section-head">
+              <h2 class="section-title">Profile</h2>
+              <button class="btn btn--primary btn--sm" type="submit" data-busy-label="Saving…">
+                <span data-label>Save changes</span>
+              </button>
+            </div>
+
+            <div class="account-card">
+              <div class="account-identity">
+                <img class="account-avatar account-avatar--lg" id="avatar-image" alt=""
+                     width="64" height="64" referrerpolicy="no-referrer"
+                     src="{{ user_profile_pic or '' }}"{% if not user_profile_pic %} hidden{% endif %}>
+                <span class="account-avatar account-avatar--fallback account-avatar--lg" id="avatar-fallback"
+                      aria-hidden="true"{% if user_profile_pic %} hidden{% endif %}>
+                  <svg class="icon icon-lg"><use href="#i-user"></use></svg>
+                </span>
+                <div class="matter-identity">
+                  <p class="matter-title" id="identity-name">{{ user_name or user_email or 'Your account' }}</p>
+                  <p class="matter-meta" id="identity-email">{{ user_email or '' }}</p>
+                </div>
+                <div class="account-form-row">
+                  <input type="file" id="avatar-input" name="avatar" class="sr-only"
+                         accept="image/jpeg,image/png,image/webp">
+                  <button class="btn btn--secondary btn--sm" type="button" id="avatar-upload"
+                          data-busy-label="Uploading…"><span data-label>Change photo</span></button>
+                  <button class="btn btn--ghost btn--sm" type="button" id="avatar-remove"
+                          data-busy-label="Removing…" hidden><span data-label>Remove</span></button>
+                </div>
+              </div>
+              <p class="field-hint" id="avatar-hint">JPEG, PNG or WebP, up to 5&nbsp;MB.</p>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="panel-section-head"><h3 class="section-title">Identity</h3></div>
+            <div class="field-row">
+              <div class="field">
+                <label class="field-label" for="f-display-name">Display name</label>
+                <input class="input" id="f-display-name" name="display_name" type="text" autocomplete="name">
+              </div>
+              <div class="field">
+                <label class="field-label" for="f-job-title">Job title</label>
+                <input class="input" id="f-job-title" name="job_title" type="text" autocomplete="organization-title">
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label" for="f-organization">Organization</label>
+              <input class="input" id="f-organization" name="organization" type="text" autocomplete="organization">
+            </div>
+            <div class="field">
+              <label class="field-label" for="f-bio">Bio <span class="optional">optional</span></label>
+              <textarea class="input" id="f-bio" name="bio" rows="4"></textarea>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="panel-section-head"><h3 class="section-title">Practice</h3></div>
+            <div class="field">
+              <label class="field-label" for="f-bar-number">Bar number</label>
+              <input class="input" id="f-bar-number" name="bar_number" type="text">
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label class="field-label" for="f-jurisdictions">Jurisdictions</label>
+                <input class="input" id="f-jurisdictions" name="jurisdictions" type="text"
+                       placeholder="New York, Federal" aria-describedby="f-jurisdictions-hint">
+                <p class="field-hint" id="f-jurisdictions-hint">Separate with commas.</p>
+              </div>
+              <div class="field">
+                <label class="field-label" for="f-practice-areas">Practice areas</label>
+                <input class="input" id="f-practice-areas" name="practice_areas" type="text"
+                       placeholder="Civil litigation, Employment" aria-describedby="f-practice-areas-hint">
+                <p class="field-hint" id="f-practice-areas-hint">Separate with commas.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="panel-section-head"><h3 class="section-title">Contact &amp; preferences</h3></div>
+            <div class="field-row">
+              <div class="field">
+                <label class="field-label" for="f-phone">Phone</label>
+                <input class="input" id="f-phone" name="phone" type="tel" autocomplete="tel">
+              </div>
+              <div class="field">
+                <label class="field-label" for="f-timezone">Timezone</label>
+                <input class="input" id="f-timezone" name="timezone" type="text" placeholder="America/New_York">
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label" for="f-office-address">Office address</label>
+              <input class="input" id="f-office-address" name="office_address" type="text" autocomplete="street-address">
+            </div>
+            <div class="field field--inline">
+              <label class="modern-toggle" for="f-notification-email">
+                <input type="checkbox" id="f-notification-email" name="notification_email">
+                <span class="toggle-slider"></span>
+              </label>
+              <label class="field-label" for="f-notification-email">Email me about invitations and completed exports</label>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      {# --------------------------------------------------------- Workspaces #}
+      <div class="panel-tab-content" id="pane-workspaces" role="tabpanel" aria-labelledby="tab-workspaces" tabindex="0" hidden>
+        <div class="panel-section">
+          <div class="panel-section-head">
+            <h2 class="section-title">Your workspaces</h2>
+            <button class="btn btn--ghost btn--sm" type="button" id="create-team-btn">
+              <svg class="icon icon-sm" aria-hidden="true"><use href="#i-plus"></use></svg>
+              <span>Create team</span>
+            </button>
+          </div>
+          <div id="workspace-list">
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+          </div>
+        </div>
+      </div>
+
+      {# ---------------------------------------------------------- Your data #}
+      <div class="panel-tab-content" id="pane-data" role="tabpanel" aria-labelledby="tab-data" tabindex="0" hidden>
+        <div class="panel-section">
+          <div class="panel-section-head"><h2 class="section-title">Your data</h2></div>
+          <div class="account-card">
+            <p class="account-card__title">Portable archive</p>
+            <p class="account-card__body">A ZIP of your profile and every personal or team matter you
+              can currently access, including original files and recorded time.</p>
+            <p class="field-hint">Only your most recent archive is kept. Creating a new one replaces the last.</p>
+            <div class="account-form-row account-card__actions">
+              <button class="btn btn--secondary" type="button" id="export-account" data-busy-label="Building…">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-download"></use></svg>
+                <span data-label>Create portable ZIP</span>
+              </button>
+              <p class="field-hint" id="export-progress" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# -------------------------------------------------------- Danger zone #}
+      <div class="panel-tab-content" id="pane-danger" role="tabpanel" aria-labelledby="tab-danger" tabindex="0" hidden>
+        <div class="panel-section">
+          <div class="panel-section-head"><h2 class="section-title">Delete account</h2></div>
+          <div class="account-card account-card--danger">
+            <p class="account-card__title">Permanently delete your account</p>
+            <p class="account-card__body">Your profile and personal matters are removed for good,
+              including their files. Records in a team stay with the team. Teams you own must be
+              transferred or deleted first.</p>
+            <div id="delete-blockers" hidden></div>
+            <div class="account-form-row account-card__actions">
+              <button class="btn btn--danger" type="button" id="delete-account">Delete my account</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  {# ------------------------------------------------------------------ dialogs #}
+  <div class="modal" id="create-team-modal" hidden role="dialog" aria-modal="true" aria-labelledby="create-team-title">
+    <div class="modal__panel modal__panel--sm">
+      <div class="modal__head">
+        <h2 class="modal__title" id="create-team-title">Create a team</h2>
+        <button class="icon-btn modal__close" type="button" data-close-modal="create-team-modal" aria-label="Close">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-close"></use></svg>
+        </button>
+      </div>
+      <form id="team-form">
+        <div class="modal__body">
+          <p class="modal__hint">A team workspace shares its matters with the colleagues you invite.</p>
+          <div class="field">
+            <label class="field-label" for="team-name">Team name</label>
+            <input class="input" id="team-name" name="name" type="text" maxlength="120" required data-autofocus>
+          </div>
+        </div>
+        <div class="modal__foot">
+          <button class="btn btn--secondary" type="button" data-close-modal="create-team-modal">Cancel</button>
+          <button class="btn btn--primary" type="submit" data-busy-label="Creating…"><span data-label>Create team</span></button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# One dialog serves remove member / transfer ownership / leave team /
+     delete team. account.js fills the title, body and confirm label. #}
+  <div class="modal" id="confirm-modal" hidden role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+    <div class="modal__panel modal__panel--sm">
+      <div class="modal__head">
+        <h2 class="modal__title" id="confirm-modal-title">Confirm</h2>
+        <button class="icon-btn modal__close" type="button" data-close-modal="confirm-modal" aria-label="Close">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-close"></use></svg>
+        </button>
+      </div>
+      <div class="modal__body"><p id="confirm-modal-body"></p></div>
+      <div class="modal__foot">
+        <button class="btn btn--secondary" type="button" data-close-modal="confirm-modal">Cancel</button>
+        <button class="btn btn--danger" type="button" id="confirm-accept" data-busy-label="Working…">
+          <span data-label>Confirm</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="delete-account-modal" hidden role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
+    <div class="modal__panel modal__panel--sm">
+      <div class="modal__head">
+        <h2 class="modal__title" id="delete-account-title">Delete your account</h2>
+        <button class="icon-btn modal__close" type="button" data-close-modal="delete-account-modal" aria-label="Close">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-close"></use></svg>
+        </button>
+      </div>
+      <div class="modal__body">
+        <p>This removes your profile, your personal matters, and every file in them. It cannot be undone.</p>
+        <div class="field account-card__actions">
+          <label class="field-label" for="delete-confirmation">Type <strong>DELETE</strong> to confirm</label>
+          <input class="input" id="delete-confirmation" type="text" autocomplete="off" data-autofocus>
+        </div>
+      </div>
+      <div class="modal__foot">
+        <button class="btn btn--secondary" type="button" data-close-modal="delete-account-modal">Cancel</button>
+        <button class="btn btn--danger" type="button" id="delete-account-confirm" disabled
+                data-busy-label="Deleting…"><span data-label>Delete my account</span></button>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='job-poller.js') }}"></script>
+<script src="{{ url_for('static', filename='account.js') }}"></script>
+{% endblock %}

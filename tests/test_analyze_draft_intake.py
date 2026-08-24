@@ -145,6 +145,10 @@ class ChatOrchestratorResearchAnswerTests(unittest.TestCase):
     @patch("services.chat_orchestrator.extract_case_strength", return_value={"score": 2})
     @patch("services.chat_orchestrator.extract_timeline", return_value=[])
     @patch("services.chat_orchestrator.rerank_cases")
+    # _grade_round grades in one batched call and only falls back to grade_case
+    # when that raises. Patch both, or the batch path reaches Gemini for real.
+    @patch("services.chat_orchestrator.grade_cases_batch",
+           return_value=[{"score": 20, "reason": "on point"}])
     @patch("services.chat_orchestrator.grade_case", return_value={"score": 20, "reason": "on point"})
     @patch("services.chat_orchestrator.query_courtlistener",
            return_value=[{"title": "Doe v. Roe", "citation": "1 F.3d 1", "pdf_link": "x"}])
@@ -156,7 +160,8 @@ class ChatOrchestratorResearchAnswerTests(unittest.TestCase):
     @patch("services.chat_orchestrator.cancellation_requested", return_value=False)
     def test_research_returns_graded_case_results(
             self, cancellation, update_job, needs_more, analysis, summary, query,
-            courtlistener, grade, rerank, timeline, strength, retrieve, patch_matter, replace_records):
+            courtlistener, grade, grade_batch, rerank, timeline, strength, retrieve,
+            patch_matter, replace_records):
         from services.chat_orchestrator import _research
         matter = {"description": "Original facts.", "clarify_attempts": 0}
         result = _research("matter-1", "job-1", "user-1", "more facts", matter)

@@ -48,6 +48,14 @@ a:hover { color: var(--accent-active); }
 
 button { font: inherit; color: inherit; }
 
+/* The [hidden] attribute must win over a component's own `display`.
+   The UA rule is only `[hidden] { display: none }`, so every class that sets
+   display — .btn, .modal, .drop-zone, .account-avatar--fallback — silently
+   defeats it, and `el.hidden = true` stops hiding anything. This is the one
+   place in the file where !important is correct: the attribute is a state
+   declaration and outranks any component's layout. */
+[hidden] { display: none !important; }
+
 .skip-link {
   position: absolute;
   left: var(--space-3);
@@ -108,6 +116,9 @@ button { font: inherit; color: inherit; }
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
+  /* .btn is used on <a> as well as <button>; without this the global anchor
+     underline makes those read as links rather than controls. */
+  text-decoration: none;
   transition: background var(--transition-base), border-color var(--transition-base),
               color var(--transition-base);
 }
@@ -196,6 +207,12 @@ textarea.input { resize: vertical; line-height: var(--leading-normal); }
   background-position: right var(--space-2) center;
   background-size: 1rem;
   cursor: pointer;
+}
+
+.field-hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: var(--leading-normal);
 }
 
 .radio-group { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); }
@@ -559,7 +576,7 @@ input[type="checkbox"] { accent-color: var(--accent-active); }
   transition: background var(--transition-base), color var(--transition-base);
 }
 .toolbar-btn:hover { background: var(--surface-hover); color: var(--text-strong); }
-.toolbar-btn.is-loading { opacity: .6; pointer-events: none; }
+.is-loading { opacity: .6; pointer-events: none; }
 
 .chat-box {
   flex: 1; min-height: 0;
@@ -1069,7 +1086,6 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
   background: rgba(253, 252, 250, .94);
   border: 2px dashed var(--accent);
 }
-.drop-zone[hidden] { display: none; }
 .drop-zone__inner { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); }
 .drop-zone__icon { width: 2.5rem; height: 2.5rem; color: var(--accent); }
 .drop-zone__title { font-size: var(--text-lg); font-weight: var(--weight-semibold); color: var(--text-strong); }
@@ -1086,7 +1102,6 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
   padding: var(--space-5);
   background: rgba(58, 42, 26, .38);
 }
-.modal[hidden] { display: none; }
 .modal--top { align-items: flex-start; padding-top: 12vh; }
 
 .modal__panel {
@@ -1555,9 +1570,6 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 .auth-google-button:disabled { color: var(--text-muted); cursor: wait; }
 .auth-google-button__mark { width: 1.125rem; height: 1.125rem; }
 .auth-google-button__spinner { color: var(--text-muted); animation: auth-spin var(--duration-slow) linear infinite; }
-/* Browsers don't reliably apply the UA [hidden] { display: none } rule to
-   SVG elements, so state it explicitly for this one rather than relying on it. */
-.auth-google-button__spinner[hidden] { display: none; }
 
 .auth-callback-spinner {
   width: 1.5rem;
@@ -1631,29 +1643,149 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
   .auth-access-panel h2 { font-size: var(--text-2xl); }
 }
 
-/* Account center */
-#account-status.error { color: var(--negative); }
-.account-center { width: min(var(--page-max), calc(100% - 32px)); margin: 0 auto; padding: 40px 0 80px; }
-.account-center__header, .workspace-row, .account-inline { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.account-panel { background: var(--surface); border: 1px solid var(--border); padding: 24px; margin-top: 20px; border-radius: 8px; }
-.account-form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.account-form label, .account-panel label { display: grid; gap: 6px; font-weight: 600; }
-.account-form input, .account-form textarea, .account-inline input { width: 100%; padding: 10px; border: 1px solid var(--border-control); border-radius: 4px; }
-.account-form input[type="checkbox"] { width: 1rem; height: 1rem; padding: 0; border: 0; }
-.account-form label:has(input[type="checkbox"]) { grid-auto-flow: column; justify-content: start; align-items: center; gap: 8px; }
-.account-form__wide { grid-column: 1 / -1; }
-.workspace-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
-.workspace-entry { border-bottom: 1px solid var(--border); }
-.workspace-entry .workspace-row { border-bottom: 0; }
-.workspace-row span { display: block; color: var(--text-muted); font-size: .875rem; }
-.team-manager { padding: 0 0 18px 18px; display: grid; gap: 10px; }
-.member-row { display: flex; align-items: center; gap: 8px; }
-.member-row span { margin-right: auto; }
-.matter-assignment { padding: 12px; border: 1px solid var(--border); border-radius: 4px; }
-.matter-assignment > div { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 8px 0; }
-.matter-assignment label { display: flex; grid-auto-flow: column; align-items: center; gap: 6px; font-weight: 400; }
-.account-panel--danger { border-color: var(--negative-border); }
-@media (max-width: 640px) { .account-form { grid-template-columns: 1fr; } .account-form__wide { grid-column: auto; } }
+/* ============================================================================
+   Account centre
+
+   Borrows the application shell wholesale rather than inventing a settings
+   layout: .app for the grid, .main for the right column, .sidebar-brand for the
+   52px rail head, .matter-bar for the caption, .panel-tab-content for pane
+   switching, .time-report-row for every divided list. Crossing /app -> /account
+   should move the sand column and the 52px band not at all; only what sits
+   inside them changes.
+
+   What is genuinely local: the sub-nav rail, the reading column, a neutral
+   card, and two form recipes the workspace has no use for. .case-item is NOT
+   reused here — app.css:1393 redefines it as a grid keyed to .case-star and
+   .treatment-placeholder, so borrowing it would mean undoing those rules.
+   ========================================================================== */
+
+/* The rail. Same width and sand as the workspace history rail. */
+.account-nav {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-muted);
+  border-right: 1px solid var(--border);
+}
+.account-nav__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-2);
+  overflow-y: auto;
+}
+
+/* Mirrors .session-item, which is how this product already draws a selected
+   row in a sand rail. State is read off aria-selected rather than a parallel
+   .active class, so the accessible state and the visible state cannot drift. */
+.account-nav__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-base), color var(--transition-base),
+              border-color var(--transition-base);
+}
+.account-nav__item:hover { background: var(--surface-hover); color: var(--text-strong); }
+.account-nav__item[aria-selected="true"] {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text-strong);
+}
+.account-nav__item .icon { flex: none; color: var(--icon-decorative); }
+/* Clay marks the active state — an indicator, never carrying meaning alone:
+   the label and aria-selected both say the same thing. */
+.account-nav__item[aria-selected="true"] .icon { color: var(--accent); }
+
+/* The only region on the page that scrolls. */
+.account-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--surface-page);
+}
+.account-content > .panel-tab-content { max-width: 56rem; padding-bottom: var(--space-9); }
+
+/* A neutral card on the documented recipe: surface, one border, no shadow. */
+.account-card {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.account-card + .account-card { margin-top: var(--space-2); }
+.account-card--danger { border-color: var(--negative-border); }
+.account-card__title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+.account-card__body {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+  max-width: var(--measure);
+}
+
+.account-card__body + .field-hint { margin-top: var(--space-2); }
+.account-card__actions { margin-top: var(--space-4); }
+
+/* Avatar, name and the two photo controls on one row. */
+.account-identity { display: flex; align-items: center; gap: var(--space-4); }
+.account-identity > .matter-identity { flex: 1; min-width: 0; }
+.account-avatar--lg { width: 4rem; height: 4rem; }
+
+/* One-line control rows: rename, invite, export, card footers. Replaces
+   .account-inline, which inherited justify-content: space-between from a
+   three-selector rule and pushed every input away from its own button. */
+.account-form-row { display: flex; align-items: flex-end; flex-wrap: wrap; gap: var(--space-2); }
+.account-form-row > .field { flex: 1; min-width: 12rem; margin-bottom: 0; }
+.account-form-row > .matter-identity { flex: 1; min-width: 0; }
+.account-form-row > .select { flex: none; width: auto; min-width: 7.5rem; }
+
+/* The team manager, opened inside a workspace card. Divided from the card
+   head by a rule rather than nested in a second card. */
+.account-team {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+.account-team > * + .panel-section-head { margin-top: var(--space-5); }
+
+@media (max-width: 1024px) {
+  /* The rail becomes a scrolling strip. No off-canvas drawer: there is no
+     history rail to hide here, and these four sections are the whole page. */
+  .app--account { grid-template-rows: auto minmax(0, 1fr); }
+  /* .matter-bar insets itself at this width to clear .sidebar-toggle, which
+     this page does not have; without this the caption gets a 60px hole. */
+  .app--account .matter-bar { padding-left: var(--space-5); }
+  .account-nav { flex-direction: row; align-items: stretch; border-right: 0; border-bottom: 1px solid var(--border); }
+  .account-nav .sidebar-brand {
+    height: auto;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 0;
+    border-right: 1px solid var(--border);
+  }
+  .account-nav__list { flex-direction: row; overflow-x: auto; scrollbar-width: none; padding: var(--space-2); }
+  .account-nav__list::-webkit-scrollbar { display: none; }
+  .account-nav__item { flex: none; width: auto; white-space: nowrap; }
+}
+
+@media (max-width: 768px) {
+  .account-identity { flex-wrap: wrap; }
+  .account-content > .panel-tab-content { padding-bottom: var(--space-7); }
+}
 
 /* ------------------------------------------------------------------ */
 /* Cycle 1 additions: demo sandbox + access gate surfaces. Functional  */
@@ -1706,7 +1838,3 @@ p.empty-state { display: block; padding: var(--space-8) 0; font-size: var(--text
 .badge-document { background: var(--surface-muted); }
 .gs-archived-chip, .time-report-archived { font-size: 10px; padding: 1px 6px; margin-left: 6px; border: 1px solid var(--border); border-radius: 999px; color: #6f5d52; vertical-align: middle; }
 
-/* Cycle 11: team activity + pending invitations (functional). */
-.team-activity { margin: 8px 0; }
-.activity-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
-.activity-meta { color: #6f5d52; font-size: 12px; white-space: nowrap; }

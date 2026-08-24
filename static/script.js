@@ -1,97 +1,10 @@
 // Global State Management
 // Keep these in sync with the backend state model
-
-function showToast(message, type = 'success') {
-    const region = document.getElementById('toast-region') || document.body;
-    const existing = document.getElementById('app-toast');
-    if (existing) existing.remove();
-
-    const toast = document.createElement('div');
-    toast.id = 'app-toast';
-    toast.className = `app-toast app-toast-${type}`;
-    toast.textContent = message;
-    region.appendChild(toast);
-
-    requestAnimationFrame(() => toast.classList.add('visible'));
-
-    setTimeout(() => {
-        toast.classList.remove('visible');
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
-}
-
-/* ===========================================================================
-   Modal controller
-
-   Every dialog previously toggled its own inline style.display and had no
-   focus management at all: no trap, no Esc, no scroll lock, no focus
-   restore. One controller now owns all six.
-   ========================================================================= */
-
-const FOCUSABLE = [
-    'a[href]', 'button:not([disabled])', 'input:not([disabled])',
-    'select:not([disabled])', 'textarea:not([disabled])', '[tabindex]:not([tabindex="-1"])'
-].join(',');
-
-let _modalStack = [];
-
-function _resolveModal(ref) {
-    return typeof ref === 'string' ? document.getElementById(ref) : ref;
-}
-
-function openModal(ref) {
-    const el = _resolveModal(ref);
-    if (!el || _modalStack.includes(el)) return;
-
-    el._returnFocus = document.activeElement;
-    el.hidden = false;
-    _modalStack.push(el);
-    document.body.style.overflow = 'hidden';
-
-    const first = el.querySelector('[data-autofocus]') || el.querySelector(FOCUSABLE);
-    if (first) requestAnimationFrame(() => first.focus());
-}
-
-function closeModal(ref) {
-    const el = _resolveModal(ref);
-    if (!el || el.hidden) return;
-
-    el.hidden = true;
-    _modalStack = _modalStack.filter(m => m !== el);
-    if (!_modalStack.length) document.body.style.overflow = '';
-
-    const back = el._returnFocus;
-    if (back && document.contains(back)) back.focus();
-    el._returnFocus = null;
-}
-
-function topModal() {
-    return _modalStack[_modalStack.length - 1] || null;
-}
-
-// Focus trap + click-outside-to-dismiss, bound once.
-document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Tab') return;
-    const modal = topModal();
-    if (!modal) return;
-
-    const items = [...modal.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null);
-    if (!items.length) return;
-    const first = items[0];
-    const last = items[items.length - 1];
-
-    if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault(); last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault(); first.focus();
-    }
-}, true);
-
-document.addEventListener('mousedown', (e) => {
-    const modal = topModal();
-    // A click on the scrim itself, never on the panel inside it.
-    if (modal && e.target === modal) closeModal(modal);
-});
+//
+// showToast, the modal controller (openModal/closeModal/topModal) and
+// escapeHtml now live in static/ui.js, which base.html loads on every page.
+// Do not re-declare them here: two top-level declarations of FOCUSABLE or
+// _modalStack on one page is a SyntaxError that kills this whole file.
 
 // Redirect to login on 401 (session expired / not authenticated)
 (function () {
@@ -1110,10 +1023,6 @@ async function retryDocumentIngest(documentId) {
     } catch (err) {
         showToast(err.message || 'Unable to retry this document', 'error');
     }
-}
-
-function escapeHtml(unsafe) {
-    return (unsafe || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 let floatingDocTooltip = null;
@@ -3272,14 +3181,11 @@ document.addEventListener('keydown', (e) => {
     
     // Esc — close modals/sidebar (always works)
     if (e.key === 'Escape') {
-        // Close any visible modal
-        const modals = document.querySelectorAll('.modal');
-        let modalClosed = false;
-        modals.forEach(m => {
-            if (!m.hidden) { closeModal(m); modalClosed = true; }
-        });
-        if (modalClosed) return;
-        
+        // Dialog dismissal belongs to the modal controller in ui.js, which
+        // binds its own Esc handler and owns the stack. Bail out here so a
+        // dialog-closing Esc does not also collapse the sidebar behind it.
+        if (topModal()) return;
+
         // Close sidebar if open
         if (!document.body.classList.contains('sidebar-collapsed')) {
             document.body.classList.add('sidebar-collapsed');

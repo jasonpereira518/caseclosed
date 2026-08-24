@@ -1,7 +1,11 @@
 """Clerk request authentication and Firestore identity synchronization."""
 from __future__ import annotations
 
+import base64
+import json
 import logging
+from collections.abc import Mapping
+from types import SimpleNamespace
 from typing import Any
 
 from clerk_backend_api import Clerk
@@ -27,6 +31,51 @@ def get_clerk_client() -> Clerk:
     return _client
 
 
+def _token_issuer(token: Any) -> str:
+    """Read a session token's unverified `iss` claim.
+
+    Used only to pick which token to present; the Clerk SDK still performs the
+    real signature check on whatever it is handed.
+    """
+    if not isinstance(token, str):
+        return ""
+    try:
+        segment = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4)))
+        return str(claims.get("iss") or "").rstrip("/")
+    except (IndexError, ValueError, TypeError, UnicodeDecodeError):
+        return ""
+
+
+def _scoped_request(flask_request):
+    """Present only the session token our own Clerk instance issued.
+
+    Cookies ignore port, so any other Clerk app served from the same host --
+    the `clerk-nextjs/` scaffold on :3000, a satellite domain -- leaves its own
+    `__session_<suffix>` cookie on our origin. The SDK's `_get_session_token`
+    returns the first cookie whose name starts with `__session`, so a foreign
+    token can shadow ours; verifying it against our JWKS then fails with
+    JWK_KID_MISMATCH and every request looks signed out, which strands signed-in
+    users on the login page. Select by issuer and hand the token over
+    explicitly, which the SDK reads before it looks at any cookie.
+    """
+    cookies = getattr(flask_request, "cookies", None)
+    if not isinstance(cookies, Mapping):
+        return flask_request
+    # An explicit bearer token still wins, exactly as it does inside the SDK.
+    if (flask_request.headers.get("Authorization") or "").strip():
+        return flask_request
+    issuer = (config.CLERK_FRONTEND_API_URL or "").rstrip("/")
+    ours = next(
+        (value for name, value in cookies.items()
+         if name.startswith("__session") and issuer and _token_issuer(value) == issuer),
+        None,
+    )
+    if ours is None:
+        return flask_request
+    return SimpleNamespace(headers={"Authorization": f"Bearer {ours}"})
+
+
 def authenticate_clerk_request(flask_request):
     """Return the local Flask-Login user represented by a Clerk session."""
     if not config.CLERK_SECRET_KEY:
@@ -37,7 +86,7 @@ def authenticate_clerk_request(flask_request):
         authorized_parties=config.CLERK_AUTHORIZED_PARTIES,
         accepts_token=["session_token"],
     )
-    state = verify_clerk_request(flask_request, options)
+    state = verify_clerk_request(_scoped_request(flask_request), options)
     if not state.is_authenticated:
         reason = getattr(state.reason, "name", None) or str(state.reason or "unknown")
         logging.info("Clerk session authentication failed: %s", reason)

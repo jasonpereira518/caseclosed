@@ -42,6 +42,11 @@
     <script defer crossorigin="anonymous" data-clerk-publishable-key="{{ clerk_publishable_key }}" src="{{ clerk_frontend_api_url }}/npm/@clerk/clerk-js@6/dist/clerk.browser.js"></script>
     <script defer src="{{ url_for('static', filename='clerk.js') }}"></script>
     {% endif %}
+    {# Shared UI primitives (toasts, the modal controller, escapeHtml) for every
+       page. Not deferred and outside page_scripts, so it is always in place
+       before any page script runs. See static/ui.js for why these cannot simply
+       live in script.js. #}
+    <script src="{{ url_for('static', filename='ui.js') }}"></script>
     {% block page_scripts %}
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     {% endblock %}

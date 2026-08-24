@@ -24,6 +24,13 @@
     else spinner.setAttribute('hidden', '');
   }
 
+  // Clerk refuses to start a new OAuth redirect while the browser already holds
+  // an active session. That means the visitor is signed in and only the
+  // server-side view of them is stale -- nothing to do with Google.
+  function hasActiveSession(error) {
+    return ((error && error.errors) || []).some(item => item && item.code === 'session_exists');
+  }
+
   window.caseClosedClerkReady
     .then(clerk => {
       setLoading(false, 'Continue with Google');
@@ -37,6 +44,10 @@
             redirectUrlComplete: completeUrl,
           });
         } catch (error) {
+          if (hasActiveSession(error)) {
+            window.location.assign(completeUrl);
+            return;
+          }
           report('We could not connect to Google. Please try again.', true);
           setLoading(false, 'Continue with Google');
         }

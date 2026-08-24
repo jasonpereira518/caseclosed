@@ -120,12 +120,59 @@ feature accretion left behind rather than a decision. Case law and statutes
 share the Authority panel because they answer the same question and were split
 only because they were built in different weeks.
 
+## Account centre
+
+`/account` reuses the application shell rather than presenting itself as a
+document: `.app` for the grid, `.sidebar-brand` for the 52px rail head,
+`.matter-bar` for the caption, `.panel-tab-content` for pane switching. The sand
+rail and the 52px band therefore do not move when you cross from `/app`, which
+is the point — settings are part of the workspace, not a page that fell out of
+it.
+
+The sub-nav is a **vertical tablist** — Profile, Workspaces, Your data, Delete
+account — not scroll-spy anchors. Four destinations with no reading order, an
+unbounded team manager whose height changes on click, and a destructive action
+that should be a destination rather than a scroll depth. Active state is keyed
+off `[aria-selected="true"]` rather than a parallel `.active` class so the
+accessible and visible states cannot drift. Sections deep-link by hash, written
+with `replaceState` so Back leaves the page instead of walking the panes. At
+≤1024 the rail becomes a horizontally scrolling strip; there is no off-canvas
+drawer, because the four sections are the whole page.
+
+Six local classes carry it — `.account-nav`, `.account-nav__list`,
+`.account-nav__item`, `.account-content`, `.account-identity`,
+`.account-form-row` — plus `.account-card`, a neutral card on the documented
+recipe. `.case-item` is deliberately not reused: it is redefined further down
+`app.css` as a grid keyed to `.case-star` and `.treatment-placeholder`, so
+borrowing it would mean undoing those rules.
+
+This surface was the last one on the old stylesheet. Its block was the only
+place in `app.css` with raw pixel values (`padding: 40px 0 80px`) and a hex
+literal (`#6f5d52`), and it opted out of `script.js` entirely — so it had no
+toasts and no dialogs, and put the product's most destructive actions behind
+`window.confirm` and a `window.prompt` typing gate.
+
 ## Components
 
-One modal pattern for all six dialogs: `.modal` > `.modal__panel`, toggled by
+One modal pattern for all dialogs: `.modal` > `.modal__panel`, toggled by
 `[hidden]`, with a focus trap, Esc, scroll lock and focus restore handled
-centrally in `script.js`. Dialogs previously toggled inline `style.display`
+centrally in `static/ui.js`. Dialogs previously toggled inline `style.display`
 with no focus management at all.
+
+`ui.js` holds the primitives every surface needs — `showToast`, the modal
+controller, `escapeHtml` — and `base.html` loads it on every page ahead of
+`page_scripts`. They lived in `script.js` until the account centre needed them,
+which was not possible: `script.js`'s `DOMContentLoaded` handler boots the
+workspace through `matters.js` functions, so any page loading it alone throws
+`ReferenceError` before init finishes. Esc-to-dismiss moved with them; it had
+been sitting in the workspace keydown handler beside the sidebar toggle, so it
+only ever worked on `/app`.
+
+`[hidden]` is enforced globally with `display: none !important`. The UA rule
+alone loses to any component that sets its own `display`, so `el.hidden = true`
+silently stopped working for `.btn`, `.modal` and `.drop-zone` — which is how
+three separate one-off `[hidden]` overrides accumulated, and why four draft
+buttons in `workspace.html` were marked hidden and rendered anyway.
 
 Icons are an inline SVG sprite in `templates/_icons.html` — 24×24, 1.5 stroke,
 round cap and join, sized by class so they align to their label. This replaced
@@ -178,6 +225,11 @@ Findings the detector reports that are deliberate:
 - **Tablet and mobile layouts are written but unverified.** The automated
   browser would not resize below 1440px, so only desktop was visually
   confirmed. Check 768 and 390 by hand before shipping.
+  The account centre's ≤1024 strip was checked by retargeting its media query
+  at desktop width, which proves the rules but not the trigger point — it still
+  wants a real narrow viewport. That test did catch one bug worth knowing
+  about: `width: 100%`, correct for the vertical rail, gave the first tab the
+  entire strip and scrolled the other three out of view.
 - No dark theme. `tokens.css` reserves a `[data-theme]` hook so one is a swap
   rather than a rewrite, but it needs a real design pass — do not synthesise it
   by inverting values.

@@ -229,6 +229,21 @@ if _missing:
 # =====================================================
 # RUN
 # =====================================================
+def run_dev_server():
+    """Start the local development server.
+
+    load_dotenv=False matters: Flask.run() otherwise re-reads .env through
+    flask.cli.load_dotenv, after config.py has already loaded it and dropped the
+    variables .env leaves blank. That reload puts GOOGLE_APPLICATION_CREDENTIALS=""
+    back into the environment, and google-auth reads a present-but-empty value as
+    a configured credentials file -- so Application Default Credentials stop
+    resolving and every Firestore call fails, including the user provisioning
+    that finishes Google sign-in. config.py is the only .env loader we want.
+    Production runs under gunicorn, which never calls Flask.run() at all.
+    """
+    app.run(host="0.0.0.0", port=config.PORT, debug=config.DEBUG, load_dotenv=False)
+
+
 if __name__ == "__main__":
     print("AI Paralegal Assistant (Multi-Agent) is running...")
-    app.run(host="0.0.0.0", port=config.PORT, debug=config.DEBUG)
+    run_dev_server()
