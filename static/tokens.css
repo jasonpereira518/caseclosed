@@ -212,6 +212,8 @@
   --duration-fast:    140ms;
   --duration-base:    200ms;
   --duration-slow:    320ms;
+  --duration-slower:  480ms;  /* section-scale reveals */
+  --duration-slowest: 720ms;  /* hero-scale entrances */
   --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out:   cubic-bezier(0.65, 0, 0.35, 1);
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
@@ -254,6 +256,8 @@
     --duration-fast:    1ms;
     --duration-base:    1ms;
     --duration-slow:    1ms;
+    --duration-slower:  1ms;
+    --duration-slowest: 1ms;
   }
 
   *,

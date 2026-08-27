@@ -1,0 +1,447 @@
+{
+  "context_id": "demo-matter-rivera-v-northline",
+  "title": "Rivera v. Northline Logistics",
+  "description": "Pedestrian struck in a marked, signaled crosswalk by a commercial delivery truck. Comparative fault, vicarious liability, and employer notice are the live issues.",
+  "status": "active",
+  "created_at": "2024-02-05T13:10:00Z",
+  "updated_at": "2024-04-18T18:30:00Z",
+  "total_seconds": 5220,
+  "intake": {
+    "legal_category": "Personal Injury — Motor Vehicle",
+    "jurisdiction": "Ohio",
+    "court_level": "State — Court of Common Pleas"
+  },
+  "uploaded_documents": [
+    {
+      "filename": "Complaint.pdf",
+      "text": "IN THE COURT OF COMMON PLEAS, FRANKLIN COUNTY, OHIO. Elena Rivera, Plaintiff, v. Northline Logistics, Inc. and Marcus Ibe, Defendants. COMPLAINT. Plaintiff alleges that on February 2, 2024, Defendant Ibe, while acting within the course and scope of his employment with Defendant Northline Logistics, Inc., operated a commercial delivery vehicle in a negligent manner and struck Plaintiff as she lawfully crossed Fifth Street at Poplar Avenue within a marked, signaled crosswalk...",
+      "uploaded_by": "Jordan Parker",
+      "uploaded_at": "Feb 19, 2024",
+      "included": true
+    },
+    {
+      "filename": "Incident_Report.pdf",
+      "text": "NORTHLINE LOGISTICS — INTERNAL INCIDENT REPORT. Date of incident: 02/02/2024. Driver: M. Ibe, Unit 214. Route: AM delivery run, Zone 6. Narrative: Driver reports pedestrian entered the crosswalk at Fifth & Poplar as truck was completing a right turn. Driver states he did not see pedestrian until impact. Dispatch confirms Unit 214 was approximately 12 minutes behind the scheduled delivery window at time of incident...",
+      "uploaded_by": "Jordan Parker",
+      "uploaded_at": "Feb 20, 2024",
+      "included": true
+    },
+    {
+      "filename": "Rivera_Statement.docx",
+      "text": "Recorded statement of Elena Rivera, taken March 8, 2024. \"I had the walk signal. I looked both ways before I stepped off the curb, like I always do. The signal was steady white — not flashing. I was almost across when I heard the engine and then I was on the ground. I didn't see the truck start its turn at all.\"",
+      "uploaded_by": "Jordan Parker",
+      "uploaded_at": "Mar 8, 2024",
+      "included": true
+    },
+    {
+      "filename": "Dispatch_Log.txt",
+      "text": "UNIT 214 — 02/02/2024\n06:52  Route assigned: Zone 6, 14 stops, ETA window 07:30-10:00\n07:41  Stop 3 complete, running 9 min behind\n08:15  Stop 4 en route, running 12 min behind\n08:19  INCIDENT LOGGED — unit stopped, dispatch notified\n08:47  Unit released to scene by responding officer\n[Northline states this is a partial export; full telematics production is pending.]",
+      "uploaded_by": "Jordan Parker",
+      "uploaded_at": "Mar 4, 2024",
+      "included": true
+    },
+    {
+      "filename": "Northline_Correspondence.pdf",
+      "text": "Letter from Northline Logistics counsel, March 1, 2024, in response to the preservation and spoliation letter: \"...while Northline does not dispute that Mr. Ibe was operating a company vehicle at the time of the incident, Northline reserves its position that Mr. Ibe's conduct in the moments preceding the incident fell outside the scope of his assigned duties...\"",
+      "uploaded_by": "Jordan Parker",
+      "uploaded_at": "Mar 4, 2024",
+      "included": true
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "What's the current state of the record for this matter?"
+    },
+    {
+      "role": "assistant",
+      "content": "I've reviewed the five documents on file — the complaint, Northline's internal incident report, your recorded statement, the partial dispatch log, and Northline's correspondence disputing scope of employment.\n\nThe chronology now runs from the February 2 crosswalk incident through the April 18 complaint filing. Northline has since disclosed a driving record showing two prior violations for Ibe, which supports a negligent-retention theory independent of respondeat superior.\n\nComparative fault is the open question. I've queued a public-records request for the Fifth & Poplar signal-timing log, which would move your account of the walk signal from contested to documented.\n\nThis is AI-assisted analysis and needs your review."
+    }
+  ],
+  "analysis": {
+    "facts": [
+      "On February 2, 2024, Elena Rivera was crossing Fifth Street at Poplar Avenue in a marked, signaled crosswalk.",
+      "A Northline Logistics delivery truck driven by employee Marcus Ibe struck Rivera as she crossed.",
+      "Ibe was en route to a scheduled delivery stop under a Northline dispatch assignment at the time of the collision.",
+      "Rivera sustained a fractured tibia and a closed head injury requiring hospitalization.",
+      "The responding officer cited Ibe for failure to yield to a pedestrian in a crosswalk under R.C. 4511.46.",
+      "Northline's dispatch log shows Ibe was running approximately twelve minutes behind schedule at the time of the incident.",
+      "Ibe's personnel file, produced in April, shows two prior moving violations in the eighteen months preceding the incident.",
+      "Northline disputes that Ibe was acting within the scope of his employment at the moment of the collision."
+    ],
+    "parties": [
+      {
+        "name": "Elena Rivera",
+        "role": "Plaintiff",
+        "details": "Pedestrian struck while crossing at a marked, signaled crosswalk."
+      },
+      {
+        "name": "Northline Logistics, Inc.",
+        "role": "Defendant",
+        "details": "Commercial trucking and delivery company; employer of the driver."
+      },
+      {
+        "name": "Marcus Ibe",
+        "role": "Defendant",
+        "details": "Northline delivery driver operating the vehicle at the time of the incident."
+      }
+    ],
+    "jurisdictions": [
+      "Franklin County Court of Common Pleas, Ohio"
+    ],
+    "legal_issues": [
+      "Whether Marcus Ibe was acting within the scope of his employment with Northline Logistics at the time of the incident, supporting vicarious liability.",
+      "Whether the crosswalk signal was in Rivera's favor at the moment she entered the intersection, and what weight the City's signal-timing log will carry on that question.",
+      "Whether Rivera's own conduct constitutes comparative fault under R.C. 2315.33, and if so, in what proportion relative to Ibe's.",
+      "Whether Northline had actual or constructive notice of Ibe's prior moving violations sufficient to support a negligent retention claim."
+    ],
+    "causes_of_action": [
+      "Negligence against Marcus Ibe",
+      "Vicarious liability / respondeat superior against Northline Logistics",
+      "Negligent hiring, retention, and supervision against Northline Logistics",
+      "Negligence per se — violation of R.C. 4511.46"
+    ]
+  },
+  "timeline": [
+    {
+      "date": "Feb 2, 2024",
+      "description": "Marcus Ibe, operating a Northline Logistics delivery truck, fails to yield at the marked crosswalk on Fifth & Poplar; Elena Rivera is struck while crossing on a walk signal.",
+      "category": "incident",
+      "source": "document"
+    },
+    {
+      "date": "Feb 2, 2024",
+      "description": "Columbus Police Department responds to the scene; officer issues a citation to Ibe for failure to yield to a pedestrian in a crosswalk (R.C. 4511.46).",
+      "category": "event",
+      "source": "document"
+    },
+    {
+      "date": "Feb 3, 2024",
+      "description": "Rivera is treated and admitted at a local hospital for a fractured tibia and closed head injury.",
+      "category": "event",
+      "source": "document"
+    },
+    {
+      "date": "Feb 5, 2024",
+      "description": "Northline's safety department opens an internal incident file and requests the truck's telematics data.",
+      "category": "event",
+      "source": "document"
+    },
+    {
+      "date": "Feb 9, 2024",
+      "description": "Northline's internal Incident Report is finalized, describing the dispatch assignment Ibe was running that morning.",
+      "category": "event",
+      "source": "document"
+    },
+    {
+      "date": "Feb 14, 2024",
+      "description": "Rivera retains counsel.",
+      "category": "event",
+      "source": "document"
+    },
+    {
+      "date": "Feb 20, 2024",
+      "description": "Counsel sends a spoliation and preservation letter to Northline covering telematics, dashcam, and dispatch records.",
+      "category": "event",
+      "source": "document"
+    },
+    {
+      "date": "Mar 1, 2024",
+      "description": "Northline's counsel responds, producing a partial dispatch log and disputing that Ibe was acting within the scope of his employment at the time of the incident.",
+      "category": "event",
+      "source": "document"
+    },
+    {
+      "date": "Mar 8, 2024",
+      "description": "Rivera provides a recorded statement describing the crosswalk signal as a steady walk signal at the time she entered the intersection.",
+      "category": "event",
+      "source": "document"
+    },
+    {
+      "date": "Mar 15, 2024",
+      "description": "A public-records request for the Fifth & Poplar signal-timing log is submitted to the City of Columbus.",
+      "category": "event",
+      "source": "document"
+    },
+    {
+      "date": "Mar 22, 2024",
+      "description": "Formal notice of claim is sent to Northline Logistics and its insurer.",
+      "category": "event",
+      "source": "document"
+    },
+    {
+      "date": "Apr 2, 2024",
+      "description": "Northline discloses Ibe's driving record, showing two prior moving violations in the eighteen months before the incident.",
+      "category": "event",
+      "source": "document"
+    },
+    {
+      "date": "Apr 10, 2024",
+      "description": "Northline declines to resolve the claim prior to suit.",
+      "category": "event",
+      "source": "document"
+    },
+    {
+      "date": "Apr 18, 2024",
+      "description": "Complaint is filed in the Franklin County Court of Common Pleas.",
+      "category": "event",
+      "source": "document"
+    }
+  ],
+  "statutes": [
+    {
+      "code": "R.C. 2315.33",
+      "title": "Comparative negligence",
+      "jurisdiction": "Ohio",
+      "description": "Reduces a claimant's recovery in proportion to their own share of fault, and bars recovery entirely only if that share exceeds the combined fault of all other parties.",
+      "relevance": "Governs whether and how much Rivera's own conduct at the crosswalk reduces her recovery."
+    },
+    {
+      "code": "R.C. 4511.46",
+      "title": "Right of way of pedestrian in crosswalk",
+      "jurisdiction": "Ohio",
+      "description": "Requires a driver to yield to a pedestrian lawfully within a marked crosswalk on the driver's half of the roadway.",
+      "relevance": "Basis for Ibe's citation and for a negligence per se theory against him."
+    },
+    {
+      "code": "R.C. 4511.202",
+      "title": "Failure to control",
+      "jurisdiction": "Ohio",
+      "description": "Prohibits operating a vehicle without being able to bring it to a stop within the assured clear distance ahead.",
+      "relevance": "Secondary negligence theory if the signal-timing log shows Rivera had already lawfully entered the crosswalk."
+    }
+  ],
+  "strength": {
+    "rating": "Moderate",
+    "explanation": "Liability against the driver is well supported by the citation and Rivera's statement. Vicarious liability turns on the scope-of-employment dispute, which the dispatch log currently favors resolving in Rivera's favor. The main open variable is comparative fault, which depends on the still-outstanding signal-timing log."
+  },
+  "cases": [
+    {
+      "title": "Okonkwo v. Bayline Municipal Transit Authority",
+      "citation": "171 Ohio App. 3d 690 (Fict. 2016)",
+      "pdf_link": "",
+      "snippet": "The court held that a pedestrian who entered a marked crossing on a changing signal was twenty percent comparatively at fault, reducing rather than barring her recovery against the transit authority.",
+      "relevance_score": 92,
+      "initial_score": 92,
+      "relevance_reason": "Directly on point for comparative fault at a signaled crosswalk involving a commercial defendant.",
+      "relevance_dimensions": {
+        "factual_similarity": 90,
+        "legal_issues_match": 95,
+        "causes_of_action_overlap": 85,
+        "jurisdictional_relevance": 100,
+        "practical_utility": 90
+      },
+      "treatment": {
+        "checked": true,
+        "status": "good",
+        "label": "✓ No Negative Treatment Found",
+        "details": ""
+      },
+      "bookmarked": true,
+      "notes": "Best fit on comparative fault — use for the signal-timing argument once the city log comes back.",
+      "notes_updated_at": "2024-03-20T14:05:00Z",
+      "follow_ups": []
+    },
+    {
+      "title": "Alvarado v. Crestmoor Freight Co.",
+      "citation": "182 Ohio App. 3d 411 (Fict. 2019)",
+      "pdf_link": "",
+      "snippet": "A commercial driver running behind a delivery schedule remained within the scope of his employment where the trip continued to serve the employer's dispatch assignment.",
+      "relevance_score": 88,
+      "initial_score": 88,
+      "relevance_reason": "Addresses scope-of-employment for a delayed delivery driver, the exact posture Northline disputes.",
+      "relevance_dimensions": {
+        "factual_similarity": 85,
+        "legal_issues_match": 90,
+        "causes_of_action_overlap": 90,
+        "jurisdictional_relevance": 100,
+        "practical_utility": 85
+      },
+      "treatment": {
+        "checked": true,
+        "status": "good",
+        "label": "✓ No Negative Treatment Found",
+        "details": ""
+      },
+      "bookmarked": true,
+      "notes": "",
+      "follow_ups": []
+    },
+    {
+      "title": "Delacroix v. Ferrand Trucking Co.",
+      "citation": "204 Ohio App. 3d 118 (Fict. 2018)",
+      "pdf_link": "",
+      "snippet": "Vicarious liability did not attach where the driver had deviated substantially from any employer-directed route to run a personal errand at the time of the collision.",
+      "relevance_score": 61,
+      "initial_score": 61,
+      "relevance_reason": "Cuts the other way on scope of employment; useful to distinguish given Ibe's on-schedule delivery.",
+      "relevance_dimensions": {
+        "factual_similarity": 55,
+        "legal_issues_match": 70,
+        "causes_of_action_overlap": 70,
+        "jurisdictional_relevance": 100,
+        "practical_utility": 60
+      },
+      "treatment": {
+        "checked": true,
+        "status": "warning",
+        "label": "⚠ Possibly Distinguished",
+        "details": "Cited as distinguished in Alvarado v. Crestmoor Freight Co."
+      },
+      "bookmarked": false,
+      "notes": "",
+      "follow_ups": []
+    },
+    {
+      "title": "Marsh v. Cobalt Line Systems",
+      "citation": "95 Ohio St. 3d 552 (Fict. 2014)",
+      "pdf_link": "",
+      "snippet": "An employer with actual knowledge of a driver's repeated moving violations may be independently liable for negligent retention, regardless of the outcome of the respondeat superior analysis.",
+      "relevance_score": 84,
+      "initial_score": 84,
+      "relevance_reason": "Supports the negligent retention theory now that Ibe's driving record is in evidence.",
+      "relevance_dimensions": {
+        "factual_similarity": 75,
+        "legal_issues_match": 85,
+        "causes_of_action_overlap": 90,
+        "jurisdictional_relevance": 95,
+        "practical_utility": 80
+      },
+      "treatment": {
+        "checked": true,
+        "status": "good",
+        "label": "✓ No Negative Treatment Found",
+        "details": ""
+      },
+      "bookmarked": false,
+      "notes": "",
+      "follow_ups": []
+    },
+    {
+      "title": "Petrakis v. Union Freight Lines",
+      "citation": "233 Ohio App. 3d 77 (Fict. 2020)",
+      "pdf_link": "",
+      "snippet": "Dispatch logs maintained in the ordinary course of a trucking company's operations are admissible as business records without further foundation testimony from the dispatcher.",
+      "relevance_score": 70,
+      "initial_score": 70,
+      "relevance_reason": "Supports admitting the partial dispatch log Northline has already produced.",
+      "relevance_dimensions": {
+        "factual_similarity": 60,
+        "legal_issues_match": 55,
+        "causes_of_action_overlap": 40,
+        "jurisdictional_relevance": 95,
+        "practical_utility": 85
+      },
+      "treatment": {
+        "checked": true,
+        "status": "good",
+        "label": "✓ No Negative Treatment Found",
+        "details": ""
+      },
+      "bookmarked": false,
+      "notes": "",
+      "follow_ups": []
+    },
+    {
+      "title": "Hollis v. Meridian Transport Ltd.",
+      "citation": "118 Ohio App. 3d 249 (Fict. 2012)",
+      "pdf_link": "",
+      "snippet": "Held that a malfunctioning pedestrian signal shifted the right-of-way analysis entirely away from comparative fault principles.",
+      "relevance_score": 42,
+      "initial_score": 42,
+      "relevance_reason": "Only relevant if the signal-timing log shows a malfunction, which is not yet established here.",
+      "relevance_dimensions": {
+        "factual_similarity": 40,
+        "legal_issues_match": 50,
+        "causes_of_action_overlap": 30,
+        "jurisdictional_relevance": 90,
+        "practical_utility": 35
+      },
+      "treatment": {
+        "checked": true,
+        "status": "negative",
+        "label": "⚠ Possibly Superseded",
+        "details": "Cited as superseded in a later signal-malfunction case."
+      },
+      "bookmarked": false,
+      "notes": "",
+      "follow_ups": []
+    },
+    {
+      "title": "Tran v. Whitmore Logistics Group",
+      "citation": "141 Ohio App. 3d 305 (Fict. 2017)",
+      "pdf_link": "",
+      "snippet": "Constructive notice of a driver's unsafe record may be inferred from an employer's own retained personnel file, without a showing that a supervisor personally reviewed it.",
+      "relevance_score": 66,
+      "initial_score": 66,
+      "relevance_reason": "Lowers the notice bar for the negligent retention claim against Northline.",
+      "relevance_dimensions": {
+        "factual_similarity": 55,
+        "legal_issues_match": 70,
+        "causes_of_action_overlap": 65,
+        "jurisdictional_relevance": 95,
+        "practical_utility": 60
+      },
+      "treatment": {
+        "checked": true,
+        "status": "good",
+        "label": "✓ No Negative Treatment Found",
+        "details": ""
+      },
+      "bookmarked": false,
+      "notes": "",
+      "follow_ups": []
+    },
+    {
+      "title": "Beaumont v. Coastal Freightways",
+      "citation": "88 Ohio App. 3d 601 (Fict. 2011)",
+      "pdf_link": "",
+      "snippet": "Recovery was barred entirely where the plaintiff's own share of fault, at fifty-five percent, exceeded the combined fault of the remaining parties.",
+      "relevance_score": 48,
+      "initial_score": 48,
+      "relevance_reason": "Illustrates the outer bound of the comparative fault statute; useful to show what this matter is not.",
+      "relevance_dimensions": {
+        "factual_similarity": 35,
+        "legal_issues_match": 60,
+        "causes_of_action_overlap": 50,
+        "jurisdictional_relevance": 100,
+        "practical_utility": 45
+      },
+      "treatment": {
+        "checked": true,
+        "status": "good",
+        "label": "✓ No Negative Treatment Found",
+        "details": ""
+      },
+      "bookmarked": false,
+      "notes": "",
+      "follow_ups": []
+    },
+    {
+      "title": "Iverson v. Redline Distribution Co.",
+      "citation": "210 Ohio App. 3d 44 (Fict. 2021)",
+      "pdf_link": "",
+      "snippet": "A dispatcher's pattern of scheduling deliveries with insufficient transit time supported a claim for punitive damages against the employer.",
+      "relevance_score": 39,
+      "initial_score": 39,
+      "relevance_reason": "Premature absent evidence that Northline's scheduling was reckless rather than merely tight.",
+      "relevance_dimensions": {
+        "factual_similarity": 30,
+        "legal_issues_match": 40,
+        "causes_of_action_overlap": 35,
+        "jurisdictional_relevance": 90,
+        "practical_utility": 30
+      },
+      "treatment": {
+        "checked": true,
+        "status": "warning",
+        "label": "⚠ Possibly Questioned",
+        "details": "Cited as questioned in a later scheduling-negligence case."
+      },
+      "bookmarked": false,
+      "notes": "",
+      "follow_ups": []
+    }
+  ],
+  "draft": "MEMORANDUM\n\nTO: File\nFROM: Case Closed AI Assistant — Draft for attorney review\nRE: Rivera v. Northline Logistics — Comparative Fault and Vicarious Liability\n\nQUESTION PRESENTED\n\nUnder Ohio law, can Elena Rivera recover from Northline Logistics and driver Marcus Ibe for injuries sustained when Ibe's delivery truck struck her in a marked crosswalk, given Northline's dispute over scope of employment and the open question of comparative fault?\n\nBRIEF ANALYSIS\n\nRivera's claim rests on ordinary negligence against Ibe and vicarious liability against Northline under respondeat superior. Northline's principal defense — that Ibe was outside the scope of his employment — is undercut by the dispatch log showing he was en route to a scheduled delivery when the collision occurred; Alvarado v. Crestmoor Freight Co., 182 Ohio App. 3d 411 (Fict. 2019), treats a commercial driver's status as within scope where the trip continues to serve the employer's delivery schedule, even if the driver is running behind it.\n\nComparative fault under R.C. 2315.33 is the larger exposure. Recovery is barred only if Rivera's share of fault exceeds the combined fault of all other parties; on the current record — a functioning signal, clear conditions, and R.C. 4511.46's duty on Ibe to yield — that threshold is unlikely to be met. Okonkwo v. Bayline Municipal Transit Authority, 171 Ohio App. 3d 690 (Fict. 2016), assigned twenty percent fault to a pedestrian who entered on a changing signal and reduced, rather than barred, her recovery. Closing the gap on the Fifth & Poplar signal-timing log would move Rivera's account of the walk signal from contested to documented.\n\nNorthline's disclosed driving record for Ibe — two moving violations in the eighteen months before the incident — also supports a negligent retention theory independent of respondeat superior, and forecloses any argument that the company lacked notice of his driving history.\n\nOPEN ITEMS\n\n- Obtain the City of Columbus signal-timing log for Fifth & Poplar.\n- Confirm Northline's full dispatch and telematics production against the preservation letter.\n- Depose Ibe's supervising dispatcher on the delivery schedule for February 2.\n\nSTATUS\n\nDraft for attorney review. This document was produced with AI assistance and has not been reviewed by counsel."
+}

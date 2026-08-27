@@ -111,16 +111,46 @@ img {
     position: sticky;
     top: 0;
     z-index: 100;
-    background: rgba(253, 252, 250, 0.93);
+    /* Solid, exactly matching whatever section sits under it -- not a
+       translucent/frosted overlay. The header should read as part of the
+       page, not as a bar floating above it. */
+    background: var(--paper);
     border-bottom: 1px solid transparent;
-    transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
-    -webkit-backdrop-filter: blur(16px);
-    backdrop-filter: blur(16px);
+    transition: border-color var(--duration-base) var(--ease-standard),
+        box-shadow var(--duration-base) var(--ease-standard),
+        background var(--duration-base) var(--ease-standard);
 }
 
 .landing-header.scrolled {
     border-color: rgba(224, 213, 200, 0.9);
     box-shadow: 0 8px 28px rgba(58, 42, 26, 0.05);
+}
+
+.landing-header.on-dark {
+    background: var(--espresso);
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.landing-header.on-dark .brand,
+.landing-header.on-dark .nav-links a,
+.landing-header.on-dark .nav-signin {
+    color: rgba(255, 255, 255, 0.82);
+}
+
+.landing-header.on-dark .nav-links a:hover,
+.landing-header.on-dark .nav-signin:hover {
+    color: white;
+}
+
+.landing-header.on-dark .nav-actions .button {
+    background: var(--paper);
+    border-color: var(--paper);
+    color: var(--espresso);
+}
+
+.landing-header.on-dark .nav-actions .button:hover {
+    background: var(--sand);
+    border-color: var(--sand);
 }
 
 .landing-nav {
@@ -166,16 +196,36 @@ img {
 
 .nav-links a,
 .nav-signin {
+    position: relative;
     color: #6b5744;
     font-size: 13px;
     font-weight: 500;
     text-decoration: none;
-    transition: color 150ms ease;
+    transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.nav-links a::after,
+.nav-signin::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: -4px;
+    left: 0;
+    height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform var(--duration-base) var(--ease-out);
 }
 
 .nav-links a:hover,
 .nav-signin:hover {
     color: var(--ink);
+}
+
+.nav-links a:hover::after,
+.nav-signin:hover::after {
+    transform: scaleX(1);
 }
 
 .nav-toggle {
@@ -201,12 +251,18 @@ img {
     font-weight: var(--weight-semibold);
     line-height: 1;
     text-decoration: none;
-    transition: background var(--transition-base), border-color var(--transition-base);
+    transition: background var(--transition-base), border-color var(--transition-base),
+        transform var(--transition-base);
 }
 
 .button:hover {
     background: var(--action-hover);
     border-color: var(--action-hover);
+    transform: translateY(-2px);
+}
+
+.button:active {
+    transform: translateY(0);
 }
 
 .button:focus-visible,
@@ -240,6 +296,44 @@ summary:focus-visible,
     margin: 0 auto;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+    .hero-enter > * {
+        opacity: 0;
+        animation: hero-rise var(--duration-slowest) var(--ease-out) both;
+    }
+
+    .hero-enter > .eyebrow { animation-delay: 40ms; }
+    .hero-enter > h1 { animation-delay: 120ms; }
+    .hero-enter > .hero-lede { animation-delay: 220ms; }
+    .hero-enter > .hero-actions { animation-delay: 320ms; }
+    .hero-enter > .confidence-list { animation-delay: 400ms; }
+}
+
+@keyframes hero-rise {
+    from {
+        opacity: 0;
+        transform: translateY(26px) scale(0.985);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Bolder-motion variant of .reveal: same scroll-triggered IntersectionObserver
+   mechanic (landing.js watches every .reveal element and adds .is-visible
+   once scrolled into view), just a bigger rise+scale for a heavier element.
+   Kept as a scroll reveal rather than a load-time animation on purpose: the
+   product frame sits low enough that it should stay hidden until the visitor
+   scrolls to it, not animate in above the fold before they've asked for it. */
+.reveal.reveal-lg {
+    transform: translateY(40px) scale(0.97);
+}
+
+.reveal.reveal-lg.is-visible {
+    transform: translateY(0) scale(1);
+}
+
 .eyebrow {
     margin: 0 0 16px;
     color: var(--clay-dark);
@@ -248,6 +342,7 @@ summary:focus-visible,
     letter-spacing: 0.18em;
     line-height: 1.3;
     text-transform: uppercase;
+    text-wrap: balance;
 }
 
 .hero h1,
@@ -287,11 +382,29 @@ summary:focus-visible,
 }
 
 .text-link {
+    position: relative;
     color: var(--ink);
     font-size: 14px;
     font-weight: 650;
-    text-underline-offset: 4px;
-    text-decoration-thickness: 1px;
+    text-decoration: none;
+}
+
+.text-link::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: -3px;
+    left: 0;
+    height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform var(--duration-base) var(--ease-out);
+}
+
+.text-link:hover::after,
+.text-link:focus-visible::after {
+    transform: scaleX(1);
 }
 
 .confidence-list {
@@ -320,486 +433,6 @@ summary:focus-visible,
     box-shadow: 0 0 0 4px rgba(74, 124, 89, 0.1);
 }
 
-.hero-product-wrap {
-    position: relative;
-    width: min(1050px, calc(100vw - 48px));
-    margin: 64px auto -8px;
-    padding: 14px 14px 0;
-}
-
-.product-topbar {
-    height: 55px;
-    padding: 0 18px;
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-    border-bottom: 1px solid var(--rule);
-    background: #fffdfa;
-    font-size: 11px;
-}
-
-.product-brand,
-.matter-name {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.product-brand {
-    color: var(--ink);
-}
-
-.product-brand img {
-    border-radius: 5px;
-}
-
-.matter-name {
-    padding: 7px 13px;
-    border: 1px solid var(--rule);
-    border-radius: 8px;
-    color: #6b5744;
-    background: var(--paper);
-}
-
-.status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--positive);
-}
-
-.product-avatar {
-    justify-self: end;
-    width: 27px;
-    height: 27px;
-    display: grid;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--espresso);
-    color: var(--white);
-    font-size: 9px;
-    font-weight: 700;
-}
-
-.product-body {
-    display: grid;
-    grid-template-columns: 31% 69%;
-    min-height: 455px;
-}
-
-.product-chat {
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 13px;
-    border-right: 1px solid var(--rule);
-    background: #faf8f5;
-}
-
-.mock-label {
-    color: #6b5744;
-    font-size: 11px;
-    font-weight: 650;
-}
-
-.mock-message {
-    max-width: 88%;
-    padding: 11px 13px;
-    border-radius: 11px;
-    color: #6b5744;
-    font-size: 10px;
-    line-height: 1.55;
-}
-
-.mock-message-ai {
-    border: 1px solid var(--rule);
-    border-bottom-left-radius: 4px;
-    background: var(--white);
-}
-
-.mock-message-user {
-    align-self: flex-end;
-    border-bottom-right-radius: 4px;
-    background: var(--espresso);
-    color: rgba(255, 255, 255, 0.9);
-}
-
-.typing-line {
-    display: block;
-    width: 92%;
-    height: 6px;
-    border-radius: 4px;
-    background: var(--sand-deep);
-    animation: typing-shimmer 1.8s ease-in-out infinite;
-}
-
-.typing-line-short {
-    width: 64%;
-    margin-top: 8px;
-    animation-delay: 140ms;
-}
-
-.mock-input {
-    margin-top: auto;
-    padding: 10px 12px;
-    display: flex;
-    justify-content: space-between;
-    border: 1px solid var(--rule-strong);
-    border-radius: 9px;
-    background: var(--white);
-    color: var(--muted);
-    font-size: 9px;
-}
-
-.mock-input span {
-    width: 20px;
-    height: 20px;
-    display: grid;
-    place-items: center;
-    border-radius: 6px;
-    background: var(--clay);
-    color: white;
-}
-
-.product-workspace {
-    background: var(--white);
-}
-
-.product-tabs {
-    height: 46px;
-    padding: 0 21px;
-    display: flex;
-    align-items: end;
-    gap: 24px;
-    border-bottom: 1px solid var(--rule);
-}
-
-.product-tab {
-    height: 46px;
-    display: flex;
-    align-items: center;
-    padding: 0;
-    border: 0;
-    border-bottom: 2px solid transparent;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 10px;
-    font-weight: 600;
-    transition: border-color 180ms ease, color 180ms ease;
-}
-
-.product-tab.active {
-    border-color: var(--clay);
-    color: var(--ink);
-}
-
-.product-tab:focus-visible {
-    outline: 2px solid rgba(184, 128, 95, 0.5);
-    outline-offset: 2px;
-}
-
-.analysis-grid {
-    padding: 21px;
-    display: grid;
-    grid-template-columns: 1.55fr 0.8fr;
-    gap: 16px;
-}
-
-.hero-cases-panel,
-.hero-draft-panel {
-    padding: 21px;
-}
-
-.hero-panel-heading {
-    margin-bottom: 15px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-}
-
-.hero-panel-heading small,
-.hero-panel-heading strong {
-    display: block;
-}
-
-.hero-panel-heading small {
-    margin-bottom: 2px;
-    color: var(--clay-dark);
-    font-size: 7px;
-    font-weight: 800;
-    letter-spacing: 0.12em;
-}
-
-.hero-panel-heading strong {
-    color: var(--ink);
-    font-size: 12px;
-}
-
-.hero-case-list {
-    display: grid;
-    gap: 9px;
-}
-
-.hero-case-list article {
-    min-height: 79px;
-    padding: 11px 12px;
-    display: grid;
-    grid-template-columns: 33px 1fr auto;
-    align-items: center;
-    gap: 11px;
-    border: 1px solid var(--rule);
-    border-radius: 10px;
-    background: #fffdfa;
-}
-
-.case-fit {
-    width: 33px;
-    height: 33px;
-    display: grid;
-    place-items: center;
-    border-radius: 8px;
-    background: var(--sand);
-    color: var(--clay-dark);
-    font-size: 9px;
-    font-weight: 800;
-}
-
-.hero-case-list strong,
-.hero-case-list small,
-.hero-case-list p {
-    display: block;
-}
-
-.hero-case-list strong {
-    color: var(--ink);
-    font-size: 9px;
-}
-
-.hero-case-list small {
-    color: var(--muted);
-    font-size: 7px;
-}
-
-.hero-case-list p {
-    margin: 4px 0 0;
-    color: #7d6a57;
-    font-size: 7px;
-}
-
-.hero-case-list b {
-    color: var(--positive);
-    font-size: 8px;
-}
-
-.hero-draft-paper {
-    padding: 17px 19px;
-    border: 1px solid var(--rule);
-    border-radius: 10px;
-    background: #fffdfa;
-    box-shadow: 0 8px 22px rgba(58, 42, 26, 0.06);
-}
-
-.hero-draft-title {
-    margin-bottom: 13px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--rule);
-    color: var(--ink);
-    font-size: 12px;
-    font-weight: 700;
-}
-
-.hero-draft-paper p {
-    margin: 6px 0;
-    color: #6b5744;
-    font-size: 8px;
-    line-height: 1.55;
-}
-
-.hero-draft-paper p strong {
-    color: var(--ink);
-}
-
-.hero-draft-citation {
-    margin-top: 13px;
-    padding: 8px 10px;
-    border-radius: 7px;
-    background: rgba(74, 124, 89, 0.09);
-    color: var(--positive);
-    font-size: 7px;
-    font-weight: 600;
-}
-
-.analysis-main,
-.matter-summary {
-    min-width: 0;
-}
-
-.mock-section-heading {
-    margin-bottom: 13px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    color: var(--ink);
-    font-size: 11px;
-    font-weight: 700;
-}
-
-.complete-pill {
-    padding: 4px 7px;
-    border-radius: 999px;
-    background: rgba(74, 124, 89, 0.1);
-    color: var(--positive);
-    font-size: 8px;
-    font-weight: 600;
-}
-
-.issue-card {
-    margin-bottom: 9px;
-    padding: 12px;
-    display: grid;
-    grid-template-columns: 25px 1fr;
-    gap: 10px;
-    border: 1px solid var(--rule);
-    border-radius: 10px;
-    background: #fffdfa;
-}
-
-.issue-number {
-    width: 25px;
-    height: 25px;
-    display: grid;
-    place-items: center;
-    border-radius: 7px;
-    background: var(--sand);
-    color: var(--clay-dark);
-    font-size: 8px;
-    font-weight: 700;
-}
-
-.issue-card strong {
-    display: block;
-    color: var(--ink);
-    font-size: 9px;
-}
-
-.issue-card p {
-    margin: 3px 0 0;
-    color: #8b7d6b;
-    font-size: 8px;
-    line-height: 1.45;
-}
-
-.matter-summary {
-    padding: 14px;
-    align-self: start;
-    border: 1px solid var(--rule);
-    border-radius: 12px;
-    background: var(--sand);
-}
-
-.summary-row {
-    padding: 8px 0;
-    display: flex;
-    justify-content: space-between;
-    border-bottom: 1px solid rgba(212, 196, 176, 0.7);
-    color: #7d6a57;
-    font-size: 9px;
-}
-
-.summary-row strong {
-    color: var(--ink);
-}
-
-.summary-progress {
-    height: 5px;
-    margin-top: 15px;
-    overflow: hidden;
-    border-radius: 4px;
-    background: var(--rule);
-}
-
-.summary-progress span {
-    width: 82%;
-    height: 100%;
-    display: block;
-    border-radius: inherit;
-    background: var(--positive);
-    animation: load-progress 1.4s 700ms both ease-out;
-}
-
-.matter-summary > p {
-    margin: 9px 0 0;
-    color: #7d6a57;
-    font-size: 8px;
-}
-
-.activity-stack {
-    position: absolute;
-    left: -8px;
-    bottom: 28px;
-    z-index: 2;
-    width: 220px;
-}
-
-.activity-card {
-    position: absolute;
-    left: 0;
-    bottom: 0;
-    width: 218px;
-    padding: 10px 12px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    border: 1px solid var(--rule);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.96);
-    box-shadow: 0 10px 30px rgba(58, 42, 26, 0.14);
-    animation: activity-in 700ms both cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.activity-two {
-    bottom: 59px;
-    left: 10px;
-    animation-delay: 500ms;
-}
-
-.activity-three {
-    bottom: 118px;
-    left: 4px;
-    animation-delay: 1000ms;
-}
-
-.activity-icon {
-    width: 28px;
-    height: 28px;
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    border-radius: 8px;
-    background: var(--sand);
-    color: var(--clay-dark);
-    font-size: 9px;
-    font-weight: 800;
-}
-
-.activity-card strong,
-.activity-card small {
-    display: block;
-}
-
-.activity-card strong {
-    color: var(--ink);
-    font-size: 9px;
-}
-
-.activity-card small {
-    color: var(--muted);
-    font-size: 7px;
-}
-
 .section-pad {
     padding: 118px max(24px, calc((100vw - 1180px) / 2));
 }
@@ -809,10 +442,16 @@ summary:focus-visible,
 }
 
 .section-heading h2,
-.control h2,
 .early-access h2,
 .final-cta h2 {
     font-size: clamp(38px, 4.2vw, 58px);
+}
+
+/* Its own, smaller clamp: this heading lives in a narrower ~450px column
+   (.control's 0.82fr share), not the full-width measure the shared clamp
+   above assumes — at the shared size it wrapped ragged, with orphaned words. */
+.control h2 {
+    font-size: clamp(30px, 3vw, 42px);
 }
 
 .section-heading > p:last-child,
@@ -865,7 +504,7 @@ summary:focus-visible,
     border-radius: 14px;
     background: var(--white);
     box-shadow: 0 12px 35px rgba(58, 42, 26, 0.08);
-    transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform var(--duration-slower) var(--ease-out);
 }
 
 .fragmented-demo.in-view .artifact-pdf {
@@ -922,7 +561,8 @@ summary:focus-visible,
     color: white;
     opacity: 0;
     transform: translate(-50%, 20px);
-    transition: opacity 500ms 350ms ease, transform 500ms 350ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: opacity var(--duration-slower) 350ms var(--ease-standard),
+        transform var(--duration-slower) 350ms var(--ease-out);
 }
 
 .fragmented-demo.in-view .connected-matter {
@@ -996,6 +636,10 @@ summary:focus-visible,
     font: inherit;
     text-align: left;
     transition: color var(--duration-base) var(--ease-standard);
+}
+
+.feature-button:not(.active):hover {
+    color: rgba(255, 255, 255, 0.8);
 }
 
 .feature-button span {
@@ -1155,7 +799,7 @@ summary:focus-visible,
     border: 1px solid var(--rule);
     border-radius: 10px;
     background: white;
-    animation: preview-card-in 350ms both ease;
+    animation: preview-card-in var(--duration-slow) both var(--ease-standard);
 }
 
 .preview-records > div > span {
@@ -1238,7 +882,7 @@ summary:focus-visible,
     min-height: 0;
     padding: 0;
     border: 0;
-    animation: draft-line-in 500ms both ease;
+    animation: draft-line-in var(--duration-slower) both var(--ease-standard);
 }
 
 .preview-records.draft-state > div + div {
@@ -1297,7 +941,7 @@ summary:focus-visible,
     background: linear-gradient(90deg, var(--rule), var(--clay), var(--rule));
     transform: scaleX(0);
     transform-origin: left;
-    transition: transform 900ms 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform var(--duration-slowest) 180ms var(--ease-out);
 }
 
 .workflow-steps.in-view::before {
@@ -1336,8 +980,10 @@ summary:focus-visible,
     font-weight: 650;
     opacity: 0;
     transform: scale(0.86);
-    transition: opacity 320ms ease, transform 380ms cubic-bezier(0.16, 1, 0.3, 1),
-        box-shadow 200ms ease, border-color 200ms ease;
+    transition: opacity var(--duration-slow) var(--ease-standard),
+        transform var(--duration-slower) var(--ease-out),
+        box-shadow var(--duration-base) var(--ease-standard),
+        border-color var(--duration-base) var(--ease-standard);
 }
 
 .workflow-steps.in-view li:nth-child(2) .step-icon {
@@ -1535,7 +1181,8 @@ summary:focus-visible,
     opacity: 0;
     transform: scale(0.25);
     transform-origin: top left;
-    transition: opacity 240ms 420ms ease, transform 720ms 420ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: opacity var(--duration-base) 420ms var(--ease-standard),
+        transform var(--duration-slowest) 420ms var(--ease-out);
 }
 
 .citation-demo.is-visible .citation-line {
@@ -1561,11 +1208,6 @@ summary:focus-visible,
 .citation-line span {
     right: -5px;
     bottom: -5px;
-}
-
-.matter-outcome {
-    padding-top: 105px;
-    padding-bottom: 105px;
 }
 
 .outcome-row {
@@ -1618,7 +1260,7 @@ summary:focus-visible,
     display: grid;
     grid-template-columns: 1.2fr 0.8fr;
     gap: 70px;
-    align-items: center;
+    align-items: start;
     border: 1px solid var(--rule-strong);
     border-radius: 22px;
     background: var(--sand);
@@ -1631,7 +1273,6 @@ summary:focus-visible,
 }
 
 .faq {
-    padding-top: 104px;
     background: white;
 }
 
@@ -1662,6 +1303,11 @@ summary:focus-visible,
     font-size: 15px;
     font-weight: 600;
     list-style: none;
+    transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.faq-list summary:hover {
+    color: var(--clay-dark);
 }
 
 .faq-list summary::-webkit-details-marker {
@@ -1673,7 +1319,7 @@ summary:focus-visible,
     color: var(--clay-dark);
     font-size: 21px;
     font-weight: 400;
-    transition: transform 180ms ease;
+    transition: transform var(--duration-base) var(--ease-standard);
 }
 
 .faq-list details[open] summary span {
@@ -1688,7 +1334,7 @@ summary:focus-visible,
 }
 
 .final-cta {
-    padding: 110px 24px;
+    padding: 118px 24px;
     background: var(--espresso);
     text-align: center;
 }
@@ -1735,7 +1381,7 @@ summary:focus-visible,
 .footer-main {
     padding-bottom: 55px;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(280px, 400px) 1fr;
     gap: 70px;
 }
 
@@ -1768,14 +1414,33 @@ summary:focus-visible,
 }
 
 .footer-links a {
+    position: relative;
     width: max-content;
     color: rgba(255, 255, 255, 0.58);
     font-size: 11px;
     text-decoration: none;
+    transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.footer-links a::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: -3px;
+    left: 0;
+    height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform var(--duration-base) var(--ease-out);
 }
 
 .footer-links a:hover {
     color: white;
+}
+
+.footer-links a:hover::after {
+    transform: scaleX(1);
 }
 
 .footer-bottom {
@@ -1799,7 +1464,8 @@ summary:focus-visible,
 .reveal {
     opacity: 0;
     transform: translateY(18px);
-    transition: opacity 580ms ease, transform 580ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: opacity var(--duration-slower) var(--ease-standard),
+        transform var(--duration-slower) var(--ease-out);
 }
 
 .reveal[data-delay="1"] {
@@ -1813,27 +1479,6 @@ summary:focus-visible,
 .reveal.is-visible {
     opacity: 1;
     transform: translateY(0);
-}
-
-@keyframes typing-shimmer {
-    0%,
-    100% { opacity: 0.45; }
-    50% { opacity: 1; }
-}
-
-@keyframes load-progress {
-    from { width: 0; }
-}
-
-@keyframes activity-in {
-    from {
-        opacity: 0;
-        transform: translate(-14px, 12px);
-    }
-    to {
-        opacity: 1;
-        transform: translate(0, 0);
-    }
 }
 
 @keyframes preview-card-in {
@@ -1871,10 +1516,6 @@ summary:focus-visible,
 
     .nav-actions {
         gap: 14px;
-    }
-
-    .product-body {
-        min-height: 410px;
     }
 
     .feature-layout {
@@ -1951,7 +1592,18 @@ html {
         display: block;
         border-radius: 2px;
         background: var(--ink);
-        transition: transform 180ms ease, opacity 180ms ease;
+        transition: transform var(--duration-base) var(--ease-standard),
+            opacity var(--duration-base) var(--ease-standard),
+            background var(--duration-base) var(--ease-standard);
+    }
+
+    .landing-header.on-dark .nav-toggle-lines {
+        background: rgba(255, 255, 255, 0.82);
+    }
+
+    .landing-header.on-dark .nav-toggle-lines::before,
+    .landing-header.on-dark .nav-toggle-lines::after {
+        background: rgba(255, 255, 255, 0.82);
     }
 
     .nav-toggle-lines::before,
@@ -1997,7 +1649,8 @@ html {
         opacity: 0;
         pointer-events: none;
         transform: translateY(-12px);
-        transition: opacity 180ms ease, transform 180ms ease;
+        transition: opacity var(--duration-base) var(--ease-standard),
+            transform var(--duration-base) var(--ease-out);
     }
 
     .nav-links.open {
@@ -2031,21 +1684,6 @@ html {
         padding: 8px 0 0;
     }
 
-    .product-body {
-        grid-template-columns: 1fr;
-        min-height: 366px;
-    }
-
-    .product-chat {
-        display: none;
-    }
-
-    .activity-stack {
-        left: 15px;
-        transform: scale(0.85);
-        transform-origin: left bottom;
-    }
-
     .section-pad {
         padding-top: 90px;
         padding-bottom: 90px;
@@ -2075,7 +1713,11 @@ html {
     }
 
     .feature-preview {
-        min-height: 500px;
+        min-height: 430px;
+    }
+
+    .preview-canvas {
+        min-height: 380px;
     }
 
     .workflow-steps {
@@ -2187,93 +1829,6 @@ html {
 
     .hero-product-wrap {
         width: calc(100vw - 12px);
-    }
-
-    .product-topbar {
-        height: 43px;
-        padding: 0 10px;
-        grid-template-columns: 1fr auto;
-    }
-
-    .matter-name {
-        display: none;
-    }
-
-    .product-body {
-        min-height: 286px;
-    }
-
-    .product-tabs {
-        height: 40px;
-        padding: 0 13px;
-        gap: 19px;
-    }
-
-    .product-tab {
-        height: 40px;
-        font-size: 8px;
-    }
-
-    .analysis-grid {
-        padding: 12px;
-        display: block;
-    }
-
-    .matter-summary {
-        display: none;
-    }
-
-    .hero-cases-panel,
-    .hero-draft-panel {
-        padding: 12px;
-    }
-
-    .hero-panel-heading {
-        margin-bottom: 9px;
-    }
-
-    .hero-case-list {
-        gap: 6px;
-    }
-
-    .hero-case-list article {
-        min-height: 57px;
-        padding: 7px 8px;
-        grid-template-columns: 27px 1fr auto;
-        gap: 8px;
-    }
-
-    .hero-case-list article:nth-child(3) {
-        display: none;
-    }
-
-    .case-fit {
-        width: 27px;
-        height: 27px;
-        font-size: 7px;
-    }
-
-    .hero-case-list p {
-        display: none;
-    }
-
-    .hero-draft-paper {
-        padding: 12px 14px;
-    }
-
-    .hero-draft-title {
-        margin-bottom: 8px;
-        padding-bottom: 6px;
-    }
-
-    .issue-card {
-        padding: 9px;
-    }
-
-    .activity-stack {
-        bottom: 18px;
-        left: 8px;
-        transform: scale(0.68);
     }
 
     .section-pad {
@@ -2426,19 +1981,29 @@ html {
         gap: 42px;
     }
 
+    /* A single line spanning the OL (as the desktop horizontal version does)
+       can't know each step's real text height, so a fixed bottom offset
+       either falls short of the last icon or runs a dangling tail past it.
+       Segmenting per-step and bridging exactly the list's own gap keeps the
+       line's end anchored to content instead of a guessed pixel value. */
     .workflow-steps::before {
+        display: none;
+    }
+
+    .workflow-steps li:not(:last-child)::after {
+        content: "";
+        position: absolute;
         top: 31px;
-        bottom: 31px;
+        bottom: -42px;
         left: 31px;
-        right: auto;
         width: 1px;
-        height: auto;
         background: linear-gradient(var(--rule), var(--clay), var(--rule));
         transform: scaleY(0);
         transform-origin: top;
+        transition: transform var(--duration-slowest) 180ms var(--ease-out);
     }
 
-    .workflow-steps.in-view::before {
+    .workflow-steps.in-view li:not(:last-child)::after {
         transform: scaleY(1);
     }
 
@@ -2549,53 +2114,6 @@ html {
     overflow: visible;
 }
 
-.hero-product-wrap {
-    width: min(1240px, calc(100vw - 32px));
-    margin-right: 0;
-    margin-left: 50%;
-    margin-top: 58px;
-    margin-bottom: 60px;
-    translate: -50% 0;
-}
-
-@keyframes demo-message-in {
-    from {
-        opacity: 0;
-        transform: translateY(12px) scale(0.98);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
-@keyframes demo-card-in {
-    from {
-        opacity: 0;
-        transform: translateX(16px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
-
-@keyframes demo-action-pulse {
-    0%,
-    100% { background: transparent; }
-    50% {
-        background: rgba(255, 255, 255, 0.2);
-        box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
-    }
-}
-
-@keyframes demo-caret {
-    0%,
-    48% { opacity: 1; }
-    49%,
-    100% { opacity: 0; }
-}
-
 @media (max-width: 600px) {
 .hero-product-wrap {
         width: calc(100vw - 16px);
@@ -2605,20 +2123,11 @@ html {
     }
 }
 
+/* The blanket duration/iteration-count/scroll-behavior override already lives
+   in tokens.css, shared with the app. This block only needs the landing-only
+   states that a 1ms transition can't resolve cleanly: reveal/scatter effects
+   that depend on JS never adding their "in-view" class in the first place. */
 @media (prefers-reduced-motion: reduce) {
-html {
-        scroll-behavior: auto;
-    }
-
-    *,
-    *::before,
-    *::after {
-        scroll-behavior: auto !important;
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-    }
-
     .reveal {
         opacity: 1;
         transform: none;
@@ -2646,6 +2155,12 @@ html {
 .hero-product-wrap {
     position: relative;
     width: 100%;
+    padding: 14px 14px 0;
+    margin-top: 58px;
+    margin-right: 0;
+    margin-bottom: 60px;
+    margin-left: 50%;
+    translate: -50% 0;
 }
 
 .hero-product {
@@ -2725,6 +2240,12 @@ html {
     border-radius: var(--radius-md);
     font-size: var(--text-sm);
     font-weight: var(--weight-semibold);
+    transition: transform var(--duration-base) var(--ease-out);
+}
+
+.hero-product-overlay:hover .hero-product-cue,
+.hero-product-overlay:focus-visible .hero-product-cue {
+    transform: translateY(-2px);
 }
 
 .hero-product-caption {

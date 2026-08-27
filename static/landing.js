@@ -5,9 +5,20 @@
     const navToggle = document.querySelector("[data-nav-toggle]");
     const navLinks = document.querySelector("[data-nav-links]");
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const darkSections = Array.from(document.querySelectorAll('[data-theme="dark"]'));
 
     function updateHeader() {
-        if (header) header.classList.toggle("scrolled", window.scrollY > 12);
+        if (!header) return;
+        header.classList.toggle("scrolled", window.scrollY > 12);
+
+        if (darkSections.length) {
+            const probeY = header.getBoundingClientRect().bottom + 1;
+            const onDark = darkSections.some(function (section) {
+                const rect = section.getBoundingClientRect();
+                return rect.top <= probeY && rect.bottom > probeY;
+            });
+            header.classList.toggle("on-dark", onDark);
+        }
     }
 
     updateHeader();

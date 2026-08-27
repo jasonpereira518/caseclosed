@@ -23,6 +23,7 @@ key.json
 !firebase.json
 !firebase.deploy.json
 !infra/*.json
+!static/demo-fixture.json
 
 # IDEs / editors
 .vscode/
