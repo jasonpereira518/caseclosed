@@ -225,9 +225,4 @@ See [BACKEND_ARCHITECTURE.md](BACKEND_ARCHITECTURE.md) for the complete chat/job
 
 ---
 
-## Contributors
-
-- Sai Yadavalli — AI Engineer  
-- Jason Pereira — Frontend Developer & UI/UX Designer  
-
 Initially built as part of an AI hackathon project. Now, backed by 1789 Student Venture Fund.
