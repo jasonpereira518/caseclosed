@@ -106,13 +106,10 @@ def get_context(context_id, user_id=None):
 
 
 def get_context_or_default(context_id, user_id=None):
+    """None when the matter exists but this user can no longer open it."""
     if not user_id:
         return default_context()
-    loaded = load_matter(str(context_id), str(user_id))
-    if loaded:
-        return FirestoreBackedDict(context_id, user_id, _ensure_metadata(loaded))
-    _, ctx = create_new_context(str(user_id), context_id=str(context_id))
-    return FirestoreBackedDict(context_id, user_id, ctx)
+    return get_or_create_context(context_id, user_id)
 
 
 def get_or_create_context(context_id, user_id=None):

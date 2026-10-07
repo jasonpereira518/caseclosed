@@ -266,3 +266,42 @@ class LegacyMigrationRetirementTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LostAccessMatterTests(unittest.TestCase):
+    """A session pointing at a matter the user was unassigned from must never
+    recreate it: create_matter overwrites the root doc and save_matter empties
+    its messages, documents and timeline for the whole team."""
+
+    def setUp(self):
+        app.config.update(TESTING=True)
+        self.client = app.test_client()
+
+    @patch("models.context.create_new_context")
+    @patch("models.context.locate_matter", return_value=("team-ws", None))
+    @patch("models.context.load_matter", return_value=None)
+    def test_inaccessible_existing_matter_is_not_recreated(self, _load, _locate, create):
+        from models.context import get_context_or_default
+
+        self.assertIsNone(get_context_or_default("team-matter", "u1"))
+        create.assert_not_called()
+
+    @patch("routes.context.set_active_matter")
+    @patch("routes.context.list_user_contexts", return_value=[{"context_id": "mine"}])
+    @patch("routes.context.active_matter", return_value=None)
+    @patch("routes.context.active_workspace", return_value="w1")
+    @patch("routes.context.get_context_or_default")
+    @patch("models.user.load_user")
+    def test_context_reselects_when_session_matter_is_gone(
+        self, load_user, get_ctx, _ws, _active, _list, set_active
+    ):
+        load_user.return_value = _user()
+        _sign_in(self.client)
+        with self.client.session_transaction() as session:
+            session["context_id"] = "team-matter"
+        get_ctx.side_effect = lambda cid, uid: None if cid == "team-matter" else {"title": "Mine"}
+
+        response = self.client.get("/context")
+
+        self.assertEqual(response.get_json()["context_id"], "mine")
+        set_active.assert_called_once_with("u1", "mine")

@@ -173,6 +173,39 @@ class InviteErrorPageTests(unittest.TestCase):
         self.assertIn(b"expired", response.data.lower())
         self.assertIn(b"/app", response.data)
 
+    def _sign_in(self, load_user):
+        load_user.return_value = User(
+            id="u1", email="lawyer@example.com", name="Jordan", profile_pic=None
+        )
+        with self.client.session_transaction() as session:
+            session["_user_id"] = "u1"
+            session["_fresh"] = True
+
+    @patch("services.tenancy.accept_invitation")
+    @patch("models.user.load_user")
+    def test_wrong_account_invite_keeps_the_invite_for_a_retry(self, load_user, accept):
+        from services.tenancy import AuthorizationError
+
+        self._sign_in(load_user)
+        accept.side_effect = AuthorizationError("sign in with the invited email address")
+
+        body = self.client.get("/auth/complete?invite=good-token").get_data(as_text=True)
+
+        self.assertIn("still valid", body)
+        self.assertIn('data-redirect="/auth/login?invite=good-token"', body)
+        self.assertNotIn("single-use and expires", body)
+
+    @patch("services.tenancy.set_active_workspace")
+    @patch("services.tenancy.accept_invitation", return_value="team-ws")
+    @patch("models.user.load_user")
+    def test_accepted_invite_opens_the_team_workspace(self, load_user, _accept, activate):
+        self._sign_in(load_user)
+
+        response = self.client.get("/auth/complete?invite=good-token")
+
+        self.assertEqual(response.status_code, 302)
+        activate.assert_called_once_with("u1", "team-ws")
+
 
 class DeletedIdentityTests(unittest.TestCase):
     def _load(self, doc):

@@ -6,11 +6,20 @@
 <main class="waitlist-page" id="main">
     <section class="waitlist-card" aria-labelledby="invite-error-title">
         <h1 id="invite-error-title">That invitation didn't work</h1>
+        {% if retry_url %}
+        <p>
+            This invitation was sent to a different email address than the Google account
+            you signed in with ({{ current_user.email }}). The invitation is still valid:
+            sign out, then sign in with the invited account.
+        </p>
+        <p><a href="{{ url_for('auth.logout') }}" data-clerk-sign-out data-redirect="{{ retry_url }}">Sign out and use the invited account</a></p>
+        {% else %}
         <p>{{ error }}</p>
         <p>
             You're signed in, but you haven't joined the team workspace. Ask the person who
             invited you to send a new invitation — the link is single-use and expires.
         </p>
+        {% endif %}
         <p><a href="{{ next_url or '/app' }}">Continue to your workspace</a></p>
     </section>
 </main>

@@ -45,8 +45,10 @@
       <div class="auth-configuration-error" role="alert">
         <svg class="icon" aria-hidden="true"><use href="#i-status-negative"></use></svg>
         <div>
-          <strong>We could not complete that invitation</strong>
+          <strong>Sign-in didn't complete</strong>
           <p>{{ error }}</p>
+          <p><a href="{{ url_for('auth.logout') }}" data-clerk-sign-out
+                data-redirect="{{ url_for('auth.login', next=next_url, invite=invite_token or None) }}">Sign out and try a different account</a></p>
         </div>
       </div>
       {% endif %}

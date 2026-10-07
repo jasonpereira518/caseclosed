@@ -142,8 +142,10 @@ class AdminAccessTests(unittest.TestCase):
             session["_user_id"] = "admin-user"
             session["_fresh"] = True
 
-    def test_anonymous_visitor_gets_404(self):
-        self.assertEqual(self.client.get("/admin/access").status_code, 404)
+    def test_anonymous_visitor_is_sent_to_sign_in(self):
+        response = self.client.get("/admin/access")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/auth/login?next=/admin/access", response.headers["Location"])
 
     @patch("models.user.load_user")
     def test_non_admin_gets_404(self, load_user):

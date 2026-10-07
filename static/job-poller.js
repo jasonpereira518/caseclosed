@@ -8,8 +8,20 @@ async function pollJob(statusUrl, { deadlineMs = 95000, intervalMs = 900,
     const deadline = Date.now() + deadlineMs;
     let interval = intervalMs;
     while (Date.now() < deadline) {
-        const res = await fetch(statusUrl, { headers: { 'Accept': 'application/json' } });
-        const job = await res.json();
+        let res, job;
+        try {
+            res = await fetch(statusUrl, { headers: { 'Accept': 'application/json' } });
+            job = await res.json();
+        } catch (_transient) {
+            // Network drop or a proxy's HTML error page. The job keeps running
+            // server-side, so keep polling until the deadline.
+            res = null;
+        }
+        if (!res || res.status >= 500) {
+            await new Promise(resolve => setTimeout(resolve, interval));
+            interval = Math.min(Math.round(interval * 1.25), maxIntervalMs);
+            continue;
+        }
         if (!res.ok) throw new Error(job.error || 'Unable to read job status');
         if (onUpdate) onUpdate(job);
         if (['succeeded', 'failed', 'cancelled'].includes(job.status)) return job;

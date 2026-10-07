@@ -2,7 +2,7 @@ import logging
 
 import config
 
-from flask import Flask, jsonify, redirect, request, url_for
+from flask import Flask, jsonify, redirect, render_template, request, url_for
 from flask_login import LoginManager, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -70,7 +70,21 @@ def load_user_from_identity_provider(req):
 def unauthorized():
     if _is_protected_json_path(request.path):
         return jsonify({"error": "unauthorized"}), 401
-    return redirect(url_for("auth.login"))
+    if request.endpoint == "auth.complete_login":
+        # Clerk says signed in but the server refused the session. Bouncing to a
+        # bare /auth/login would loop silently (Continue -> session_exists ->
+        # here again), so say so and keep the destination and invite.
+        return redirect(url_for(
+            "auth.login",
+            next=request.args.get("next"),
+            invite=request.args.get("invite") or None,
+            error="session",
+        ))
+    # Carry the deep link through sign-in; /app is already login's default.
+    # auth._safe_next() re-validates it on the way back out.
+    target = request.full_path if request.query_string else request.path
+    next_url = None if target == url_for("main.workspace") else target
+    return redirect(url_for("auth.login", next=next_url))
 
 
 app = Flask(__name__)
@@ -179,13 +193,20 @@ def set_security_headers(response):
     headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     headers.setdefault("Content-Security-Policy", "frame-ancestors 'self'")
     headers.setdefault("Content-Security-Policy-Report-Only", CSP_REPORT_ONLY)
-    headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    headers.setdefault("Permissions-Policy", "camera=(), microphone=(self), geolocation=()")
     if request.is_secure:
         headers.setdefault(
             "Strict-Transport-Security",
             f"max-age={config.HSTS_MAX_AGE}; includeSubDomains",
         )
     return response
+
+
+@app.errorhandler(404)
+def not_found(error):
+    if _is_protected_json_path(request.path):
+        return jsonify({"error": "not_found"}), 404
+    return render_template("not_found.html"), 404
 
 
 @app.context_processor

@@ -33,6 +33,16 @@ def _safe_next(value):
     return url_for("main.workspace")
 
 
+# ?error= is attacker-controllable, so it selects fixed copy and is never shown raw.
+LOGIN_ERRORS = {
+    "google": "We could not complete sign-in with Google. Please try again.",
+    "unavailable": "Sign-in could not be loaded. Please try again.",
+    "session": "Your Google sign-in worked, but we couldn't open your account. "
+               "Try again, or sign out and use a different Google account.",
+}
+DEFAULT_LOGIN_ERROR = "Sign-in didn't complete. Please try again."
+
+
 @auth_bp.route("/login")
 def login():
     next_url = _safe_next(request.args.get("next"))
@@ -49,7 +59,8 @@ def login():
         invite_token=invite_token,
         complete_url=complete_url,
         sso_callback_url=sso_callback_url,
-        error=request.args.get("error", ""),
+        error=(LOGIN_ERRORS.get(request.args["error"], DEFAULT_LOGIN_ERROR)
+               if request.args.get("error") else ""),
     )
 
 
@@ -76,16 +87,27 @@ def complete_login():
     next_url = _safe_next(request.args.get("next"))
     invite_token = request.args.get("invite", "")
     if invite_token:
-        from services.tenancy import AuthorizationError, ValidationError, accept_invitation
+        from services.tenancy import (
+            AuthorizationError, ValidationError, accept_invitation, set_active_workspace,
+        )
 
         try:
-            accept_invitation(str(current_user.get_id()), current_user.email, invite_token)
+            workspace_id = accept_invitation(str(current_user.get_id()), current_user.email, invite_token)
+            # Open the team they just joined, not their personal workspace.
+            set_active_workspace(str(current_user.get_id()), workspace_id)
         except (AuthorizationError, ValidationError) as exc:
             # The user is signed in either way; a redirect would silently
             # swallow the failure (the login page bounces authenticated
             # visitors). Show the problem, then let them continue.
             session.clear()
-            return render_template("invite_error.html", error=str(exc), next_url=next_url)
+            return render_template(
+                "invite_error.html",
+                error=str(exc),
+                next_url=next_url,
+                # Wrong Google account: the invitation is still good.
+                retry_url=(url_for("auth.login", invite=invite_token)
+                           if isinstance(exc, AuthorizationError) else None),
+            )
     session.clear()
     return redirect(next_url)
 

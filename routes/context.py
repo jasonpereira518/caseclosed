@@ -9,6 +9,7 @@ from models.context import (
     get_context as get_stored_context,
     get_context_id,
     get_context_or_default,
+    default_context,
     list_user_contexts,
     rename_context,
 )
@@ -73,28 +74,37 @@ def _activate_next_matter(user_id):
     return {"status": "ok", "switched_to": new_id, "context": context}
 
 
+def _select_matter(user_id):
+    """The user's last active matter if still usable, else their first, else a new one."""
+    workspace_id = active_workspace(user_id)
+    stored_id = active_matter(user_id)
+    stored_context = get_stored_context(stored_id, user_id) if stored_id else {}
+    if (stored_context
+            and stored_context.get("workspace_id") == workspace_id
+            and stored_context.get("status") != "archived"):
+        return stored_id
+    matters = list_user_contexts(user_id, workspace_id)
+    if matters:
+        return matters[0]["context_id"]
+    return create_new_context(user_id, workspace_id=workspace_id)[0]
+
+
 @context_bp.route("/context", methods=["GET"])
 @login_required
 def get_context():
     """Get current context for a session."""
     user_id = str(current_user.get_id())
     if "context_id" not in session:
-        workspace_id = active_workspace(user_id)
-        stored_id = active_matter(user_id)
-        stored_context = get_stored_context(stored_id, user_id) if stored_id else {}
-        if (stored_context
-                and stored_context.get("workspace_id") == workspace_id
-                and stored_context.get("status") != "archived"):
-            session["context_id"] = stored_id
-        else:
-            matters = list_user_contexts(user_id, workspace_id)
-            if matters:
-                session["context_id"] = matters[0]["context_id"]
-            else:
-                session["context_id"] = create_new_context(user_id, workspace_id=workspace_id)[0]
-    context_id = get_context_id(session)
+        session["context_id"] = _select_matter(user_id)
+    context = get_context_or_default(get_context_id(session), user_id)
+    if context is None:
+        # The session points at a matter this user can no longer open
+        # (unassigned, or removed from the team). Recreating it under the same
+        # ID would overwrite a teammate's matter, so move on to another.
+        session["context_id"] = _select_matter(user_id)
+        context = get_context_or_default(session["context_id"], user_id) or default_context()
+    context_id = session["context_id"]
     set_active_matter(user_id, context_id)
-    context = get_context_or_default(context_id, user_id)
     session["workspace_id"] = context.get("workspace_id") or active_workspace(user_id)
     return jsonify({
         "context_id": context_id, "matter_id": context_id,

@@ -23,12 +23,17 @@ async function loadContext() {
     try {
         const res = await fetch('/context');
         const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Unable to load this matter');
         if (data.context) {
             data.context.total_seconds = data.total_seconds || data.context.total_seconds || 0;
         }
         applyContextToUI(data.context_id, data.context);
     } catch (err) {
         console.error('Error loading context:', err);
+        // Clear the skeletons; an empty panel with a message beats a shimmer
+        // that never resolves.
+        applyContextToUI(null, {});
+        showToast('Could not load this matter. Refresh the page to try again.', 'error');
     }
 }
 
@@ -200,6 +205,7 @@ function formatRelativeTime(isoString) {
 }
 
 function applyContextToUI(nextContextId, context) {
+    stopSessionTimer();  // credits pending seconds to the outgoing matter
     contextId = nextContextId || contextId;
     const safeContext = context || {};
     currentUploadedDocs = safeContext.uploaded_documents || [];
@@ -243,8 +249,13 @@ function renderChatFromContext(context) {
     messages.forEach((msg) => {
         const role = (msg && (msg.role || msg.sender || msg.type)) || 'assistant';
         const rawText = (msg && (msg.content || msg.text || msg.message)) || '';
-        const htmlText = escapeHtml(String(rawText)).replace(/\n/g, '<br>');
-        appendMessage(role === 'user' ? 'user' : 'bot', htmlText);
+        if (role === 'user') {
+            appendMessage('user', escapeHtml(String(rawText)).replace(/\n/g, '<br>'));
+        } else {
+            appendMessage('bot', renderGroundedMessage({
+                message: String(rawText), citations: msg && msg.metadata && msg.metadata.citations,
+            }));
+        }
     });
 }
 
@@ -315,12 +326,16 @@ async function handleNewSession() {
             await loadContext();
             return;
         }
-        contextId = data.context_id;
         clearPanelsForNewSession();
+        // Resets docs, intake, header, role and timer too -- otherwise the new
+        // matter shows (and acts on) the previous one's documents and facts.
+        applyContextToUI(data.context_id, { title: data.title });
         await loadSessionHistory();
         if (window.innerWidth < 768) closeSidebar();
     } catch (err) {
         console.error('Error creating new session:', err);
+        await loadContext();
+        showToast('Could not create a new matter. Please try again.', 'error');
     }
 }
 
@@ -393,6 +408,8 @@ async function switchSession(targetContextId) {
         if (!res.ok) {
             // Matter vanished or became inaccessible; refresh the list.
             await loadSessionHistory();
+            await loadContext();
+            showToast('That matter is no longer available.', 'error');
             return;
         }
         const data = await res.json();
@@ -404,6 +421,8 @@ async function switchSession(targetContextId) {
         if (window.innerWidth < 768) closeSidebar();
     } catch (err) {
         console.error('Error switching session:', err);
+        await loadContext();
+        showToast('Could not open that matter. Please try again.', 'error');
     } finally {
         if (card) {
             card.classList.remove('is-loading');
@@ -455,7 +474,6 @@ async function setSessionArchived(targetContextId, archived) {
         // Archiving the active matter returns the same switch payload as
         // delete: the backend already moved us to the next matter.
         if (data.switched_to && data.context) {
-            contextId = data.switched_to;
             applyContextToUI(data.switched_to, data.context || {});
         }
         await loadSessionHistory();
@@ -497,18 +515,29 @@ async function beginRenameSession(targetContextId) {
     input.focus();
     input.select();
 
+    // Re-rendering the list removes the input, which fires blur; without this
+    // guard Escape would save and Enter would rename twice.
+    let settled = false;
     const commit = async () => {
+        if (settled) return;
+        settled = true;
         const title = input.value.trim() || 'New Session';
         try {
-            await fetch('/contexts/rename', {
+            const res = await fetch('/contexts/rename', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ context_id: targetContextId, title })
             });
-            await loadSessionHistory();
+            if (!res.ok) throw new Error('rename failed');
+            if (targetContextId === contextId) {
+                const headerTitle = document.getElementById('matter-title');
+                if (headerTitle) headerTitle.textContent = title;
+            }
         } catch (err) {
             console.error('Error renaming session:', err);
+            showToast('Could not rename the matter.', 'error');
         }
+        await loadSessionHistory();
     };
 
     input.addEventListener('keydown', async (ev) => {
@@ -516,6 +545,8 @@ async function beginRenameSession(targetContextId) {
             ev.preventDefault();
             await commit();
         } else if (ev.key === 'Escape') {
+            ev.stopPropagation();  // don't also collapse the sidebar
+            settled = true;
             await loadSessionHistory();
         }
     });
@@ -546,8 +577,11 @@ async function confirmDeleteSession() {
             body: JSON.stringify({ context_id: targetContextId })
         });
         const data = await res.json();
+        if (!res.ok) {
+            showToast(data.error || 'Could not delete the matter.', 'error');
+            return;
+        }
         if (data && data.switched_to && data.context) {
-            contextId = data.switched_to;
             applyContextToUI(data.switched_to, data.context || {});
         }
         // Remove deleted session locally for immediate UI feedback.

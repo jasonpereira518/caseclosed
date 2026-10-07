@@ -199,15 +199,14 @@
     const image = $('avatar-image');
     const fallback = $('avatar-fallback');
     const remove = $('avatar-remove');
-    const uploaded = profile.avatar_url || '';
-    const url = uploaded || CLERK_PHOTO;
+    const url = profile.avatar_url || CLERK_PHOTO;
 
     image.hidden = !url;
     if (url) image.src = url;
     fallback.hidden = !!url;
     /* Only an uploaded avatar can be deleted; the Clerk photo is not ours to
        remove. Offering "Remove" with nothing to remove was the old page's tell. */
-    remove.hidden = !uploaded;
+    remove.hidden = !profile.has_uploaded_avatar;
   }
 
   function setupProfile() {
@@ -283,7 +282,6 @@
         if (!confirmed) return;
         const result = await api('/api/account/avatar', { method: 'DELETE' });
         accountData.profile = result.profile || accountData.profile;
-        if (result.profile) accountData.profile.avatar_url = '';
         renderAvatar(accountData.profile);
         showToast('Profile photo removed.', 'success');
       }));
@@ -688,8 +686,23 @@
         const payload = Object.fromEntries(new FormData(inviteForm));
         const result = await api(`/api/workspaces/${wid}/invitations`, jsonRequest('POST', payload));
         inviteForm.reset();
-        showToast(result.email_sent ? 'Invitation sent.' : 'Invitation created.', 'success');
+        const shareLink = !result.email_sent && result.invite_url;
+        showToast(shareLink ? 'Invitation created. Email isn\u2019t set up, so share the link below.' : 'Invitation sent.',
+                  shareLink ? 'info' : 'success');
         await renderTeam(wid);
+        if (shareLink) {
+          // No email went out: give the admin the link to send themselves.
+          const form = document.querySelector(`[data-invite-form="${CSS.escape(wid)}"]`);
+          const linkId = `invite-link-${wid}`;
+          form?.insertAdjacentHTML('afterend', `
+            <div class="field">
+              <label class="field-hint" for="${escapeHtml(linkId)}">Send this single-use link to them directly:</label>
+              <input class="input" id="${escapeHtml(linkId)}" type="text" readonly value="${escapeHtml(result.invite_url)}">
+            </div>`);
+          const linkInput = document.getElementById(linkId);
+          linkInput?.focus();
+          linkInput?.select();
+        }
       }));
       return;
     }

@@ -59,6 +59,8 @@ def public_profile(data: dict) -> dict:
         except RuntimeError:
             avatar = ""
     result["avatar_url"] = avatar
+    # avatar_url may just be the Google photo; only an upload is removable.
+    result["has_uploaded_avatar"] = bool(data.get("avatar_storage_path"))
     return result
 
 

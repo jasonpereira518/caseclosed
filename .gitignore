@@ -23,6 +23,8 @@ key.json
 !firebase.json
 !firebase.deploy.json
 !infra/*.json
+# Synthetic data for the public /demo sandbox; must ship with the source.
+!static/demo-fixture.json
 
 # IDEs / editors
 .vscode/
