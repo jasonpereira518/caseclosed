@@ -1,5 +1,8 @@
 (function () {
   const SIGN_OUT_TIMEOUT_MS = 4000;
+  // Past this, the sign-in button and the callback page report a failure
+  // instead of spinning forever on a blocked or stalled Clerk API.
+  const LOAD_TIMEOUT_MS = 15000;
 
   function timeout(ms) {
     let timer;
@@ -10,14 +13,19 @@
 
   window.caseClosedClerkReady = (async function () {
     if (!window.Clerk) throw new Error('Clerk failed to load');
-    await window.Clerk.load({ui: {ClerkUI: window.__internal_ClerkUICtor}});
+    const {promise: loadTimedOut, cancel: cancelLoadTimeout} = timeout(LOAD_TIMEOUT_MS);
+    try {
+      await Promise.race([window.Clerk.load({ui: {ClerkUI: window.__internal_ClerkUICtor}}), loadTimedOut]);
+    } finally {
+      cancelLoadTimeout();
+    }
     document.querySelectorAll('[data-clerk-sign-out]').forEach(link => {
       link.addEventListener('click', async event => {
         event.preventDefault();
         link.classList.add('is-loading');
         const {promise: timedOut, cancel} = timeout(SIGN_OUT_TIMEOUT_MS);
         try {
-          await Promise.race([window.Clerk.signOut({redirectUrl: '/'}), timedOut]);
+          await Promise.race([window.Clerk.signOut({redirectUrl: link.dataset?.redirect || '/'}), timedOut]);
           cancel();
         } catch (_error) {
           cancel();

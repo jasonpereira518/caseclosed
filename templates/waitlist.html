@@ -5,12 +5,23 @@
 {% block content %}
 <main class="waitlist-page" id="main">
     <section class="waitlist-card" aria-labelledby="waitlist-title">
+        {% if revoked %}
+        <h1 id="waitlist-title">Your access has been paused</h1>
+        <p>
+            Access for <strong>{{ user_email }}</strong> is currently turned off. If you
+            think this is a mistake, contact whoever set up your access.
+        </p>
+        {% else %}
         <h1 id="waitlist-title">You're on the list</h1>
         <p>
             Thanks{% if user_name %}, {{ user_name }}{% endif %} — your request for
             early access is in. We review requests by hand and will email
             <strong>{{ user_email }}</strong> as soon as your workspace is ready.
         </p>
+        <p>
+            Already approved? <a href="{{ url_for('main.workspace') }}">Open your workspace</a>
+        </p>
+        {% endif %}
         <p>
             In the meantime you can <a href="{{ url_for('demo.demo_workspace') }}">explore the
             live demo</a> on a fictional matter.

@@ -46,6 +46,12 @@ class LandingRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.headers["Location"].endswith("/auth/login"))
 
+    def test_signed_out_deep_link_survives_login_redirect(self):
+        response = self.client.get("/account")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/auth/login?next=/account"))
+
     def test_login_exposes_only_google_authentication(self):
         with patch("config.CLERK_PUBLISHABLE_KEY", "pk_test_example"), \
                 patch("config.CLERK_SECRET_KEY", "sk_test_example"), \

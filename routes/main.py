@@ -51,6 +51,7 @@ def waitlist():
         "waitlist.html",
         user_name=current_user.name,
         user_email=current_user.email,
+        revoked=current_user.access_status == "revoked",
     )
 
 

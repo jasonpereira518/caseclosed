@@ -7,18 +7,18 @@
   const nextUrl = root.dataset.next || '/app';
   const inviteToken = root.dataset.invite || '';
 
-  function fail(message) {
+  function fail(message, code) {
     if (status) {
       status.textContent = message;
       status.classList.add('auth-status--error');
     }
-    const params = new URLSearchParams({next: nextUrl, error: message});
+    const params = new URLSearchParams({next: nextUrl, error: code});
     if (inviteToken) params.set('invite', inviteToken);
     window.location.assign('/auth/login?' + params.toString());
   }
 
   if (!window.caseClosedClerkReady) {
-    fail('Sign-in could not be loaded. Please try again.');
+    fail('Sign-in could not be loaded. Please try again.', 'unavailable');
     return;
   }
 
@@ -29,5 +29,5 @@
       signUpForceRedirectUrl: completeUrl,
       signUpFallbackRedirectUrl: completeUrl,
     }))
-    .catch(() => fail('We could not complete sign-in with Google. Please try again.'));
+    .catch(() => fail('We could not complete sign-in with Google. Please try again.', 'google'));
 })();

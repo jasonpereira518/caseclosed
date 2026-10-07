@@ -1,12 +1,12 @@
 """Admin surface for the access gate.
 
-Admins are the emails in config.ADMIN_EMAILS. Everyone else — including
-signed-in users and anonymous visitors — gets a 404, not a 403, so the
-surface's existence is not advertised.
+Admins are the emails in config.ADMIN_EMAILS. Signed-in non-admins get a 404,
+not a 403, so the surface's existence is not advertised. Anonymous visitors to
+the dashboard page are sent to sign in (as for any page); the API stays 404.
 """
 import logging
 
-from flask import Blueprint, abort, jsonify, render_template, request
+from flask import Blueprint, abort, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 
 import config
@@ -26,6 +26,10 @@ def _require_admin():
 
 @admin_bp.route("/admin/access")
 def access_dashboard():
+    if not current_user.is_authenticated:
+        # The access-request email links here and usually arrives signed out.
+        # Still no signal to probers: anyone can be sent to sign in.
+        return redirect(url_for("auth.login", next=request.path))
     _require_admin()
     return render_template("admin_access.html", requests=list_access_requests())
 

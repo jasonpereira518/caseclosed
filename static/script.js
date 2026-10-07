@@ -20,6 +20,9 @@
 })();
 const chatBox = document.querySelector('#chat-box');
 const chatForm = document.querySelector('#chat-form');
+// The real handler binds only after the initial loads finish. Until then a
+// native submit would GET /app?message=<client facts> into history and logs.
+chatForm?.addEventListener('submit', event => event.preventDefault());
 const chatInput = document.querySelector('#chat-input');
 const uploadBtn = document.querySelector('#upload-btn');
 const pdfInput = document.querySelector('#pdf-input');
@@ -126,16 +129,14 @@ function syncTimeToBackend() {
     const seconds = pendingSecondsToSync;
     pendingSecondsToSync = 0;
     
-    console.log('[SYNC] Sending', seconds, 'seconds for context', contextId);
     fetch('/session/track-time', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
         body: JSON.stringify({ context_id: contextId, seconds })
     })
-    .then(r => { console.log('[SYNC] Response status:', r.status); return r.json(); })
+    .then(r => r.json())
     .then(data => {
-        console.log('[SYNC] Response data:', data);
         const session = sessionHistory.find(s => s.context_id === contextId);
         if (session && data.total_seconds !== undefined) {
             session.total_seconds = data.total_seconds;
@@ -668,7 +669,7 @@ function setupIntakeModal() {
                 if (!res.ok) throw new Error(data.error || 'Server error');
 
                 contextId = data.context_id;
-                await pollJob(data.status_url, {
+                const job = await pollJob(data.status_url, {
                     onUpdate: job => {
                         const stage = String(job.stage || 'analyzing').replace(/_/g, ' ');
                         submitBtn.textContent = `${stage.charAt(0).toUpperCase()}${stage.slice(1)}…`;
@@ -680,14 +681,26 @@ function setupIntakeModal() {
                 // synchronously, so reloading the matter picks up all of it.
                 await loadContext();
                 await loadSessionHistory();
-                document.querySelector('[data-tab="record"]').click();
-
                 closeModal(modal);
-                showToast('Case intake submitted and analyzed', 'success');
+                if (job.status === 'succeeded') {
+                    document.querySelector('[data-tab="record"]').click();
+                    showToast('Case intake submitted and analyzed', 'success');
+                } else {
+                    showToast(`Intake saved, but the analysis ${job.status === 'cancelled' ? 'was cancelled' : 'failed'}. `
+                        + 'Use Analyze to try again.', 'error');
+                }
              } catch (err) {
-                 showToast('Error processing intake: ' + err.message, 'error');
-                 submitBtn.disabled = false;
-                 submitBtn.textContent = 'Submit & Analyze';
+                 if (err.stillRunning) {
+                     // The intake itself is already saved; resubmitting would
+                     // append a duplicate and queue a second analysis.
+                     await loadContext();
+                     closeModal(modal);
+                     showToast('Intake saved. The analysis is still running and will appear when it finishes.', 'info');
+                 } else {
+                     showToast('Error processing intake: ' + err.message, 'error');
+                     submitBtn.disabled = false;
+                     submitBtn.textContent = 'Submit & Analyze';
+                 }
              } finally {
                  document.body.style.cursor = 'default';
              }
@@ -791,6 +804,22 @@ function showDraftSkeleton() {
 // =====================================================
 const SUPPORTED_UPLOAD_EXTENSIONS = ['pdf', 'docx', 'txt'];
 
+/** Refresh only the document list and header. A full loadContext() here
+ *  re-renders chat (dropping in-flight replies) and exits draft edit mode. */
+async function refreshDocuments(forMatterId) {
+    try {
+        const res = await fetch('/context');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.context_id !== forMatterId || contextId !== forMatterId) return;
+        currentUploadedDocs = data.context?.uploaded_documents || [];
+        updateMatterHeader(data.context);
+        renderDocList();
+    } catch (err) {
+        console.error('Error refreshing documents:', err);
+    }
+}
+
 async function handleFileUpload(event) {
     let files = event.target.files;
     if (!files.length) return;
@@ -864,20 +893,22 @@ async function handleFileUpload(event) {
             showToast(`${data.jobs.length} file(s) queued for extraction`, 'info');
             // Open the manager immediately: rows show "processing" and each
             // updates as its own job finishes, not after all of them.
-            await loadContext();
+            const uploadMatterId = contextId;
+            await refreshDocuments(uploadMatterId);
             openDocManager();
-            const refreshRows = async () => {
-                await loadContext();
-                renderDocList();
-            };
             const settled = await Promise.allSettled(data.jobs.map(job =>
-                pollJob(job.status_url, { deadlineMs: 120000 }).finally(refreshRows)));
+                pollJob(job.status_url, { deadlineMs: 120000 })
+                    .finally(() => refreshDocuments(uploadMatterId))));
             const completed = settled.filter(s => s.status === 'fulfilled').map(s => s.value);
             const succeeded = completed.filter(job => job.status === 'succeeded').length;
-            const failed = data.jobs.length - succeeded;
+            const stillRunning = settled.filter(s => s.status === 'rejected' && s.reason?.stillRunning).length;
+            const failed = data.jobs.length - succeeded - stillRunning;
             await loadSessionHistory();
-            showToast(failed ? `${succeeded} processed; ${failed} failed` : `${succeeded} file(s) processed`,
-                      failed ? 'error' : 'success');
+            const parts = [`${succeeded} processed`];
+            if (stillRunning) parts.push(`${stillRunning} still processing`);
+            if (failed) parts.push(`${failed} failed`);
+            showToast(parts.length > 1 ? parts.join('; ') : `${succeeded} file(s) processed`,
+                      failed ? 'error' : (stillRunning ? 'info' : 'success'));
         } else if (data.error) {
             showToast(`Upload failed: ${data.error}`, 'error');
         }
@@ -1013,13 +1044,12 @@ async function retryDocumentIngest(documentId) {
             return;
         }
         showToast('Reprocessing document…', 'info');
-        await loadContext();
-        renderDocList();
+        const matterId = contextId;
+        await refreshDocuments(matterId);
         try {
             await pollJob(data.status_url, { deadlineMs: 120000 });
         } catch (_err) { /* row refresh below shows the stored outcome */ }
-        await loadContext();
-        renderDocList();
+        await refreshDocuments(matterId);
     } catch (err) {
         showToast(err.message || 'Unable to retry this document', 'error');
     }
@@ -1068,12 +1098,17 @@ function promptDeleteDocument(event, index) {
 
 async function toggleDocument(index, included) {
     try {
-        await fetch('/documents/toggle', {
+        const res = await fetch('/documents/toggle', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
             body: JSON.stringify({ context_id: contextId, doc_index: index, included })
         });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            showToast(data.error || 'Failed to update document', 'error');
+            return;
+        }
         if (currentUploadedDocs[index]) {
             currentUploadedDocs[index].included = included;
         }
@@ -1116,8 +1151,10 @@ async function handleAnalyze() {
         return;
     }
 
+    const startedOn = contextId;
     const loading = appendLoadingMessage('Analyzing case…');
     showAnalysisSkeleton();
+    analyzeBtn.classList.add('is-loading');
 
     try {
         const res = await fetch('/analyze', {
@@ -1135,9 +1172,13 @@ async function handleAnalyze() {
             },
         });
         removeMessage(loading);
+        if (contextId !== startedOn) {
+            showToast('Analysis finished for another matter — switch back to see it.', 'info');
+            return;
+        }
 
         if (job.status !== 'succeeded') {
-            appendMessage('bot', `Error: ${job.error?.message || 'Analysis failed.'}`);
+            appendMessage('bot', `Error: ${escapeHtml(job.error?.message || 'Analysis failed.')}`);
             return;
         }
 
@@ -1152,8 +1193,12 @@ async function handleAnalyze() {
         document.querySelector('[data-tab="record"]').click();
     } catch (err) {
         removeMessage(loading);
-        appendMessage('bot', err.message || 'Analysis failed.');
+        if (contextId === startedOn) appendMessage('bot', escapeHtml(err.message || 'Analysis failed.'));
         console.error(err);
+    } finally {
+        analyzeBtn.classList.remove('is-loading');
+        // Replace the skeleton on every exit path, not just success.
+        updateAnalysisPanel(currentAnalysis);
     }
 }
 
@@ -1200,11 +1245,20 @@ async function handleChatSubmit(e) {
 /** Polls a chat job to completion and renders its result. On failure (not
  *  cancellation), offers a Retry button that re-queues the same job via
  *  POST .../retry and re-enters this same settle loop. */
+/** /api/matters/<id>/jobs/<job> -> <id>; undefined for the demo's URLs. */
+function matterIdFromStatusUrl(statusUrl) {
+    const match = String(statusUrl || '').match(/\/api\/matters\/([^/]+)\/jobs\//);
+    return match ? decodeURIComponent(match[1]) : undefined;
+}
+
 async function settleChatJob(statusUrl, loadingElement) {
+    const jobMatterId = matterIdFromStatusUrl(statusUrl);
+    const switchedAway = () => Boolean(jobMatterId) && jobMatterId !== contextId;
     let data;
     try {
         data = await pollChatJob(statusUrl, loadingElement);
     } catch (err) {
+        if (switchedAway()) return;
         if (!err.stillRunning) throw err;
         // The job outlived the poll window but hasn't failed — offer to keep
         // waiting on the same status_url instead of a dead-end message.
@@ -1226,6 +1280,16 @@ async function settleChatJob(statusUrl, loadingElement) {
         return;
     }
     removeMessage(loadingElement);
+
+    if (switchedAway()) {
+        // The reply is saved on its own matter (and shows when the user goes
+        // back); painting it here would put it in the wrong conversation and
+        // retarget the next message.
+        const hist = sessionHistory.find((item) => item.context_id === jobMatterId);
+        if (hist && data.result?.title) { hist.title = data.result.title; renderSessionList(); }
+        showToast(`Reply ready in “${hist?.title || 'another matter'}”.`, 'info');
+        return;
+    }
 
     if (data.status !== 'succeeded') {
         if (data.status === 'cancelled') {
@@ -1259,6 +1323,10 @@ async function settleChatJob(statusUrl, loadingElement) {
         completedHistory.title = data.title;
         if (wasNew && data.title !== 'New Session') completedHistory._animateTitleNext = true;
         renderSessionList();
+    }
+    if (data.title && completedId === contextId) {
+        const titleEl = document.getElementById('matter-title');
+        if (titleEl) titleEl.textContent = data.title;
     }
 
     // Handle clarifying
@@ -1389,9 +1457,11 @@ async function handleDraftGenerate() {
     exitDraftEditMode(false);
 
     const docType = document.getElementById('draft-type').value;
-    const draftContent = document.getElementById('draft-content');
+    const startedOn = contextId;
+    const previousDraft = currentDraft;
 
     showDraftSkeleton();
+    generateBtn?.classList.add('is-loading');
 
     try {
         const res = await fetch('/draft', {
@@ -1399,39 +1469,28 @@ async function handleDraftGenerate() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ context_id: contextId, doc_type: docType })
         });
-
-        let data;
-        try {
-            data = await res.json();
-        } catch (e) {
-            draftContent.innerHTML = '<p class="empty-state">Received invalid response from server.</p>';
-            return;
-        }
-
-        if (!res.ok) {
-            draftContent.innerHTML = `<p class="empty-state">Error: ${data.error || 'Unable to queue draft'}</p>`;
-            return;
-        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Unable to queue draft');
 
         const job = await pollJob(data.status_url);
-
-        if (job.status !== 'succeeded') {
-            draftContent.innerHTML = `<p class="empty-state">${job.error?.message || 'Draft generation failed.'}</p>`;
+        if (contextId !== startedOn) {
+            showToast('Draft finished for another matter — switch back to see it.', 'info');
             return;
         }
-
-        const draftDocument = job.result?.document;
-        if (draftDocument) {
-            displayDraft(draftDocument);
-            currentDraft = draftDocument;
-            document.getElementById('draft-export-btn').hidden = false;
-            appendMessage('bot', `Generated ${docType}! Check the Draft panel.`);
-        } else {
-            draftContent.innerHTML = '<p class="empty-state">Draft generation failed.</p>';
+        if (job.status !== 'succeeded' || !job.result?.document) {
+            throw new Error(job.error?.message || 'Draft generation failed.');
         }
+        // Sets currentDraft and reveals Export and Edit.
+        updateDraftPanel(job.result.document);
+        appendMessage('bot', `Generated ${escapeHtml(docType)}! Check the Draft panel.`);
     } catch (err) {
-        draftContent.innerHTML = `<p class="empty-state">${err.message || 'Draft generation failed.'}</p>`;
         console.error(err);
+        if (contextId !== startedOn) return;
+        // Keep the previous draft on screen; a failed regenerate shouldn't hide it.
+        updateDraftPanel(previousDraft);
+        showToast(err.message || 'Draft generation failed.', 'error');
+    } finally {
+        generateBtn?.classList.remove('is-loading');
     }
 }
 
@@ -3198,8 +3257,8 @@ document.addEventListener('keydown', (e) => {
     // Don't fire other shortcuts while typing in inputs
     if (isInputFocused) return;
     
-    // Cmd+N — new session
-    if (cmdKey && e.key.toLowerCase() === 'n') {
+    // Cmd+N — new session (Cmd+Shift+N is notes, below)
+    if (cmdKey && !e.shiftKey && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         document.getElementById('new-session-btn')?.click();
         return;

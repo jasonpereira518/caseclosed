@@ -1,6 +1,7 @@
 """Account center, workspace administration, export, and deletion APIs."""
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 
@@ -204,14 +205,17 @@ def invite_member(workspace_id):
         invite_url = f"{config.APP_BASE_URL.rstrip('/')}/auth/login?invite={token}"
         try:
             sent = send_workspace_invitation(invitation["email"], workspace.get("name", "a workspace"), invite_url)
-        except RuntimeError:
-            revoke_invitation(workspace_id, _uid(), invitation["invitation_id"])
-            raise
+        except (RuntimeError, OSError):  # unconfigured SMTP, or smtplib/socket failure
+            logging.exception("Invitation email failed; returning the link to the inviter")
+            sent = False
         response = {"invitation": invitation, "email_sent": sent}
-        if config.DEBUG:
+        if not sent:
+            # The inviter is a workspace admin and the link only works for the
+            # invited address, so handing it back is safe -- and far better
+            # than revoking the invite and failing the request.
             response["invite_url"] = invite_url
         return jsonify(response), 201
-    except (AuthorizationError, ValidationError, RuntimeError, StopIteration) as exc:
+    except (AuthorizationError, ValidationError, StopIteration) as exc:
         return _error(exc)
 
 

@@ -176,5 +176,33 @@ class TeamRoutesTests(unittest.TestCase):
         self.assertEqual(response.get_json()["events"][0]["event"], "workspace.renamed")
 
 
+class InviteWithoutEmailTests(unittest.TestCase):
+    """Neither deploy profile configures SMTP. An invite must survive that and
+    hand the inviter the link, not be revoked behind a 400."""
+
+    def setUp(self):
+        app.config.update(TESTING=True)
+        self.client = app.test_client()
+
+    @patch("routes.account.revoke_invitation")
+    @patch("routes.account.send_workspace_invitation",
+           side_effect=RuntimeError("SMTP_HOST and SMTP_FROM are required to send email"))
+    @patch("routes.account.list_workspaces", return_value=[{"workspace_id": "w1", "name": "Firm"}])
+    @patch("routes.account.create_invitation",
+           return_value=({"invitation_id": "inv-1", "email": "a@example.com"}, "tok"))
+    @patch("models.user.load_user")
+    def test_mail_failure_returns_the_link(self, load_user, _create, _list, _send, revoke):
+        load_user.return_value = _user()
+        _sign_in(self.client)
+
+        response = self.client.post("/api/workspaces/w1/invitations", json={"email": "a@example.com"})
+
+        self.assertEqual(response.status_code, 201)
+        body = response.get_json()
+        self.assertFalse(body["email_sent"])
+        self.assertTrue(body["invite_url"].endswith("/auth/login?invite=tok"))
+        revoke.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

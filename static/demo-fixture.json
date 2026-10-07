@@ -1,0 +1,481 @@
+{
+  "_notice": "SYNTHETIC DEMONSTRATION DATA. Every matter, party, document, authority and citation below is fictional and was authored for the public demo at /demo. Case names are deliberately invented so that none can be mistaken for real authority. Nothing here is a claim about the product's accuracy or output.",
+  "context_id": "demo-rivera-northline",
+  "title": "Rivera v. Northline Logistics",
+  "created_at": "2026-06-11T14:20:00Z",
+  "updated_at": "2026-07-29T09:41:00Z",
+  "total_seconds": 8940,
+  "description": "Commercial vehicle negligence. Plaintiff Marisol Rivera was struck at the intersection of Kellner and 7th by a delivery vehicle operated by a Northline Logistics driver. Northline disputes that the driver was acting in the course of employment at the time.",
+  "role": "plaintiff",
+  "intake": {
+    "case_title": "Rivera v. Northline Logistics",
+    "legal_category": "Personal Injury",
+    "jurisdiction": "Ohio",
+    "court_level": "Lower Court",
+    "user_role": "Plaintiff",
+    "description": "Client was struck in a marked crossing at Kellner and 7th by a Northline Logistics delivery vehicle. Northline disputes that the driver was acting in the course of employment.",
+    "opposing_party": "Northline Logistics, Inc."
+  },
+  "messages": [
+    {
+      "role": "user",
+      "content": "Client was hit by a Northline delivery van on 14 March. The company says the driver had clocked out and was running a personal errand. I have the incident report, the dispatch log and their letter denying liability."
+    },
+    {
+      "role": "assistant",
+      "content": "I've read the documents you added. The dispatch log is the pivotal record here: it shows the vehicle transmitting location data 41 minutes after the driver's stated clock-out, on a route consistent with the assigned delivery sequence rather than a departure from it.\n\nThat cuts directly against Northline's course-of-employment defence. I've pulled the record into the Record panel, built the chronology, and retrieved five authorities on vicarious liability and the scope-of-employment question. Two are directly on point.\n\nEverything here is AI-assisted and needs your review before it goes anywhere."
+    },
+    {
+      "role": "user",
+      "content": "What's our exposure on comparative fault? The report mentions she stepped off the kerb early."
+    }
+  ],
+  "uploaded_documents": [
+    {
+      "filename": "Complaint.pdf",
+      "included": true,
+      "uploaded_at": "2026-06-11T14:22:00Z",
+      "text": "",
+      "status": "ready"
+    },
+    {
+      "filename": "Incident_Report.pdf",
+      "included": true,
+      "uploaded_at": "2026-06-11T14:22:40Z",
+      "text": "",
+      "status": "ready"
+    },
+    {
+      "filename": "Rivera_Statement.docx",
+      "included": true,
+      "uploaded_at": "2026-06-11T14:23:10Z",
+      "text": "",
+      "status": "ready"
+    },
+    {
+      "filename": "Dispatch_Log.txt",
+      "included": true,
+      "uploaded_at": "2026-06-18T10:02:00Z",
+      "text": "",
+      "status": "ready"
+    },
+    {
+      "filename": "Northline_Correspondence.pdf",
+      "included": false,
+      "uploaded_at": "2026-07-02T16:35:00Z",
+      "text": "",
+      "status": "ready"
+    }
+  ],
+  "analysis": {
+    "facts": [
+      "On 14 March 2026 at approximately 07:52, a Northline Logistics delivery vehicle struck the plaintiff in the marked crossing at Kellner Avenue and 7th Street.",
+      "The plaintiff sustained a comminuted fracture of the left tibia and underwent surgical fixation on 15 March 2026.",
+      "The responding officer's report records clear conditions, dry road surface, and a functioning pedestrian signal.",
+      "Northline's dispatch log shows the vehicle transmitting location data at 08:33, forty-one minutes after the driver's recorded clock-out.",
+      "The transmitted route is consistent with the assigned delivery sequence for that shift.",
+      "Northline's letter of 28 June 2026 denies liability on the basis that the driver had ended his shift.",
+      "The plaintiff's statement describes stepping into the crossing as the signal changed.",
+      "No independent witness statement has been obtained to date."
+    ],
+    "jurisdictions": [
+      "Ohio",
+      "Franklin County Court of Common Pleas"
+    ],
+    "parties": [
+      {
+        "name": "Marisol Rivera",
+        "role": "Plaintiff",
+        "details": "Individual; injured pedestrian"
+      },
+      {
+        "name": "Northline Logistics, Inc.",
+        "role": "Defendant",
+        "details": "Commercial carrier; vehicle owner and employer"
+      },
+      {
+        "name": "D. Halvorsen",
+        "role": "Defendant",
+        "details": "Vehicle operator at the time of the collision"
+      },
+      {
+        "name": "Meridian Casualty",
+        "role": "Third party",
+        "details": "Northline's liability carrier"
+      }
+    ],
+    "legal_issues": [
+      "Whether the driver was acting within the scope of employment at the time of the collision.",
+      "Whether the dispatch telemetry is sufficient to rebut the employer's clock-out evidence.",
+      "Whether the plaintiff's entry into the crossing constitutes comparative fault.",
+      "Whether Northline is independently liable for negligent supervision of route completion.",
+      "Admissibility and foundation for the dispatch log as a business record."
+    ],
+    "causes_of_action": [
+      "Negligence (against the vehicle operator)",
+      "Vicarious liability / respondeat superior (against Northline Logistics)",
+      "Negligent supervision (against Northline Logistics)",
+      "Loss of earning capacity"
+    ],
+    "penal_codes": []
+  },
+  "timeline": [
+    {
+      "date": "2026-03-14",
+      "description": "Collision at Kellner Avenue and 7th Street, approximately 07:52.",
+      "category": "incident",
+      "source": "auto"
+    },
+    {
+      "date": "2026-03-14",
+      "description": "Responding officer files incident report; conditions recorded as clear and dry.",
+      "category": "event",
+      "source": "auto"
+    },
+    {
+      "date": "2026-03-14",
+      "description": "Northline vehicle transmits location data at 08:33, after the recorded clock-out.",
+      "category": "event",
+      "source": "auto"
+    },
+    {
+      "date": "2026-03-15",
+      "description": "Plaintiff undergoes surgical fixation of the left tibia.",
+      "category": "event",
+      "source": "auto"
+    },
+    {
+      "date": "2026-04-02",
+      "description": "Notice of claim served on Northline Logistics.",
+      "category": "event",
+      "source": "manual"
+    },
+    {
+      "date": "2026-06-28",
+      "description": "Northline denies liability, asserting the driver had ended his shift.",
+      "category": "event",
+      "source": "auto"
+    },
+    {
+      "date": "2026-07-15",
+      "description": "Complaint filed in Franklin County Court of Common Pleas.",
+      "category": "event",
+      "source": "manual"
+    }
+  ],
+  "statutes": [
+    {
+      "code": "R.C. 2315.33",
+      "title": "Comparative negligence",
+      "description": "Bars recovery where the claimant's contributory fault exceeds the combined fault of all other parties; otherwise damages are reduced in proportion.",
+      "relevance": "Governs the effect of any finding that the plaintiff entered the crossing early.",
+      "jurisdiction": "Ohio"
+    },
+    {
+      "code": "R.C. 4511.46",
+      "title": "Right of way of pedestrian in crosswalk",
+      "description": "Requires a driver to yield to a pedestrian lawfully within a marked crosswalk on the driver's half of the roadway.",
+      "relevance": "Establishes the duty owed and supports the negligence per se argument.",
+      "jurisdiction": "Ohio"
+    },
+    {
+      "code": "Evid.R. 803(6)",
+      "title": "Records of regularly conducted activity",
+      "description": "Excepts from hearsay records kept in the regular course of a business activity, on foundation from a qualified witness.",
+      "relevance": "The foundation route for admitting the dispatch log.",
+      "jurisdiction": "Ohio"
+    }
+  ],
+  "strength": {
+    "rating": "Moderate",
+    "explanation": "The telemetry contradicting the clock-out is strong on the scope-of-employment question, and the crosswalk statute supports a negligence per se theory. Exposure comes from comparative fault on the plaintiff's entry into the crossing, and from the absence of any independent witness. Obtaining the signal-timing data would materially improve the position."
+  },
+  "cases": [
+    {
+      "title": "Alvarado v. Crestmoor Freight Co.",
+      "citation": "182 Ohio App. 3d 411 (Fict. 2019)",
+      "pdf_link": "#",
+      "decision_date": "2019-05-14",
+      "snippet": "Telemetry establishing that a delivery vehicle remained on its assigned route after the operator's recorded shift end was sufficient to create a jury question on scope of employment, notwithstanding the employer's timekeeping records.",
+      "initial_score": 88,
+      "relevance_score": 91,
+      "relevance_reason": "Directly on point. Same evidentiary posture: employer timekeeping records contradicted by vehicle location data, on a route-completion theory.",
+      "relevance_dimensions": {
+        "factual": 92,
+        "legal": 94,
+        "jurisdiction": 88,
+        "recency": 82,
+        "posture": 90
+      },
+      "treatment": {
+        "status": "good",
+        "label": "No negative treatment found",
+        "details": "Cited approvingly in later appellate decisions; no signal of reversal.",
+        "checked": true
+      },
+      "bookmarked": true,
+      "notes": "Lead authority for the vicarious liability argument. Pull the full opinion before the motion — the concurrence discusses the business-records foundation for telemetry directly.",
+      "notes_updated_at": "2026-07-22T11:04:00Z",
+      "follow_ups": []
+    },
+    {
+      "title": "Petrakis v. Halvern Distribution",
+      "citation": "204 Ohio App. 3d 77 (Fict. 2022)",
+      "pdf_link": "#",
+      "decision_date": "2022-11-02",
+      "snippet": "An employer's negligent supervision claim survives independently of respondeat superior where the employer had actual knowledge that drivers routinely completed routes after clocking out.",
+      "initial_score": 79,
+      "relevance_score": 84,
+      "relevance_reason": "Supports the independent negligent supervision count, which survives even if the scope-of-employment argument fails.",
+      "relevance_dimensions": {
+        "factual": 78,
+        "legal": 88,
+        "jurisdiction": 88,
+        "recency": 90,
+        "posture": 76
+      },
+      "treatment": {
+        "status": "warning",
+        "label": "Distinguished in part",
+        "details": "A later decision distinguished the holding where the employer had a documented policy prohibiting off-clock route completion. Check whether Northline has one.",
+        "checked": true
+      },
+      "bookmarked": false,
+      "notes": "",
+      "follow_ups": []
+    },
+    {
+      "title": "Okonkwo v. Bayline Municipal Transit Authority",
+      "citation": "171 Ohio App. 3d 690 (Fict. 2016)",
+      "pdf_link": "#",
+      "decision_date": "2016-03-30",
+      "snippet": "Pedestrian who entered a marked crossing on a changing signal was assigned twenty percent comparative fault; recovery reduced accordingly rather than barred.",
+      "initial_score": 71,
+      "relevance_score": 77,
+      "relevance_reason": "Closest available guidance on the comparative fault exposure from entry on a changing signal.",
+      "relevance_dimensions": {
+        "factual": 84,
+        "legal": 74,
+        "jurisdiction": 88,
+        "recency": 58,
+        "posture": 72
+      },
+      "treatment": {
+        "status": "good",
+        "label": "No negative treatment found",
+        "details": "Still cited for the apportionment analysis.",
+        "checked": true
+      },
+      "bookmarked": false,
+      "notes": "",
+      "follow_ups": [
+        {
+          "question": "Does this case address whether the signal was functioning?",
+          "answer": "Yes. The court treated a functioning signal as established and confined its analysis to the timing of entry, which is the same posture as our matter. The opinion does not reach the question of a malfunctioning signal."
+        }
+      ]
+    },
+    {
+      "title": "Straub v. Kellner Avenue Partners",
+      "citation": "159 Ohio App. 3d 205 (Fict. 2011)",
+      "pdf_link": "#",
+      "decision_date": "2011-09-19",
+      "snippet": "Municipal signal-timing records were held admissible as public records and were dispositive of the sequence of the pedestrian phase.",
+      "initial_score": 62,
+      "relevance_score": 68,
+      "relevance_reason": "Procedural value: the route to obtaining and admitting the signal-timing data identified as a gap in the record.",
+      "relevance_dimensions": {
+        "factual": 60,
+        "legal": 70,
+        "jurisdiction": 88,
+        "recency": 44,
+        "posture": 66
+      },
+      "treatment": {
+        "status": "good",
+        "label": "No negative treatment found",
+        "details": "",
+        "checked": true
+      },
+      "bookmarked": false,
+      "notes": "",
+      "follow_ups": []
+    },
+    {
+      "title": "Denholm v. Riverbend Carriers",
+      "citation": "148 Ohio App. 3d 512 (Fict. 2008)",
+      "pdf_link": "#",
+      "decision_date": "2008-01-22",
+      "snippet": "Where a driver deviated substantially from the assigned route for a personal purpose, the employer was not vicariously liable for the resulting collision.",
+      "initial_score": 55,
+      "relevance_score": 61,
+      "relevance_reason": "Adverse authority. This is the case Northline will lead with; the route-consistency evidence is what distinguishes it.",
+      "relevance_dimensions": {
+        "factual": 66,
+        "legal": 72,
+        "jurisdiction": 88,
+        "recency": 30,
+        "posture": 52
+      },
+      "treatment": {
+        "status": "negative",
+        "label": "Superseded in part",
+        "details": "The frolic-and-detour framing was narrowed by later authority requiring a substantial rather than incidental deviation. Verify before relying on or distinguishing it.",
+        "checked": true
+      },
+      "bookmarked": true,
+      "notes": "Opposing counsel's best case. Distinguish on route consistency — Denholm involved an 11-mile departure; our telemetry shows the vehicle on sequence.",
+      "notes_updated_at": "2026-07-24T15:12:00Z",
+      "follow_ups": []
+    }
+  ],
+  "draft": "MEMORANDUM\n\nTo:       File\nFrom:     Case Closed (AI-assisted draft)\nRe:       Rivera v. Northline Logistics — vicarious liability\nDate:     29 July 2026\nStatus:   DRAFT — FOR ATTORNEY REVIEW\n\nQUESTION PRESENTED\n\nWhether Northline Logistics is vicariously liable for the 14 March 2026 collision where its dispatch telemetry places the vehicle on its assigned route forty-one minutes after the operator's recorded clock-out.\n\nBRIEF ANSWER\n\nProbably yes, on the present record. Ohio authority treats route-completion after a recorded shift end as raising a jury question on scope of employment, and the telemetry here contradicts the employer's own timekeeping. The principal risk is comparative fault arising from the plaintiff's entry into the crossing.\n\nANALYSIS\n\nAn employer is answerable for the negligence of an employee acting within the scope of employment. Northline's denial rests entirely on its timekeeping record showing a 07:52 clock-out. That record is contradicted by Northline's own dispatch log, which shows the vehicle transmitting location data at 08:33 on a route consistent with the assigned delivery sequence.\n\nAlvarado v. Crestmoor Freight Co. is directly on point: telemetry establishing that a vehicle remained on its assigned route after a recorded shift end was sufficient to reach a jury, notwithstanding the employer's timekeeping. The evidentiary posture there is the posture here.\n\nNorthline will rely on Denholm v. Riverbend Carriers, where an eleven-mile personal deviation defeated vicarious liability. Denholm is distinguishable on its facts, and its frolic-and-detour framing has since been narrowed to require a substantial rather than incidental deviation.\n\nAn independent negligent supervision count should be pleaded in the alternative under Petrakis v. Halvern Distribution, which survives even if the scope-of-employment argument does not.\n\nOPEN ITEMS\n\n1. Obtain municipal signal-timing records for the Kellner and 7th pedestrian phase.\n2. Confirm whether Northline maintains a written policy prohibiting off-clock route completion.\n3. Identify and interview any independent witness.\n4. Establish the business-records foundation for the dispatch log.\n\nThis memorandum is an AI-assisted first draft prepared from the matter record. Every authority cited must be read and verified before use.\n",
+  "seeded_chat": [
+    {
+      "question": "What's our exposure on comparative fault?",
+      "keywords": [
+        "comparative",
+        "fault",
+        "exposure",
+        "kerb",
+        "curb",
+        "crosswalk",
+        "signal"
+      ],
+      "answer": "Comparative fault is the real exposure here, and it is bounded rather than fatal.\n\nR.C. 2315.33 reduces recovery in proportion to the claimant's share of fault and only bars it entirely if her share exceeds everyone else's combined. On these facts that threshold is unlikely to be met: the signal was functioning, conditions were clear, and R.C. 4511.46 put the duty to yield on the driver.\n\nThe closest guidance in the retrieved authority assigned twenty percent to a pedestrian who entered on a changing signal, and reduced rather than barred recovery.\n\nThe gap worth closing is the municipal signal-timing record. It would move her entry from contested to documented. I have added it to the open items in the draft.\n\nThis is AI-assisted analysis and needs your review.",
+      "citations": [
+        {
+          "source_id": "statute-rc-2315-33",
+          "source_type": "statute",
+          "title": "R.C. 2315.33 — Comparative negligence",
+          "locator": "Ohio Rev. Code",
+          "url": "",
+          "quote": "Bars recovery where the claimant's contributory fault exceeds the combined fault of all other parties; otherwise damages are reduced in proportion."
+        },
+        {
+          "source_id": "statute-rc-4511-46",
+          "source_type": "statute",
+          "title": "R.C. 4511.46 — Right of way of pedestrian in crosswalk",
+          "locator": "Ohio Rev. Code",
+          "url": "",
+          "quote": "Requires a driver to yield to a pedestrian lawfully within a marked crosswalk on the driver's half of the roadway."
+        },
+        {
+          "source_id": "case-okonkwo-bayline",
+          "source_type": "case_law",
+          "title": "Okonkwo v. Bayline Municipal Transit Authority",
+          "locator": "171 Ohio App. 3d 690 (Fict. 2016)",
+          "url": "",
+          "quote": "Pedestrian who entered a marked crossing on a changing signal was assigned twenty percent comparative fault; recovery reduced accordingly rather than barred."
+        }
+      ]
+    },
+    {
+      "question": "Can we hold Northline liable if the driver had clocked out?",
+      "keywords": [
+        "clocked",
+        "clock-out",
+        "clock",
+        "vicarious",
+        "employment",
+        "scope",
+        "employer",
+        "liable",
+        "northline"
+      ],
+      "answer": "Probably yes, on the present record — the clock-out is Northline's evidence, and their own telemetry contradicts it.\n\nThe dispatch log shows the vehicle transmitting location data at 08:33, forty-one minutes after the recorded clock-out, on a route consistent with the assigned delivery sequence. Under the retrieved authority, route completion after a recorded shift end raises a jury question on scope of employment notwithstanding the employer's timekeeping.\n\nNorthline's best answer is the frolic-and-detour line of cases, but those require a substantial deviation — an eleven-mile personal departure in the leading case — and our telemetry shows the vehicle on sequence.\n\nPlead negligent supervision in the alternative: it survives even if the scope-of-employment argument fails.\n\nThis is AI-assisted analysis and needs your review.",
+      "citations": [
+        {
+          "source_id": "case-alvarado-crestmoor",
+          "source_type": "case_law",
+          "title": "Alvarado v. Crestmoor Freight Co.",
+          "locator": "182 Ohio App. 3d 411 (Fict. 2019)",
+          "url": "",
+          "quote": "Telemetry establishing that a delivery vehicle remained on its assigned route after the operator's recorded shift end was sufficient to create a jury question on scope of employment."
+        },
+        {
+          "source_id": "case-denholm-riverbend",
+          "source_type": "case_law",
+          "title": "Denholm v. Riverbend Carriers",
+          "locator": "148 Ohio App. 3d 512 (Fict. 2008)",
+          "url": "",
+          "quote": "Where a driver deviated substantially from the assigned route for a personal purpose, the employer was not vicariously liable for the resulting collision."
+        },
+        {
+          "source_id": "case-petrakis-halvern",
+          "source_type": "case_law",
+          "title": "Petrakis v. Halvern Distribution",
+          "locator": "204 Ohio App. 3d 77 (Fict. 2022)",
+          "url": "",
+          "quote": "An employer's negligent supervision claim survives independently of respondeat superior where the employer had actual knowledge that drivers routinely completed routes after clocking out."
+        }
+      ]
+    },
+    {
+      "question": "What's the weakest part of our case?",
+      "keywords": [
+        "weakest",
+        "weakness",
+        "risk",
+        "problem",
+        "worried",
+        "concern",
+        "against"
+      ],
+      "answer": "Three soft spots, in order of how much they matter.\n\nFirst, there is no independent witness. The plaintiff's own statement describes stepping in as the signal changed, and nothing corroborates the sequence from outside the parties.\n\nSecond, comparative fault. The entry-on-a-changing-signal fact pattern has drawn a twenty percent apportionment in the closest retrieved authority — recovery reduced, not barred, but it prices the claim.\n\nThird, foundation for the dispatch log. The whole scope-of-employment theory runs through that record, so it must come in as a business record under Evid.R. 803(6); line up the custodian early.\n\nNone of these is disqualifying, and each has a concrete fix in the open items.\n\nThis is AI-assisted analysis and needs your review.",
+      "citations": [
+        {
+          "source_id": "statute-evidr-803-6",
+          "source_type": "statute",
+          "title": "Evid.R. 803(6) — Records of regularly conducted activity",
+          "locator": "Ohio R. Evid.",
+          "url": "",
+          "quote": "Excepts from hearsay records kept in the regular course of a business activity, on foundation from a qualified witness."
+        },
+        {
+          "source_id": "case-okonkwo-bayline",
+          "source_type": "case_law",
+          "title": "Okonkwo v. Bayline Municipal Transit Authority",
+          "locator": "171 Ohio App. 3d 690 (Fict. 2016)",
+          "url": "",
+          "quote": "Pedestrian who entered a marked crossing on a changing signal was assigned twenty percent comparative fault; recovery reduced accordingly rather than barred."
+        }
+      ]
+    },
+    {
+      "question": "What should I do next?",
+      "keywords": [
+        "next",
+        "steps",
+        "do now",
+        "priorities",
+        "plan",
+        "todo"
+      ],
+      "answer": "Four open items, ranked by leverage.\n\n1. Obtain the municipal signal-timing records for the Kellner and 7th pedestrian phase. Public records of signal sequence have been held admissible and dispositive on the crossing phase — it would move her entry from contested to documented.\n\n2. Confirm whether Northline maintains a written policy prohibiting off-clock route completion. The negligent-supervision authority was distinguished where such a policy existed, so the answer decides whether that count leads or trails.\n\n3. Canvass for an independent witness; nothing currently corroborates the sequence from outside the parties.\n\n4. Line up the records custodian for the dispatch log's business-records foundation.\n\nEach of these is also listed under Open Items in the draft memorandum.\n\nThis is AI-assisted analysis and needs your review.",
+      "citations": [
+        {
+          "source_id": "case-straub-kellner",
+          "source_type": "case_law",
+          "title": "Straub v. Kellner Avenue Partners",
+          "locator": "159 Ohio App. 3d 205 (Fict. 2011)",
+          "url": "",
+          "quote": "Municipal signal-timing records were held admissible as public records and were dispositive of the sequence of the pedestrian phase."
+        },
+        {
+          "source_id": "case-petrakis-halvern",
+          "source_type": "case_law",
+          "title": "Petrakis v. Halvern Distribution",
+          "locator": "204 Ohio App. 3d 77 (Fict. 2022)",
+          "url": "",
+          "quote": "An employer's negligent supervision claim survives independently of respondeat superior where the employer had actual knowledge that drivers routinely completed routes after clocking out."
+        }
+      ]
+    }
+  ],
+  "offscript_answer": "In the live product I would research that against this matter's record and the shared law library, and answer with citations you can inspect. The demo answers a fixed set of questions so that nothing here can be mistaken for real legal analysis — try one of the suggested questions below the conversation.",
+  "search_query": "vicarious liability delivery driver route completion after clock out Ohio",
+  "summary": "Commercial vehicle negligence with a contested scope-of-employment defence, turning on dispatch telemetry that contradicts the employer's timekeeping.",
+  "pending_questions": [],
+  "clarify_attempts": 0
+}

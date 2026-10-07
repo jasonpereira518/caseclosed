@@ -33,6 +33,15 @@
 
   window.caseClosedClerkReady
     .then(clerk => {
+      // Returning visitor: Clerk still holds a session, only the short-lived
+      // server cookie lapsed. Skip the button. Not when an error is showing --
+      // that error may be the server rejecting this very session, and
+      // continuing automatically would loop.
+      if (clerk.session && !new URLSearchParams(window.location.search).has('error')) {
+        setLoading(true, 'Signing you in…');
+        window.location.assign(completeUrl);
+        return;
+      }
       setLoading(false, 'Continue with Google');
       button.addEventListener('click', async () => {
         report('');
@@ -54,6 +63,8 @@
       });
     })
     .catch(() => {
+      spinner.setAttribute('hidden', '');
+      button.setAttribute('aria-busy', 'false');
       report('Sign-in could not be loaded. Refresh the page and try again.', true);
     });
 })();

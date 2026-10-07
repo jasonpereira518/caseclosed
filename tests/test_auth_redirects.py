@@ -44,5 +44,28 @@ class SafeNextTests(unittest.TestCase):
             self.assertEqual(_safe_next(""), "/app")
 
 
+
+class LoginErrorTests(unittest.TestCase):
+    def setUp(self):
+        app.config.update(TESTING=True)
+        self.client = app.test_client()
+
+    def test_rejected_session_at_complete_reports_instead_of_looping(self):
+        response = self.client.get("/auth/complete?next=/account&invite=tok")
+
+        self.assertEqual(response.status_code, 302)
+        location = response.headers["Location"]
+        self.assertIn("/auth/login?", location)
+        self.assertIn("error=session", location)
+        self.assertIn("next=/account", location)
+        self.assertIn("invite=tok", location)
+
+    def test_error_param_selects_fixed_copy_never_raw_text(self):
+        body = self.client.get("/auth/login?error=Call+555-0100+for+support").get_data(as_text=True)
+
+        self.assertNotIn("555-0100", body)
+        self.assertIn("Sign-in didn&#39;t complete", body)
+
+
 if __name__ == "__main__":
     unittest.main()
